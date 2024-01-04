@@ -1,0 +1,24 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"icon": {
+				"color": "terminal.ansiCyan",
+				"dark": "terminal.ansiCyan",
+			},
+			"label": "build",
+			"type": "process",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--config",
+				"Debug"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
