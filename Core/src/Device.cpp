@@ -7,6 +7,8 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
+#include <fmt/std.h>
+
 namespace Core {
 
 auto Device::get() -> Ptr {
@@ -153,7 +155,50 @@ auto Device::construct_vulkan_device() -> void {
   verify(vkCreateDevice(physical_device, &create_info, nullptr, &device),
          "vkCreateDevice", "Failed to create Vulkan device");
 
+  auto &queue_map = queues;
+  for (auto &&queue_info : queue_infos) {
+    VkQueue queue;
+    vkGetDeviceQueue(device, queue_info.queueFamilyIndex, 0, &queue);
+    IndexedQueue indexed_queue {
+      .family_index = queue_info.queueFamilyIndex,
+      .queue = queue,
+    };
+
+    // What Queue::Type are we here?
+    Queue::Type type = Queue::Type::Unknown;
+    if (queue_info.queueFamilyIndex == 0) {
+      type = Queue::Type::Compute;
+    } else if (queue_info.queueFamilyIndex == 1) {
+      type = Queue::Type::Graphics;
+    } else {
+      throw std::runtime_error("Unknown queue family index");
+    }
+
+    queue_map[type] = std::move(indexed_queue);
+  }
+
   info("Created Vulkan device with {} queue(s)", queue_infos.size());
+  for (auto &&[k, v] : queue_map) {
+    auto as_string = [](Queue::Type type) {
+      switch (type) {
+      case Queue::Type::Graphics:
+        return "Graphics";
+      case Queue::Type::Compute:
+        return "Compute";
+      case Queue::Type::Transfer:
+        return "Transfer";
+      case Queue::Type::Present:
+        return "Present";
+        default:
+        return "Unknown";
+      }
+    };
+
+    const auto type_string = as_string(k);
+
+    info("{} queue: family index {}, queue {}", type_string, v.family_index,
+         fmt::ptr(v.queue)); 
+  }
 }
 
 } // namespace Core

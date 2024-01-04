@@ -3,7 +3,9 @@
 #include "Logger.hpp"
 #include "Types.hpp"
 #include "Verify.hpp"
+
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <vector>
 
 namespace Core {

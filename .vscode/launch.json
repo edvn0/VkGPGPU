@@ -8,8 +8,14 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug",
-            "program": "${workspaceFolder}/build/App/App.exe",
-            "args": [],
+            "windows": {
+                "program": "${workspaceFolder}/build/App/App.exe",
+                "args": []
+            },
+            "linux": {
+                "program": "${workspaceFolder}/build/App/Debug/App",
+                "args": []
+            },
             "env": {
                 "LOG_LEVEL": "Debug",
                 "ENABLE_VALIDATION_LAYERS": "On",

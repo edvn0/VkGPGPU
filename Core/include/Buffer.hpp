@@ -2,6 +2,8 @@
 
 #include "Device.hpp"
 #include "Types.hpp"
+#include <span>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
@@ -30,9 +32,22 @@ public:
 
   [[nodiscard]] auto get_buffer() const noexcept -> VkBuffer;
 
+  [[nodiscard]] auto get_descriptor_info() const noexcept
+      -> VkDescriptorBufferInfo {
+    return descriptor_info;
+  }
+
+  template <typename T> void write(std::span<T> data) {
+    write(data.data(), data.size() * sizeof(T));
+  }
+  template <typename T> void write(const T &data) { write(&data, sizeof(T)); }
+  void write(const void *data, u64 data_size);
+
 private:
   u64 size{};
   Type type;
+
+  VkDescriptorBufferInfo descriptor_info{};
 
   Scope<BufferDataImpl> buffer_data{};
   void initialise_vulkan_buffer();

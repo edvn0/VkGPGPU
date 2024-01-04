@@ -1,12 +1,17 @@
 #pragma once
 
+#include "CommandBuffer.hpp"
 #include "Shader.hpp"
 #include "Types.hpp"
-#include <vulkan/vulkan_core.h>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 namespace Core {
 
-enum class PipelineStage : u8 { Compute, Graphics };
+enum class PipelineStage : u8 {
+  Graphics,
+  Compute,
+};
 
 struct PipelineConfiguration {
   std::string name;
@@ -33,12 +38,13 @@ public:
     return pipeline_cache;
   }
 
+  auto bind(CommandBuffer &) -> void;
+
 private:
   auto construct_pipeline(const PipelineConfiguration &configuration) -> void;
 
   [[nodiscard]] auto try_load_pipeline_cache(const std::string &name)
       -> std::vector<u8>;
-  auto create_default_pipeline_cache() -> void;
 
   std::string name{};
   VkPipelineLayout pipeline_layout{};

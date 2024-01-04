@@ -55,16 +55,6 @@ Pipeline::~Pipeline() {
   vkDestroyPipeline(Device::get()->get_device(), pipeline, nullptr);
 }
 
-auto Pipeline::create_default_pipeline_cache() -> void {
-  VkPipelineCacheCreateInfo pipeline_cache_create_info{};
-  pipeline_cache_create_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-  verify(vkCreatePipelineCache(Device::get()->get_device(),
-                               &pipeline_cache_create_info, nullptr,
-                               &pipeline_cache),
-         "vkCreatePipelineCache", "Failed to create pipeline cache");
-}
-
 auto Pipeline::try_load_pipeline_cache(const std::string &name)
     -> std::vector<u8> {
   auto cache_path = FS::pipeline_cache(name + ".cache");
@@ -73,7 +63,6 @@ auto Pipeline::try_load_pipeline_cache(const std::string &name)
     auto cache_file = std::ifstream{cache_path, std::ios::binary};
     if (!cache_file) {
       info("Failed to open pipeline cache file at {}", cache_path.string());
-      create_default_pipeline_cache();
     } else {
       auto cache_data = std::vector<u8>(std::filesystem::file_size(cache_path));
       cache_file.read(reinterpret_cast<char *>(cache_data.data()),
@@ -82,10 +71,15 @@ auto Pipeline::try_load_pipeline_cache(const std::string &name)
     }
   } else {
     info("Pipeline cache does not exist. Creating...");
-    create_default_pipeline_cache();
   }
 
   return {};
+}
+
+auto Pipeline::bind(CommandBuffer &command_buffer) -> void {
+  vkCmdBindPipeline(command_buffer.get_command_buffer(),
+                    static_cast<VkPipelineBindPoint>(PipelineStage::Compute),
+                    pipeline);
 }
 
 auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)

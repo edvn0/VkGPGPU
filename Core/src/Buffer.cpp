@@ -1,5 +1,6 @@
 #include "Buffer.hpp"
 
+#include <cstring>
 #include <vk_mem_alloc.h>
 
 #include "Allocator.hpp"
@@ -49,6 +50,9 @@ void Buffer::initialise_storage_buffer() {
 
   VmaAllocationCreateInfo allocation_create_info{};
   allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+  allocation_create_info.flags =
+      VMA_ALLOCATION_CREATE_MAPPED_BIT |
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
   verify(vmaCreateBuffer(Allocator::get_allocator(), &buffer_create_info,
                          &allocation_create_info, &buffer_data->buffer,
@@ -61,6 +65,20 @@ Buffer::~Buffer() = default;
 
 auto Buffer::get_buffer() const noexcept -> VkBuffer {
   return buffer_data->buffer;
+}
+
+void Buffer::write(const void *data, u64 data_size) {
+  const auto is_always_mapped = buffer_data->allocation_info.pMappedData;
+  if (is_always_mapped) {
+    std::memcpy(buffer_data->allocation_info.pMappedData, data, data_size);
+  } else {
+    void *mapped_data{};
+    verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
+                        &mapped_data),
+           "vmaMapMemory", "Failed to map memory");
+    std::memcpy(mapped_data, data, data_size);
+    vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
+  }
 }
 
 } // namespace Core
