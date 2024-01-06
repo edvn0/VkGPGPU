@@ -36,4 +36,9 @@ void verify(VkResult result, const std::string &functionName,
   }
 }
 
+template <auto T> [[noreturn]] auto unreachable_return() -> decltype(T) {
+  throw BaseException{"Invalidly here!"};
+  return T;
+}
+
 } // namespace Core

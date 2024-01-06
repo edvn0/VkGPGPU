@@ -5,6 +5,7 @@
 #include "Logger.hpp"
 #include "Verify.hpp"
 
+#include <filesystem>
 #include <fstream>
 
 namespace Core {
@@ -21,6 +22,10 @@ auto save_cache(auto pipeline_cache, const std::string &name) {
 
   if (std::filesystem::exists(name + ".cache")) {
     info("Pipeline cache exists. Overwriting...");
+  }
+
+  if (FS::mkdir_safe("pipeline_cache")) {
+    info("Created folder '{}'.", "pipeline_cache");
   }
 
   const auto output_path = FS::pipeline_cache(name + ".cache");

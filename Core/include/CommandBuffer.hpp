@@ -47,7 +47,7 @@ private:
     VkSemaphore finished_semaphore{};
   };
   FrameCommandBuffer *active_frame{nullptr};
-  VkQueryPool* active_pool {nullptr};
+  VkQueryPool *active_pool{nullptr};
   std::array<FrameCommandBuffer, Config::frame_count> command_buffers{};
 
   Queue::Type queue_type{Queue::Type::Unknown};
@@ -56,7 +56,8 @@ private:
   std::array<VkQueryPool, Config::frame_count> query_pools{};
 
   void create_query_objects();
-  void destroy_query_objects();;
+  void destroy_query_objects();
+  ;
 };
 
 } // namespace Core

@@ -2,13 +2,26 @@
 #include "Config.hpp"
 #include "Device.hpp"
 #include "Verify.hpp"
+#include "Formatters.hpp"
+
 #include <array>
+#include <fmt/ranges.h>
 #include <ranges>
 #include <vulkan/vulkan.h>
 
+static constexpr auto for_each_frame = []() {
+  return std::views::iota(0, Core::Config::frame_count);
+};
+
 namespace Core {
 
-DescriptorMap::DescriptorMap(): m_descriptors(Config::frame_count) {
+DescriptorMap::DescriptorMap() {
+  for (const auto i : for_each_frame()) {
+    // We'll start with just one descriptor set, and try to update if we add
+    // two!
+    m_descriptors[i].resize(1);
+  }
+
   // Create pool sizes for 10 storage buffers and 10 uniform buffers
   std::array<VkDescriptorPoolSize, 2> pool_sizes{};
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -27,7 +40,6 @@ DescriptorMap::DescriptorMap(): m_descriptors(Config::frame_count) {
                                 nullptr, &m_descriptor_pool),
          "vkCreateDescriptorPool", "Failed to create descriptor pool!");
 
-  // Storage, Storage, Uniform (0, 1, 2)
   VkDescriptorSetLayoutBinding binding_0{};
   binding_0.binding = 0;
   binding_0.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -65,9 +77,12 @@ DescriptorMap::DescriptorMap(): m_descriptors(Config::frame_count) {
   allocation_info.descriptorSetCount = static_cast<u32>(layouts.size());
   allocation_info.pSetLayouts = layouts.data();
 
-  if (vkAllocateDescriptorSets(Device::get()->get_device(), &allocation_info,
-                               m_descriptors.data()) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate descriptor sets!");
+  for (const auto i : for_each_frame()) {
+    auto &frame_descriptors = m_descriptors.at(i);
+    if (vkAllocateDescriptorSets(Device::get()->get_device(), &allocation_info,
+                                 frame_descriptors.data()) != VK_SUCCESS) {
+      throw std::runtime_error("failed to allocate descriptor sets!");
+    }
   }
 }
 
@@ -76,19 +91,25 @@ DescriptorMap::~DescriptorMap() {
   // Destroy all layouts, pools, and sets
   vkDestroyDescriptorSetLayout(Device::get()->get_device(),
                                m_descriptor_set_layout, nullptr);
+  for (auto &&[k, v] : this->m_descriptors) {
+    info("{}, {}", k, fmt::join(v, ", "));
+  }
+
+  m_descriptors.clear();
 
   vkDestroyDescriptorPool(Device::get()->get_device(), m_descriptor_pool,
                           nullptr);
+
 }
 
 auto DescriptorMap::bind(CommandBuffer &buffer, u32 current_frame,
                          VkPipelineLayout layout) -> void {
-  auto current_descriptor = &m_descriptors.at(current_frame);
+  auto &current_descriptor = m_descriptors.at(current_frame);
 
   vkCmdBindDescriptorSets(buffer.get_command_buffer(),
                           VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0,
-                          1,current_descriptor,  0,
-                          nullptr);
+                          static_cast<u32>(current_descriptor.size()),
+                          current_descriptor.data(), 0, nullptr);
 }
 
 auto DescriptorMap::get_descriptor_pool() -> VkDescriptorPool {
@@ -98,22 +119,24 @@ auto DescriptorMap::get_descriptor_pool() -> VkDescriptorPool {
 auto DescriptorMap::add_for_frames(u32 set, u32 binding, const Buffer &buffer)
     -> void {
 
-  const auto current_set = m_descriptors[set];
-  std::vector descriptor_writes(Config::frame_count, VkWriteDescriptorSet{});
-  for (auto i = 0U; i < Config::frame_count; ++i) {
-    auto& descriptor_write = descriptor_writes[i];
-    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptor_write.dstSet = current_set;
-    descriptor_write.dstBinding = binding;
-    descriptor_write.dstArrayElement = 0;
-    descriptor_write.descriptorType = buffer.get_vulkan_type();
-    descriptor_write.descriptorCount = 1;
-    descriptor_write.pBufferInfo = &buffer.get_descriptor_info();
-  }
+  for (const auto i : for_each_frame()) {
+    const auto current_set = m_descriptors.at(i).at(set);
+    std::vector descriptor_writes(Config::frame_count, VkWriteDescriptorSet{});
+    for (auto i = 0U; i < Config::frame_count; ++i) {
+      auto &descriptor_write = descriptor_writes[i];
+      descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      descriptor_write.dstSet = current_set;
+      descriptor_write.dstBinding = binding;
+      descriptor_write.dstArrayElement = 0;
+      descriptor_write.descriptorType = buffer.get_vulkan_type();
+      descriptor_write.descriptorCount = 1;
+      descriptor_write.pBufferInfo = &buffer.get_descriptor_info();
+    }
 
-  vkUpdateDescriptorSets(Device::get()->get_device(),
-                         static_cast<u32>(descriptor_writes.size()),
-                         descriptor_writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(Device::get()->get_device(),
+                           static_cast<u32>(descriptor_writes.size()),
+                           descriptor_writes.data(), 0, nullptr);
+  }
 }
 
 } // namespace Core

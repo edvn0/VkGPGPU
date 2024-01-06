@@ -27,6 +27,10 @@ set(SOURCES
     src/DescriptorMap.cpp
     include/DebugMarker.hpp
     src/DebugMarker.cpp
+    include/Formatters.hpp
+    src/Formatters.cpp
+    include/Timer.hpp
+    src/Timer.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
@@ -35,5 +39,5 @@ target_link_libraries(Core PUBLIC Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=12)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
 endif()

@@ -3,7 +3,6 @@
 #include "Types.hpp"
 
 #include <fmt/core.h>
-#include <string_view>
 #include <unordered_map>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -20,7 +19,7 @@ enum class Type : u8 {
 };
 }
 
-enum class Feature:u8 {
+enum class Feature : u8 {
   DeviceQuery,
 
 };
@@ -46,7 +45,9 @@ public:
     return queues.at(type).queue;
   }
 
-  [[nodiscard]] auto check_support(Feature feature, Queue::Type queue = Queue::Type::Graphics) const -> bool;
+  [[nodiscard]] auto
+  check_support(Feature feature,
+                Queue::Type queue = Queue::Type::Graphics) const -> bool;
   [[nodiscard]] auto get_device_properties() const {
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical_device, &properties);
@@ -66,17 +67,17 @@ private:
   };
 
   struct QueueFeatureSupport {
-    bool timestamping {false};
+    bool timestamping{false};
   };
   std::unordered_map<Queue::Type, IndexedQueue> queues{};
-  std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support {};
+  std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support{};
 
   static inline Scope<Device> static_device{nullptr};
 };
 
 } // namespace Core
 
-template<>
-struct fmt::formatter<Core::Queue::Type> : formatter<const char*> {
-  auto format(const Core::Queue::Type& type, format_context& ctx)const  -> decltype(ctx.out());
+template <> struct fmt::formatter<Core::Queue::Type> : formatter<const char *> {
+  auto format(const Core::Queue::Type &type, format_context &ctx) const
+      -> decltype(ctx.out());
 };

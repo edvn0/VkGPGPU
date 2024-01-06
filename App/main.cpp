@@ -2,15 +2,17 @@
 #include "Buffer.hpp"
 #include "CommandBuffer.hpp"
 #include "CommandDispatcher.hpp"
+#include "DebugMarker.hpp"
 #include "DescriptorMap.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
 #include "Pipeline.hpp"
-#include "DebugMarker.hpp"
 #include "Shader.hpp"
+#include "Timer.hpp"
 #include "Types.hpp"
+#include <cassert>
 #include <filesystem>
 #include <span>
 
@@ -25,45 +27,41 @@
 
 #include <fmt/format.h>
 
-#include <renderdoc_app.h>
 #include <Windows.h>
-
+#include <renderdoc_app.h>
 
 #include <atomic>
 #include <csignal>
 
-RENDERDOC_API_1_0_0* GetRenderDocApi()
-{
-  Core::DebugMarker::setup(Core::Device::get()->get_device(), Core::Device::get()->get_physical_device());
+RENDERDOC_API_1_0_0 *GetRenderDocApi() {
+  Core::DebugMarker::setup(Core::Device::get()->get_device(),
+                           Core::Device::get()->get_physical_device());
 
   RENDERDOC_API_1_1_2 *rdoc_api = NULL;
 
   // At init, on windows
   HMODULE mod = GetModuleHandleA("renderdoc.dll");
-  if(mod != nullptr)
-  {
+  if (mod != nullptr) {
     pRENDERDOC_GetAPI RENDERDOC_GetAPI =
         (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
-    int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api);
+    int ret =
+        RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api);
     assert(ret == 1);
   }
 
   pRENDERDOC_GetAPI getApi = nullptr;
   getApi = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
 
-  if (getApi == nullptr)
-  {
+  if (getApi == nullptr) {
     return nullptr;
   }
 
-  if (getApi(eRENDERDOC_API_Version_1_1_2, (void**)&rdoc_api) != 1)
-  {
+  if (getApi(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api) != 1) {
     return nullptr;
   }
 
   return rdoc_api;
 }
-
 
 template <Core::u64 N, Core::u64 M> struct Matrix {
   std::array<std::array<float, N>, M> data;
@@ -99,7 +97,7 @@ auto randomize_span_of_matrices(std::span<Matrix<4, 4>> matrices) -> void {
   }
 }
 
-void perform(auto* renderdoc) {
+void perform(auto *renderdoc) {
 
   Core::CommandBuffer command_buffer(Core::CommandBuffer::Type::Compute);
 
@@ -122,6 +120,8 @@ void perform(auto* renderdoc) {
            matrix.data.at(3).at(2), matrix.data.at(3).at(3));
     }
   };
+
+
 
   randomize_span_of_matrices(matrices);
 
@@ -152,11 +152,12 @@ void perform(auto* renderdoc) {
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  // Lets do a basic benchmark, mean and stdev of computation times
-  for (auto i = 0U; i < 100; i++) {
+  for (auto i = 0U; i < 10000; i++) {
+    Core::Timer timer;
+
     if (renderdoc != nullptr) {
 
-    renderdoc->StartFrameCapture(nullptr, nullptr);
+      renderdoc->StartFrameCapture(nullptr, nullptr);
     }
 
     randomize_span_of_matrices(matrices);
@@ -182,8 +183,7 @@ void perform(auto* renderdoc) {
     frame = (frame + 1) % Core::Config::frame_count;
 
     if (renderdoc != nullptr) {
-    renderdoc->EndFrameCapture(nullptr, nullptr);
-
+      renderdoc->EndFrameCapture(nullptr, nullptr);
     }
   }
 }
@@ -206,6 +206,7 @@ int main(int argc, char **argv) {
 
   // Close dll
 
+  _CrtDumpMemoryLeaks();
 
   return 0;
 }

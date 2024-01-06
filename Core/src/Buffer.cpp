@@ -1,10 +1,12 @@
 #include "Buffer.hpp"
 
+#include <cassert>
 #include <cstring>
 #include <vk_mem_alloc.h>
 
 #include "Allocator.hpp"
 #include "DebugMarker.hpp"
+#include "Device.hpp"
 #include "Verify.hpp"
 
 namespace Core {
@@ -94,22 +96,29 @@ void Buffer::initialise_storage_buffer() {
 }
 
 auto Buffer::read_raw(size_t offset, size_t data_size) -> std::vector<char> {
-    assert(offset + data_size <= size);  // Ensure we don't read out of bounds
+  assert(offset + data_size <= size); // Ensure we don't read out of bounds
 
-    std::vector<char> data(data_size);
-    const auto is_always_mapped = buffer_data->allocation_info.pMappedData != nullptr;
-    if (is_always_mapped) {
-      // If the buffer is always mapped, copy the data directly
-      std::memcpy(data.data(), static_cast<const char*>(buffer_data->allocation_info.pMappedData) + offset, data_size);
-    } else {
-      // Otherwise, map the buffer, copy the data, then unmap
-      void *mapped_data{};
-      verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation, &mapped_data),
-             "vmaMapMemory", "Failed to map memory");
-      std::memcpy(data.data(), static_cast<const char*>(mapped_data) + offset, data_size);
-      vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
-    }
-    return data;
+  std::vector<char> data(data_size);
+  const auto is_always_mapped =
+      buffer_data->allocation_info.pMappedData != nullptr;
+  if (is_always_mapped) {
+    // If the buffer is always mapped, copy the data directly
+    std::memcpy(
+        data.data(),
+        static_cast<const char *>(buffer_data->allocation_info.pMappedData) +
+            offset,
+        data_size);
+  } else {
+    // Otherwise, map the buffer, copy the data, then unmap
+    void *mapped_data{};
+    verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
+                        &mapped_data),
+           "vmaMapMemory", "Failed to map memory");
+    std::memcpy(data.data(), static_cast<const char *>(mapped_data) + offset,
+                data_size);
+    vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
+  }
+  return data;
 }
 
 Buffer::~Buffer() {
@@ -139,29 +148,3 @@ void Buffer::write(const void *data, u64 data_size) {
 }
 
 } // namespace Core
-
-auto fmt::formatter<Core::Buffer::Type, char, void>::format(
-    const Core::Buffer::Type &type, format_context &ctx) const
-    -> decltype(ctx.out()) {
-
-  std::string output_type = "Unknown";
-  switch (type) {
-  case Core::Buffer::Type::Vertex:
-    output_type = "Vertex";
-    break;
-  case Core::Buffer::Type::Index:
-    output_type = "Index";
-    break;
-
-  case Core::Buffer::Type::Uniform:
-    output_type = "Uniform";
-    break;
-  case Core::Buffer::Type::Storage:
-    output_type = "Storage";
-    break;
-  default:
-    break;
-  }
-  return formatter<const char*>::format(fmt::format("{}", output_type).data(), ctx);
-
-}

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Device.hpp"
 #include "Types.hpp"
+#include "Verify.hpp"
 
-#include <assert.h>
 #include <span>
+#include <vector>
 #include <vulkan/vulkan_core.h>
 
 namespace Core {
@@ -37,7 +37,7 @@ public:
     case Type::Storage:
       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     default:
-      return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+      return unreachable_return<VK_DESCRIPTOR_TYPE_MAX_ENUM>();
     }
   }
   [[nodiscard]] auto get_size() const noexcept -> u64 { return size; }
@@ -56,8 +56,7 @@ public:
 
   void write(const void *data, u64 data_size);
 
-  template <typename T>
-  auto read(std::vector<T>& output, size_t offset = 0) {
+  template <typename T> auto read(std::vector<T> &output, size_t offset = 0) {
     auto data_size = output.size() * sizeof(T);
     auto raw_data = read_raw(offset, data_size);
     std::memcpy(output.data(), raw_data.data(), data_size);
@@ -82,7 +81,8 @@ private:
 
 } // namespace Core
 
-template<>
-struct fmt::formatter<Core::Buffer::Type> : formatter<const char*> {
-  auto format(const Core::Buffer::Type& type, format_context& ctx)const  -> decltype(ctx.out());
+template <>
+struct fmt::formatter<Core::Buffer::Type> : formatter<const char *> {
+  auto format(const Core::Buffer::Type &type, format_context &ctx) const
+      -> decltype(ctx.out());
 };

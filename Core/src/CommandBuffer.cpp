@@ -76,12 +76,11 @@ CommandBuffer::CommandBuffer(Type type)
 }
 
 CommandBuffer::~CommandBuffer() {
+  const auto &device = Device::get()->get_device();
+  vkDeviceWaitIdle(device);
   if (supports_device_query) {
     destroy_query_objects();
   }
-
-  const auto &device = Device::get()->get_device();
-  vkDeviceWaitIdle(device);
 
   vkDestroyCommandPool(device, command_pool, nullptr);
 
@@ -105,8 +104,9 @@ auto CommandBuffer::begin(u32 provided_frame) -> void {
 
   verify(vkBeginCommandBuffer(active_frame->command_buffer, &begin_info),
          "vkBeginCommandBuffer", "Failed to begin recording command buffer");
-  verify(vkWaitForFences(Device::get()->get_device(), 1, &active_frame->fence, VK_TRUE, timeout),
-       "vkWaitForFences", "Failed to wait for fence");
+  verify(vkWaitForFences(Device::get()->get_device(), 1, &active_frame->fence,
+                         VK_TRUE, timeout),
+         "vkWaitForFences", "Failed to wait for fence");
   if (supports_device_query) {
     vkCmdResetQueryPool(active_frame->command_buffer, *active_pool, 0, 2);
     vkCmdWriteTimestamp(active_frame->command_buffer,
@@ -123,14 +123,14 @@ auto CommandBuffer::submit() -> void {
   constexpr VkPipelineStageFlags wait_stage_mask =
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
   submit_info.pWaitDstStageMask = &wait_stage_mask;
- // submit_info.signalSemaphoreCount = 1;
- // submit_info.pSignalSemaphores = &active_frame->finished_semaphore;
+  // submit_info.signalSemaphoreCount = 1;
+  // submit_info.pSignalSemaphores = &active_frame->finished_semaphore;
 
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers = &active_frame->command_buffer;
 
   verify(vkWaitForFences(device, 1, &active_frame->fence, VK_TRUE, timeout),
-       "vkWaitForFences", "Failed to wait for fence");
+         "vkWaitForFences", "Failed to wait for fence");
   verify(vkResetFences(device, 1, &active_frame->fence), "vkResetFences",
          "Failed to reset fence");
 
@@ -148,7 +148,8 @@ auto CommandBuffer::submit() -> void {
 
     const auto timestamp_period =
         Device::get()->get_device_properties().limits.timestampPeriod;
-    static constexpr auto convert_to_double = [](const auto timestamp) -> double {
+    static constexpr auto convert_to_double =
+        [](const auto timestamp) -> double {
       return static_cast<double>(timestamp);
     };
     double timeTakenInSeconds =
@@ -183,9 +184,9 @@ void CommandBuffer::create_query_objects() {
   query_pool_info.queryCount = 2;
 
   for (auto i = 0U; i < Config::frame_count; ++i) {
-    verify(vkCreateQueryPool(device, &query_pool_info, nullptr,
-                             &query_pools[i]),
-           "vkCreateQueryPool", "Failed to create query pool");
+    verify(
+        vkCreateQueryPool(device, &query_pool_info, nullptr, &query_pools[i]),
+        "vkCreateQueryPool", "Failed to create query pool");
   }
 }
 

@@ -10,28 +10,6 @@
 #include <fmt/format.h>
 #include <fmt/std.h>
 
-auto fmt::formatter<Core::Queue::Type>::format(const Core::Queue::Type& type, format_context& ctx) const -> decltype(ctx.out())
-{
-  std::string output_type = "Unknown";
-  switch (type) {
-  case Core::Queue::Type::Graphics:
-    output_type = "Graphics";
-    break;
-  case Core::Queue::Type::Compute:
-    output_type = "Compute";
-    break;
-  case Core::Queue::Type::Transfer:
-    output_type = "Transfer";
-    break;
-  case Core::Queue::Type::Present:
-    output_type = "Present";
-    break;
-  default:
-    break;
-  }
-  return formatter<const char*>::format(fmt::format("{}", output_type).data(), ctx);
-}
-
 namespace Core {
 
 auto Device::get() -> Ptr {
@@ -58,12 +36,7 @@ auto Device::check_support(Feature feature, Queue::Type queue) const -> bool {
   vkGetPhysicalDeviceFeatures(physical_device, &physical_device_features);
 
   if (feature == Feature::DeviceQuery) {
-#ifdef GPGPU_DEBUG
-    return false;
-#else
     return queue_support.at(queue).timestamping;
-
-    #endif
   }
 
   return false;
@@ -153,7 +126,8 @@ auto Device::construct_vulkan_device() -> void {
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count,
                                              queue_families.data());
 
-    using IndexQueueTypePair = std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
+    using IndexQueueTypePair =
+        std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
     std::vector<IndexQueueTypePair> queue_infos;
     for (u32 i = 0; i < queue_families.size(); ++i) {
       const auto &queue_family = queue_families[i];
@@ -169,7 +143,8 @@ auto Device::construct_vulkan_device() -> void {
             .queueCount = 1,
             .pQueuePriorities = &priority,
         };
-        queue_infos.emplace_back(Queue::Type::Compute, queue_info, queue_family.timestampValidBits > 0);
+        queue_infos.emplace_back(Queue::Type::Compute, queue_info,
+                                 queue_family.timestampValidBits > 0);
         already_found = true;
       }
 
@@ -184,7 +159,8 @@ auto Device::construct_vulkan_device() -> void {
             .queueCount = 1,
             .pQueuePriorities = &priority,
         };
-        queue_infos.emplace_back(Queue::Type::Graphics, queue_info, queue_family.timestampValidBits > 0);
+        queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
+                                 queue_family.timestampValidBits > 0);
       }
     }
 
@@ -196,11 +172,12 @@ auto Device::construct_vulkan_device() -> void {
   VkPhysicalDeviceFeatures device_features{};
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
-  for (auto &&[type, queue_info, supports_timestamping] : index_queue_type_pairs) {
+  for (auto &&[type, queue_info, supports_timestamping] :
+       index_queue_type_pairs) {
     float priority = 1.0F;
     queue_info.pQueuePriorities = &priority;
     queue_infos.push_back(queue_info);
-    queue_support[type] = { supports_timestamping};
+    queue_support[type] = {supports_timestamping};
   }
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -214,7 +191,8 @@ auto Device::construct_vulkan_device() -> void {
          "vkCreateDevice", "Failed to create Vulkan device");
 
   auto &queue_map = queues;
-  for (auto &&[type, queue_info, supports_timestamping] : index_queue_type_pairs) {
+  for (auto &&[type, queue_info, supports_timestamping] :
+       index_queue_type_pairs) {
     VkQueue queue;
     vkGetDeviceQueue(device, queue_info.queueFamilyIndex, 0, &queue);
     IndexedQueue indexed_queue{
