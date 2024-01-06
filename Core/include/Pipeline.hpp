@@ -5,6 +5,7 @@
 #include "Types.hpp"
 #include <vector>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
@@ -17,10 +18,12 @@ struct PipelineConfiguration {
   std::string name;
   PipelineStage stage{PipelineStage::Compute};
   const Shader *shader{nullptr};
+  VkDescriptorSetLayout descriptor_set_layout{};
 
   PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader *shader)
-      : name(std::move(name)), stage(stage), shader(shader) {}
+                        const Shader *shader, VkDescriptorSetLayout layout)
+      : name(std::move(name)), stage(stage), shader(shader),
+        descriptor_set_layout(layout) {}
 };
 
 class Pipeline {

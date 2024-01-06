@@ -6,17 +6,13 @@
 namespace Core {
 
 class Allocator {
-  struct AllocatorImpl {
-    VmaAllocator allocator{};
-    AllocatorImpl() = default;
-    ~AllocatorImpl() { vmaDestroyAllocator(allocator); }
-  };
-
 public:
   static auto get_allocator() -> VmaAllocator {
     static VmaAllocator allocator{construct_allocator()};
     return allocator;
   }
+
+  static void destroy() { vmaDestroyAllocator(get_allocator()); }
 
 private:
   static auto construct_allocator() -> VmaAllocator;

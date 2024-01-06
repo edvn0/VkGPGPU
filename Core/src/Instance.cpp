@@ -18,6 +18,12 @@ auto Instance::get() -> Ptr {
   return static_instance.get();
 }
 
+Instance::~Instance() {
+  if (instance != nullptr) {
+    vkDestroyInstance(instance, nullptr);
+  }
+}
+
 auto Instance::construct_instance() -> Scope<Instance> {
   auto created = make_scope<Instance>();
   created->construct_vulkan_instance();
@@ -37,7 +43,7 @@ auto Instance::construct_vulkan_instance() -> void {
 
   // Add layers and extensions as needed
   std::vector<const char *> enabled_layers = {};
-  if (Environment::get("ENABLE_VALIDATION_LAYERS")) {
+  if (true || Environment::get("ENABLE_VALIDATION_LAYERS")) {
     enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
   }
 

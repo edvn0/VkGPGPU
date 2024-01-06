@@ -88,6 +88,9 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
   pipeline_layout_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_create_info.setLayoutCount = 1;
+  pipeline_layout_create_info.pSetLayouts =
+      &configuration.descriptor_set_layout;
 
   verify(vkCreatePipelineLayout(Device::get()->get_device(),
                                 &pipeline_layout_create_info, nullptr,

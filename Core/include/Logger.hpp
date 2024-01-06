@@ -16,6 +16,7 @@ enum class LogLevel {
 class Logger {
 public:
   static Logger &getInstance();
+  ~Logger() = default;
 
   void set_level(LogLevel level);
   auto get_level() const -> LogLevel;

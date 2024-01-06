@@ -14,7 +14,7 @@ public:
 };
 
 auto read_file(const std::filesystem::path &path) -> std::string {
-  auto resolved = std::filesystem::absolute(path);
+  const auto resolved = std::filesystem::absolute(path);
   std::ifstream stream{resolved, std::ios::binary};
   if (!stream) {
     throw FileCouldNotBeOpened{"Could not open file: " +
@@ -33,7 +33,7 @@ Shader::Shader(const std::filesystem::path &path) {
   create_info.codeSize = shader_code.size();
   create_info.pCode = std::bit_cast<const u32 *>(shader_code.data());
 
-  auto device = Device::get()->get_device();
+  const auto device = Device::get()->get_device();
 
   verify(vkCreateShaderModule(device, &create_info, nullptr, &shader_module),
          "vkCreateShaderModule", "Failed to create shader module");

@@ -10,8 +10,10 @@ class Instance {
 
 public:
   [[nodiscard]] static auto get() -> Ptr;
+  ~Instance();
+  static void destroy() { static_instance.reset(); }
 
-  auto get_instance() const -> VkInstance { return instance; }
+  [[nodiscard]] auto get_instance() const -> VkInstance { return instance; }
 
 private:
   VkInstance instance{nullptr};

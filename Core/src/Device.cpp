@@ -7,7 +7,30 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
+#include <fmt/format.h>
 #include <fmt/std.h>
+
+auto fmt::formatter<Core::Queue::Type>::format(const Core::Queue::Type& type, format_context& ctx) const -> decltype(ctx.out())
+{
+  std::string output_type = "Unknown";
+  switch (type) {
+  case Core::Queue::Type::Graphics:
+    output_type = "Graphics";
+    break;
+  case Core::Queue::Type::Compute:
+    output_type = "Compute";
+    break;
+  case Core::Queue::Type::Transfer:
+    output_type = "Transfer";
+    break;
+  case Core::Queue::Type::Present:
+    output_type = "Present";
+    break;
+  default:
+    break;
+  }
+  return formatter<const char*>::format(fmt::format("{}", output_type).data(), ctx);
+}
 
 namespace Core {
 
@@ -17,6 +40,33 @@ auto Device::get() -> Ptr {
   }
 
   return static_device.get();
+}
+
+Device::~Device() {
+  if (device != nullptr) {
+    vkDestroyDevice(device, nullptr);
+  }
+}
+
+auto Device::check_support(Feature feature, Queue::Type queue) const -> bool {
+  if (!queue_support.contains(queue)) {
+    error("Unknown queue type: {}", queue);
+    throw std::runtime_error("Unknown queue type");
+  }
+
+  auto physical_device_features = VkPhysicalDeviceFeatures{};
+  vkGetPhysicalDeviceFeatures(physical_device, &physical_device_features);
+
+  if (feature == Feature::DeviceQuery) {
+#ifdef GPGPU_DEBUG
+    return false;
+#else
+    return queue_support.at(queue).timestamping;
+
+    #endif
+  }
+
+  return false;
 }
 
 auto Device::construct_device() -> Scope<Device> {
@@ -103,7 +153,8 @@ auto Device::construct_vulkan_device() -> void {
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count,
                                              queue_families.data());
 
-    std::vector<VkDeviceQueueCreateInfo> queue_infos;
+    using IndexQueueTypePair = std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
+    std::vector<IndexQueueTypePair> queue_infos;
     for (u32 i = 0; i < queue_families.size(); ++i) {
       const auto &queue_family = queue_families[i];
       // Is there a unique compute queue?
@@ -118,7 +169,7 @@ auto Device::construct_vulkan_device() -> void {
             .queueCount = 1,
             .pQueuePriorities = &priority,
         };
-        queue_infos.push_back(queue_info);
+        queue_infos.emplace_back(Queue::Type::Compute, queue_info, queue_family.timestampValidBits > 0);
         already_found = true;
       }
 
@@ -133,17 +184,24 @@ auto Device::construct_vulkan_device() -> void {
             .queueCount = 1,
             .pQueuePriorities = &priority,
         };
-        queue_infos.push_back(queue_info);
+        queue_infos.emplace_back(Queue::Type::Graphics, queue_info, queue_family.timestampValidBits > 0);
       }
     }
 
     return queue_infos;
   };
 
-  auto queue_infos = find_all_possible_queue_infos(physical_device);
+  auto index_queue_type_pairs = find_all_possible_queue_infos(physical_device);
 
   VkPhysicalDeviceFeatures device_features{};
 
+  std::vector<VkDeviceQueueCreateInfo> queue_infos;
+  for (auto &&[type, queue_info, supports_timestamping] : index_queue_type_pairs) {
+    float priority = 1.0F;
+    queue_info.pQueuePriorities = &priority;
+    queue_infos.push_back(queue_info);
+    queue_support[type] = { supports_timestamping};
+  }
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = nullptr,
@@ -156,30 +214,19 @@ auto Device::construct_vulkan_device() -> void {
          "vkCreateDevice", "Failed to create Vulkan device");
 
   auto &queue_map = queues;
-  for (auto &&queue_info : queue_infos) {
+  for (auto &&[type, queue_info, supports_timestamping] : index_queue_type_pairs) {
     VkQueue queue;
     vkGetDeviceQueue(device, queue_info.queueFamilyIndex, 0, &queue);
-    IndexedQueue indexed_queue {
-      .family_index = queue_info.queueFamilyIndex,
-      .queue = queue,
+    IndexedQueue indexed_queue{
+        .family_index = queue_info.queueFamilyIndex,
+        .queue = queue,
     };
-
-    // What Queue::Type are we here?
-    Queue::Type type = Queue::Type::Unknown;
-    if (queue_info.queueFamilyIndex == 0) {
-      type = Queue::Type::Compute;
-    } else if (queue_info.queueFamilyIndex == 1) {
-      type = Queue::Type::Graphics;
-    } else {
-      throw std::runtime_error("Unknown queue family index");
-    }
-
-    queue_map[type] = std::move(indexed_queue);
+    queue_map[type] = indexed_queue;
   }
 
   info("Created Vulkan device with {} queue(s)", queue_infos.size());
   for (auto &&[k, v] : queue_map) {
-    auto as_string = [](Queue::Type type) {
+    static constexpr auto as_string = [](Queue::Type type) {
       switch (type) {
       case Queue::Type::Graphics:
         return "Graphics";
@@ -189,7 +236,7 @@ auto Device::construct_vulkan_device() -> void {
         return "Transfer";
       case Queue::Type::Present:
         return "Present";
-        default:
+      default:
         return "Unknown";
       }
     };
@@ -197,7 +244,7 @@ auto Device::construct_vulkan_device() -> void {
     const auto type_string = as_string(k);
 
     info("{} queue: family index {}, queue {}", type_string, v.family_index,
-         fmt::ptr(v.queue)); 
+         fmt::ptr(v.queue));
   }
 }
 

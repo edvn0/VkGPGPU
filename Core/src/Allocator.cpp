@@ -11,8 +11,8 @@ namespace Core {
 
 auto Allocator::construct_allocator() -> VmaAllocator {
   VmaAllocatorCreateInfo allocator_create_info{};
-  auto device = Device::get();
-  auto instance = Instance::get();
+  const auto &device = Device::get();
+  const auto& instance = Instance::get();
   allocator_create_info.physicalDevice = device->get_physical_device();
   allocator_create_info.device = device->get_device();
   allocator_create_info.instance = instance->get_instance();
