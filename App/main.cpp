@@ -4,6 +4,7 @@
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"
 #include "DescriptorMap.hpp"
+#include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
 #include "Instance.hpp"
@@ -12,55 +13,39 @@
 #include "Shader.hpp"
 #include "Timer.hpp"
 #include "Types.hpp"
-#include <cassert>
-#include <filesystem>
 #include <span>
 
 #include <array>
-#include <iostream>
 #include <random>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 #include <vulkan/vulkan.h>
 
 #include <fmt/format.h>
-
-#include <Windows.h>
 #include <renderdoc_app.h>
 
-#include <atomic>
-#include <csignal>
-
-RENDERDOC_API_1_0_0 *GetRenderDocApi() {
+auto GetRenderDocApi() -> RENDERDOC_API_1_6_0 * {
   Core::DebugMarker::setup(Core::Device::get()->get_device(),
                            Core::Device::get()->get_physical_device());
 
-  RENDERDOC_API_1_1_2 *rdoc_api = NULL;
-
-  // At init, on windows
-  HMODULE mod = GetModuleHandleA("renderdoc.dll");
-  if (mod != nullptr) {
-    pRENDERDOC_GetAPI RENDERDOC_GetAPI =
-        (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
-    int ret =
-        RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api);
-    assert(ret == 1);
-  }
-
-  pRENDERDOC_GetAPI getApi = nullptr;
-  getApi = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
-
-  if (getApi == nullptr) {
+  auto loader = Core::DynamicLibraryLoader::construct("renderdoc.dll");
+  if (!loader->is_valid()) {
+    info("Dynamic loader could not be constructed.");
     return nullptr;
   }
 
-  if (getApi(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api) != 1) {
-    return nullptr;
+  auto RENDERDOC_GetAPI =
+      std::bit_cast<pRENDERDOC_GetAPI>(loader->get_symbol("RENDERDOC_GetAPI"));
+  RENDERDOC_API_1_1_2 *rdoc_api = nullptr;
+
+  if (RENDERDOC_GetAPI &&
+      RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api) == 1) {
+    return rdoc_api;
   }
 
-  return rdoc_api;
+  info("Could not load symbols.");
+  return nullptr;
 }
 
 template <Core::u64 N, Core::u64 M> struct Matrix {
@@ -101,9 +86,6 @@ void perform(auto *renderdoc) {
 
   Core::CommandBuffer command_buffer(Core::CommandBuffer::Type::Compute);
 
-  std::array<std::string, 2> keys{"LOG_LEVEL", "ENABLE_VALIDATION_LAYERS"};
-  Core::Environment::initialize(keys);
-
   using mat4 = Matrix<4, 4>;
   std::array<mat4, 10> matrices{};
   std::array<mat4, 10> output_matrices{};
@@ -120,8 +102,6 @@ void perform(auto *renderdoc) {
            matrix.data.at(3).at(2), matrix.data.at(3).at(3));
     }
   };
-
-
 
   randomize_span_of_matrices(matrices);
 
@@ -152,11 +132,10 @@ void perform(auto *renderdoc) {
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  for (auto i = 0U; i < 10000; i++) {
+  for (auto i = 0U; i < 2; i++) {
     Core::Timer timer;
 
     if (renderdoc != nullptr) {
-
       renderdoc->StartFrameCapture(nullptr, nullptr);
     }
 
@@ -195,6 +174,9 @@ int main(int argc, char **argv) {
     views.emplace_back(arg);
   }
 
+  std::array<std::string, 2> keys{"LOG_LEVEL", "ENABLE_VALIDATION_LAYERS"};
+  Core::Environment::initialize(keys);
+
   auto rdoc = GetRenderDocApi();
   perform(rdoc);
 
@@ -205,8 +187,5 @@ int main(int argc, char **argv) {
   Core::Instance::destroy();
 
   // Close dll
-
-  _CrtDumpMemoryLeaks();
-
   return 0;
 }

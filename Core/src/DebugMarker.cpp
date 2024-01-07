@@ -1,5 +1,6 @@
 #include "DebugMarker.hpp"
 
+#include <cstring>
 #include <span>
 #include <vector>
 

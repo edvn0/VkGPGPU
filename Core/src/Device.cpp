@@ -23,6 +23,7 @@ auto Device::get() -> Ptr {
 Device::~Device() {
   if (device != nullptr) {
     vkDestroyDevice(device, nullptr);
+    info("Destroyed Device!");
   }
 }
 

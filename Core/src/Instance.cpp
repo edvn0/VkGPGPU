@@ -21,6 +21,7 @@ auto Instance::get() -> Ptr {
 Instance::~Instance() {
   if (instance != nullptr) {
     vkDestroyInstance(instance, nullptr);
+    info("Destroyed Instance!");
   }
 }
 
@@ -43,7 +44,7 @@ auto Instance::construct_vulkan_instance() -> void {
 
   // Add layers and extensions as needed
   std::vector<const char *> enabled_layers = {};
-  if (true || Environment::get("ENABLE_VALIDATION_LAYERS")) {
+  if (Environment::get("ENABLE_VALIDATION_LAYERS")) {
     enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
   }
 
@@ -63,11 +64,11 @@ auto Instance::construct_vulkan_instance() -> void {
   verify(vkCreateInstance(&create_info, nullptr, &instance), "vkCreateInstance",
          "Failed to create Vulkan instance");
 
-  debug("Created Vulkan instance. Enabled layers (count={}): [{}], enabled "
-        "extensions (count={}): "
-        "[{}]",
-        enabled_layers.size(), fmt::join(enabled_layers, ", "),
-        enabled_extensions.size(), fmt::join(enabled_extensions, ", "));
+  info("Created Vulkan instance. Enabled layers (count={}): [{}], enabled "
+       "extensions (count={}): "
+       "[{}]",
+       enabled_layers.size(), fmt::join(enabled_layers, ", "),
+       enabled_extensions.size(), fmt::join(enabled_extensions, ", "));
 }
 
 } // namespace Core

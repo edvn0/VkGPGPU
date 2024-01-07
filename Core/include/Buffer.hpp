@@ -3,6 +3,7 @@
 #include "Types.hpp"
 #include "Verify.hpp"
 
+#include <cstring>
 #include <span>
 #include <vector>
 #include <vulkan/vulkan_core.h>
