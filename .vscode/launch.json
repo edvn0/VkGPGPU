@@ -1,26 +1,29 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug",
-            "windows": {
-                "program": "${workspaceFolder}/build/App/App.exe",
-                "args": []
-            },
-            "linux": {
-                "program": "${workspaceFolder}/build/App/App",
-                "args": []
-            },
-            "env": {
-                "LOG_LEVEL": "Debug",
-                "ENABLE_VALIDATION_LAYERS": "On",
-            },
-            "cwd": "${workspaceFolder}/App"
-        }
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug",
+      "windows": {
+        "program": "${workspaceFolder}/build/App/App.exe",
+        "args": [
+          "--wd",
+          "${workspaceFolder}/App"
+        ]
+      },
+      "linux": {
+        "program": "${workspaceFolder}/build/App/App",
+        "args": []
+      },
+      "env": {
+        "LOG_LEVEL": "Debug",
+        "ENABLE_VALIDATION_LAYERS": "On",
+      },
+      "cwd": "${workspaceFolder}/App"
+    }
+  ]
 }

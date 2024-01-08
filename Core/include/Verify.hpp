@@ -31,8 +31,6 @@ void verify(VkResult result, const std::string &function_name,
                                 formatted_message;
     error("{}", error_message);
     throw VulkanResultException(result, error_message);
-  } else {
-    debug("{} succeeded", function_name);
   }
 }
 

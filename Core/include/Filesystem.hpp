@@ -16,6 +16,12 @@ namespace Core::FS {
 template <class T, class To>
 concept CStrConvertibleTo = std::convertible_to<T, To> || requires(const T &t) {
   { t.c_str() } -> std::convertible_to<To>;
+} || requires(const T &t) {
+  { t.data() } -> std::convertible_to<To>;
+} || requires(const T &t) {
+  { t.c_str() } -> std::convertible_to<const char *>;
+} || requires(const T &t) {
+  { t.data() } -> std::convertible_to<const char *>;
 };
 
 template <class T>
@@ -59,4 +65,15 @@ auto mkdir_safe(StringLike auto path) -> bool {
   return std::filesystem::create_directory(resolved);
 }
 
+auto set_current_path(StringLike auto path) -> bool {
+  const auto resolved = std::filesystem::absolute(path);
+  if (!std::filesystem::exists(resolved)) {
+    debug("set_current_path Path {} does not exist.", resolved);
+    return false;
+  }
+
+  std::filesystem::current_path(resolved);
+  info("set_current_path Path set to {}.", std::filesystem::current_path());
+  return true;
+}
 } // namespace Core::FS
