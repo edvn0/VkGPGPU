@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <string>
 
-
 namespace Core {
 
 struct Colour {

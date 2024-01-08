@@ -8,4 +8,4 @@ static constexpr auto frame_count = GPGPU_FRAME_COUNT;
 static constexpr auto frame_count = 3;
 #endif
 
-}
+} // namespace Core::Config
