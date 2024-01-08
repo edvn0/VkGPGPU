@@ -218,10 +218,9 @@ int main(int argc, char **argv) {
     };
   }
 
+  Core::Allocator::destroy();
   device.reset();
   instance.reset();
-
-  Core::Allocator::destroy();
 
   // Close dll
   info("Exiting");

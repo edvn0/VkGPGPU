@@ -2,37 +2,41 @@ cmake_minimum_required(VERSION 3.21)
 project(Core)
 
 set(SOURCES
-    include/Buffer.hpp
-    src/Buffer.cpp
-    include/Device.hpp
-    src/Device.cpp
-    include/Instance.hpp
-    src/Instance.cpp
-    include/Types.hpp
-    include/Logger.hpp
-    src/Logger.cpp
-    include/Verify.hpp
-    src/Verify.cpp
     include/Allocator.hpp
-    src/Allocator.cpp
+    include/Buffer.hpp
+    include/CommandBuffer.hpp
+    include/CommandDispatcher.hpp
+    include/Config.hpp
+    include/DebugMarker.hpp
+    include/DescriptorMap.hpp
+    include/Device.hpp
+    include/DynamicLibraryLoader.hpp
+    include/Environment.hpp
     include/Exception.hpp
     include/Filesystem.hpp
-    include/Shader.hpp
-    src/Shader.cpp
-    include/Pipeline.hpp
-    src/Pipeline.cpp
-    include/CommandBuffer.hpp
-    src/CommandBuffer.cpp
-    include/DescriptorMap.hpp
-    src/DescriptorMap.cpp
-    include/DebugMarker.hpp
-    src/DebugMarker.cpp
     include/Formatters.hpp
-    src/Formatters.cpp
+    include/Instance.hpp
+    include/Logger.hpp
+    include/Pipeline.hpp
+    include/Shader.hpp
     include/Timer.hpp
-    src/Timer.cpp
-    include/DynamicLibraryLoader.hpp
+    include/Types.hpp
+    include/Verify.hpp
+    include/pch/vkgpgpu_pch.hpp
+    src/Allocator.cpp
+    src/Buffer.cpp
+    src/CommandBuffer.cpp
+    src/DebugMarker.cpp
+    src/DescriptorMap.cpp
+    src/Device.cpp
     src/DynamicLibraryLoader.cpp
+    src/Formatters.cpp
+    src/Instance.cpp
+    src/Logger.cpp
+    src/Pipeline.cpp
+    src/Shader.cpp
+    src/Timer.cpp
+    src/Verify.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
@@ -54,5 +58,5 @@ endif()
 
 # If we're on Linux + clang/gnu, need to set -Wno-nullability-completeness
 if(UNIX AND NOT APPLE)
-    target_compile_options(Core PRIVATE -Wno-nullability-completeness)
+    target_compile_options(Core PRIVATE -Wno-nullability-completeness -Wno-format)
 endif()
