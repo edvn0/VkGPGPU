@@ -3,42 +3,46 @@
 #include "Buffer.hpp"
 #include "CommandBuffer.hpp"
 #include "Types.hpp"
-#include <unordered_map>
+#include <map>
 #include <vulkan/vulkan.h>
 
-template <> struct fmt::formatter<VkDescriptorSet> : formatter<const char *> {
-  auto format(const VkDescriptorSet &type, format_context &ctx) const
-      -> decltype(ctx.out());
+template <> struct fmt::formatter<VkDescriptorSet> : formatter<const char*> {
+	auto format(const VkDescriptorSet& type, format_context& ctx) const
+		-> decltype(ctx.out());
 };
 
 namespace Core {
 
-class DescriptorMap {
-  using DescriptorSets = std::vector<VkDescriptorSet>;
+	class DescriptorMap {
+		using DescriptorSets = std::vector<VkDescriptorSet>;
 
-public:
-  DescriptorMap();
-  ~DescriptorMap();
+	public:
+		explicit DescriptorMap(const Device&);
+		~DescriptorMap();
 
-  auto add_for_frames(u32 set, u32 binding, const Buffer &info) -> void;
+		auto add_for_frames(u32 set, u32 binding, const Buffer& info) -> void;
 
-  auto bind(const CommandBuffer &buffer, u32 frame,
-            VkPipelineLayout binding) const -> void;
+		auto bind(const CommandBuffer& buffer, u32 frame,
+			VkPipelineLayout binding) const -> void;
 
-  [[nodiscard]] auto get_descriptor_pool() -> VkDescriptorPool;
-  [[nodiscard]] auto get_descriptor_set_layout() -> VkDescriptorSetLayout {
-    return descriptor_set_layout;
-  }
+		[[nodiscard]] auto get_descriptor_pool() -> VkDescriptorPool;
+		[[nodiscard]] auto get_descriptor_set_layout() const -> VkDescriptorSetLayout {
+			return descriptor_set_layout;
+		}
 
-  auto descriptors() -> std::unordered_map<u32, DescriptorSets> &;
-  auto descriptors() const -> std::unordered_map<u32, DescriptorSets> &;
+		auto descriptors() -> auto& {
+			return descriptor_sets;
+		}
+		[[nodiscard]] auto descriptors() const ->const auto& {
+			return descriptor_sets;
+		}
 
-private:
-  struct MapStorageImpl;
+	private:
+		const Device& device;
 
-  VkDescriptorPool descriptor_pool{};
-  VkDescriptorSetLayout descriptor_set_layout{};
-  Scope<MapStorageImpl> pimpl{nullptr};
-};
+		std::map<u32, std::vector<VkDescriptorSet>> descriptor_sets{};
+		VkDescriptorPool descriptor_pool{ nullptr };
+		VkDescriptorSetLayout descriptor_set_layout{ nullptr };
+	};
 
 } // namespace Core

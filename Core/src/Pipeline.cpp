@@ -12,12 +12,13 @@
 
 namespace Core {
 
-Pipeline::Pipeline(const PipelineConfiguration &configuration)
-    : name(configuration.name) {
+Pipeline::Pipeline(const Device &dev,
+                   const PipelineConfiguration &configuration)
+    : device(dev), name(configuration.name) {
   construct_pipeline(configuration);
 }
 
-auto save_cache(auto pipeline_cache, const std::string &name) {
+auto save_cache(auto &device, auto pipeline_cache, const std::string &name) {
   if (name.empty()) {
     return;
   }
@@ -38,14 +39,14 @@ auto save_cache(auto pipeline_cache, const std::string &name) {
     return;
   }
 
-  auto device = Device::get()->get_device();
   auto pipeline_cache_size = size_t{0};
-  verify(vkGetPipelineCacheData(device, pipeline_cache, &pipeline_cache_size,
-                                nullptr),
+  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                &pipeline_cache_size, nullptr),
          "vkGetPipelineCacheData", "Failed to get pipeline cache data");
 
   auto pipeline_cache_data = std::vector<u8>(pipeline_cache_size);
-  verify(vkGetPipelineCacheData(device, pipeline_cache, &pipeline_cache_size,
+  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                &pipeline_cache_size,
                                 pipeline_cache_data.data()),
          "vkGetPipelineCacheData", "Failed to get pipeline cache data");
 
@@ -54,12 +55,15 @@ auto save_cache(auto pipeline_cache, const std::string &name) {
 }
 
 Pipeline::~Pipeline() {
-  save_cache(pipeline_cache, name);
+  try {
+    save_cache(device, pipeline_cache, name);
+  } catch (const std::exception &exc) {
+    error("Pipeline save_cache exception: {}", exc.what());
+  }
 
-  vkDestroyPipelineLayout(Device::get()->get_device(), pipeline_layout,
-                          nullptr);
-  vkDestroyPipelineCache(Device::get()->get_device(), pipeline_cache, nullptr);
-  vkDestroyPipeline(Device::get()->get_device(), pipeline, nullptr);
+  vkDestroyPipelineLayout(device.get_device(), pipeline_layout, nullptr);
+  vkDestroyPipelineCache(device.get_device(), pipeline_cache, nullptr);
+  vkDestroyPipeline(device.get_device(), pipeline, nullptr);
 }
 
 auto Pipeline::try_load_pipeline_cache(const std::string &name)
@@ -99,7 +103,7 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   pipeline_layout_create_info.pSetLayouts =
       &configuration.descriptor_set_layout;
 
-  verify(vkCreatePipelineLayout(Device::get()->get_device(),
+  verify(vkCreatePipelineLayout(device.get_device(),
                                 &pipeline_layout_create_info, nullptr,
                                 &pipeline_layout),
          "vkCreatePipelineLayout", "Failed to create pipeline layout");
@@ -113,8 +117,8 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   pipeline_cache_create_info.pInitialData =
       maybe_empty_pipeline_cache_data.data();
 
-  vkCreatePipelineCache(Device::get()->get_device(),
-                        &pipeline_cache_create_info, nullptr, &pipeline_cache);
+  vkCreatePipelineCache(device.get_device(), &pipeline_cache_create_info,
+                        nullptr, &pipeline_cache);
 
   VkComputePipelineCreateInfo compute_pipeline_create_info{};
   compute_pipeline_create_info.sType =
@@ -125,13 +129,13 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   shader_stage_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stage_create_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-  shader_stage_create_info.module = configuration.shader->get_shader_module();
+  shader_stage_create_info.module = configuration.shader.get_shader_module();
   shader_stage_create_info.pName = "main";
 
   compute_pipeline_create_info.stage = shader_stage_create_info;
 
-  verify(vkCreateComputePipelines(Device::get()->get_device(), pipeline_cache,
-                                  1, &compute_pipeline_create_info, nullptr,
+  verify(vkCreateComputePipelines(device.get_device(), pipeline_cache, 1,
+                                  &compute_pipeline_create_info, nullptr,
                                   &pipeline),
          "vkCreateComputePipelines", "Failed to create compute pipeline");
 }

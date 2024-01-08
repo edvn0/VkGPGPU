@@ -23,7 +23,7 @@ class CommandBuffer {
 public:
   enum class Type : u8 { Compute, Graphics };
 
-  explicit CommandBuffer(Type type);
+  explicit CommandBuffer(const Device &, Type type);
   ~CommandBuffer();
 
   auto begin(u32 current_frame) -> void;
@@ -38,7 +38,7 @@ public:
 
 private:
   auto submit() -> void;
-
+  const Device &device;
   bool supports_device_query{false};
 
   struct FrameCommandBuffer {

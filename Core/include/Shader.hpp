@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Device.hpp"
 #include "Types.hpp"
 
 #include <filesystem>
@@ -15,7 +16,7 @@ public:
     Fragment,
   };
 
-  explicit Shader(const std::filesystem::path &path);
+  explicit Shader(const Device &device, const std::filesystem::path &path);
   ~Shader();
 
   [[nodiscard]] auto get_shader_module() const -> VkShaderModule {
@@ -23,6 +24,7 @@ public:
   }
 
 private:
+  const Device &device;
   VkShaderModule shader_module{};
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Instance.hpp"
 #include "Types.hpp"
 
 #include <fmt/core.h>
@@ -25,12 +26,9 @@ enum class Feature : u8 {
 };
 
 class Device {
-  using Ptr = const Device *const;
-
 public:
-  [[nodiscard]] static auto get() -> Ptr;
+  explicit Device(const Instance &);
   ~Device();
-  static void destroy() { static_device.reset(); }
 
   auto get_device() const -> VkDevice { return device; }
   auto get_physical_device() const -> VkPhysicalDevice {
@@ -54,11 +52,13 @@ public:
     return properties;
   }
 
+  static auto construct(const Instance &) -> Scope<Device>;
+
 private:
+  const Instance &instance;
   VkDevice device{nullptr};
   VkPhysicalDevice physical_device{nullptr};
 
-  static auto construct_device() -> Scope<Device>;
   auto construct_vulkan_device() -> void;
 
   struct IndexedQueue {
@@ -71,8 +71,6 @@ private:
   };
   std::unordered_map<Queue::Type, IndexedQueue> queues{};
   std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support{};
-
-  static inline Scope<Device> static_device{nullptr};
 };
 
 } // namespace Core

@@ -17,18 +17,19 @@ enum class PipelineStage : u8 {
 struct PipelineConfiguration {
   std::string name;
   PipelineStage stage{PipelineStage::Compute};
-  const Shader *shader{nullptr};
+  const Shader &shader;
   VkDescriptorSetLayout descriptor_set_layout{};
 
   PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader *shader, VkDescriptorSetLayout layout)
+                        const Shader &shader, VkDescriptorSetLayout layout)
       : name(std::move(name)), stage(stage), shader(shader),
         descriptor_set_layout(layout) {}
 };
 
 class Pipeline {
 public:
-  explicit Pipeline(const PipelineConfiguration &configuration);
+  explicit Pipeline(const Device &dev,
+                    const PipelineConfiguration &configuration);
   ~Pipeline();
 
   [[nodiscard]] auto get_pipeline() const -> VkPipeline { return pipeline; }
@@ -49,6 +50,7 @@ private:
   [[nodiscard]] auto try_load_pipeline_cache(const std::string &name)
       -> std::vector<u8>;
 
+  const Device &device;
   std::string name{};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};

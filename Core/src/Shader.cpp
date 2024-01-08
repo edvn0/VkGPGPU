@@ -8,7 +8,6 @@
 #include <fstream>
 #include <vulkan/vulkan.h>
 
-
 namespace Core {
 
 class FileCouldNotBeOpened : public BaseException {
@@ -16,16 +15,17 @@ public:
   using BaseException::BaseException;
 };
 
-auto read_file(const std::filesystem::path& path) -> std::string {
+auto read_file(const std::filesystem::path &path) -> std::string {
   // Convert to an absolute path and open the file
-  const auto& absolute_path = absolute(path);
-  std::ifstream file(absolute_path);
+  const auto &absolute_path = absolute(path);
+  std::ifstream file(absolute_path, std::ios::in | std::ios::binary);
   // Set exceptions on
   file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
   // Check if the file was successfully opened
   if (!file.is_open()) {
-    throw FileCouldNotBeOpened("Failed to open file: " + absolute_path.string());
+    throw FileCouldNotBeOpened("Failed to open file: " +
+                               absolute_path.string());
   }
 
   // Use a std::stringstream to read the file's contents into a string
@@ -36,7 +36,8 @@ auto read_file(const std::filesystem::path& path) -> std::string {
   return buffer.str();
 }
 
-Shader::Shader(const std::filesystem::path &path) {
+Shader::Shader(const Device &dev, const std::filesystem::path &path)
+    : device(dev) {
   auto shader_code = read_file(path);
 
   VkShaderModuleCreateInfo create_info{};
@@ -44,15 +45,13 @@ Shader::Shader(const std::filesystem::path &path) {
   create_info.codeSize = shader_code.size();
   create_info.pCode = std::bit_cast<const u32 *>(shader_code.data());
 
-  const auto device = Device::get()->get_device();
-
-  verify(vkCreateShaderModule(device, &create_info, nullptr, &shader_module),
+  verify(vkCreateShaderModule(device.get_device(), &create_info, nullptr,
+                              &shader_module),
          "vkCreateShaderModule", "Failed to create shader module");
 }
 
 Shader::~Shader() {
-  auto device = Device::get()->get_device();
-  vkDestroyShaderModule(device, shader_module, nullptr);
+  vkDestroyShaderModule(device.get_device(), shader_module, nullptr);
 }
 
 } // namespace Core

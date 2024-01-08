@@ -6,33 +6,20 @@
 #include "Types.hpp"
 #include "Verify.hpp"
 
-
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <vector>
 
 namespace Core {
 
-auto Instance::get() -> Ptr {
-  if (static_instance == nullptr) {
-    static_instance = construct_instance();
-  }
-
-  return static_instance.get();
-}
+Instance::Instance() { construct_vulkan_instance(); }
 
 Instance::~Instance() {
-  if (instance != nullptr) {
-    vkDestroyInstance(instance, nullptr);
-    info("Destroyed Instance!");
-  }
+  vkDestroyInstance(instance, nullptr);
+  info("Destroyed Instance!");
 }
 
-auto Instance::construct_instance() -> Scope<Instance> {
-  auto created = make_scope<Instance>();
-  created->construct_vulkan_instance();
-  return created;
-}
+auto Instance::construct() -> Scope<Instance> { return make_scope<Instance>(); }
 
 auto Instance::construct_vulkan_instance() -> void {
   VkApplicationInfo application_info{
