@@ -65,6 +65,7 @@ private:
   VkDescriptorBufferInfo descriptor_info{};
 
   void initialise_vulkan_buffer();
+  void initialise_descriptor_info();
 
   void initialise_vertex_buffer();
   void initialise_index_buffer();

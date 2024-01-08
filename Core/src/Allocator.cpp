@@ -50,7 +50,8 @@ auto Allocator::allocate_buffer(VkBuffer &buffer,
   ensure(allocator != nullptr, "Allocator was null.");
   VmaAllocationCreateInfo alloc_info{};
   alloc_info.usage = static_cast<VmaMemoryUsage>(props.usage);
-  alloc_info.flags = static_cast<VmaAllocationCreateFlags>(props.creation);
+  alloc_info.flags = static_cast<VmaAllocationCreateFlags>(props.creation) |
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
 
   VmaAllocation allocation{};
   verify(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &buffer,

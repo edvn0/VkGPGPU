@@ -4,17 +4,23 @@ struct Mat4 {
   mat4 matrix;
 };
 
-layout(std140, set = 0, binding = 0) readonly buffer InputBuffer {
+layout(std140, set = 0, binding = 0) readonly buffer InputBufferA {
   Mat4 inputMatrix[];
 }
-input_buffer;
+input_buffer_a;
 
-layout(std140, set = 0, binding = 1) writeonly buffer OutputBuffer {
+layout(std140, set = 0, binding = 1) readonly buffer InputBufferB {
+  Mat4 inputMatrix[];
+}
+input_buffer_b;
+
+
+layout(std140, set = 0, binding = 2) writeonly buffer OutputBuffer {
   Mat4 outputMatrix[];
 }
 output_buffer;
 
-layout(std140, set = 0, binding = 2) uniform UniformBuffer { float something; }
+layout(std140, set = 0, binding = 3) uniform UniformBuffer { float something; }
 ubo;
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -22,6 +28,5 @@ layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
   uint index = gl_GlobalInvocationID.x;
 
-  output_buffer.outputMatrix[index] = input_buffer.inputMatrix[index];
-  output_buffer.outputMatrix[index].matrix[0] = vec4(ubo.something);
+  output_buffer.outputMatrix[index].matrix = input_buffer_a.inputMatrix[index].matrix + input_buffer_b.inputMatrix[index].matrix;
 }
