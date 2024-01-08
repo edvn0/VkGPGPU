@@ -1,5 +1,6 @@
 #include "pch/vkgpgpu_pch.hpp"
 
+#include "Allocator.hpp"
 #include "Device.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
@@ -23,6 +24,8 @@ auto Device::get() -> Ptr {
 }
 
 Device::~Device() {
+  Core::Allocator::destroy();
+
   if (device != nullptr) {
     vkDestroyDevice(device, nullptr);
     info("Destroyed Device!");

@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "windows": {
-                "program": "${workspaceFolder}/build/App/App.exe",
+                "program": "${workspaceFolder}/build/App/Debug/App.exe",
                 "args": []
             },
             "linux": {

@@ -1,4 +1,3 @@
-#include "Allocator.hpp"
 #include "Buffer.hpp"
 #include "CommandBuffer.hpp"
 #include "CommandDispatcher.hpp"
@@ -23,13 +22,15 @@
 #include <vulkan/vulkan.h>
 
 #include <fmt/format.h>
-#include <renderdoc_app.h>
 
 #ifdef _WIN32
 static constexpr std::string_view renderdoc_dll_name = "renderdoc.dll";
 #else
 static constexpr std::string_view renderdoc_dll_name = "librenderdoc.so";
 #endif
+
+#if !defined(GPGPU_PIPELINE)
+#include <renderdoc_app.h>
 
 auto GetRenderDocApi(auto &loader) -> RENDERDOC_API_1_6_0 * {
   Core::DebugMarker::setup(Core::Device::get()->get_device(),
@@ -52,6 +53,7 @@ auto GetRenderDocApi(auto &loader) -> RENDERDOC_API_1_6_0 * {
   info("Could not load symbols.");
   return nullptr;
 }
+#endif
 
 template <Core::u64 N, Core::u64 M> struct Matrix {
   std::array<std::array<float, N>, M> data{};
@@ -87,27 +89,13 @@ auto randomize_span_of_matrices(std::span<Matrix<4, 4>> matrices) -> void {
   }
 }
 
-void perform(auto *renderdoc) {
+void perform(void *renderdoc) {
 
   Core::CommandBuffer command_buffer(Core::CommandBuffer::Type::Compute);
 
   using mat4 = Matrix<4, 4>;
   std::array<mat4, 10> matrices{};
   std::array<mat4, 10> output_matrices{};
-  static constexpr auto log_matrices = [](std::span<mat4> matrices) -> void {
-    for (const auto &matrix : matrices) {
-      info("Matrix:");
-      info("{} {} {} {}", matrix.data.at(0).at(0), matrix.data.at(0).at(1),
-           matrix.data.at(0).at(2), matrix.data.at(0).at(3));
-      info("{} {} {} {}", matrix.data.at(1).at(0), matrix.data.at(1).at(1),
-           matrix.data.at(1).at(2), matrix.data.at(1).at(3));
-      info("{} {} {} {}", matrix.data.at(2).at(0), matrix.data.at(2).at(1),
-           matrix.data.at(2).at(2), matrix.data.at(2).at(3));
-      info("{} {} {} {}", matrix.data.at(3).at(0), matrix.data.at(3).at(1),
-           matrix.data.at(3).at(2), matrix.data.at(3).at(3));
-    }
-  };
-
   randomize_span_of_matrices(matrices);
 
   auto input_buffer =
@@ -117,7 +105,8 @@ void perform(auto *renderdoc) {
 
   struct Uniform {
     float whatever{};
-  } uniform{};
+  };
+  Uniform uniform{};
   auto simple_uniform =
       Core::Buffer{sizeof(Uniform), Core::Buffer::Type::Uniform};
 
@@ -140,9 +129,12 @@ void perform(auto *renderdoc) {
   for (auto i = 0U; i < 3; i++) {
     Core::Timer timer;
 
+#if !defined(GPGPU_PIPELINE)
     if (renderdoc != nullptr) {
-      renderdoc->StartFrameCapture(nullptr, nullptr);
+      static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->StartFrameCapture(nullptr,
+                                                                       nullptr);
     }
+#endif
 
     randomize_span_of_matrices(matrices);
     input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
@@ -166,15 +158,20 @@ void perform(auto *renderdoc) {
     command_buffer.end_and_submit();
     frame = (frame + 1) % Core::Config::frame_count;
 
+#if !defined(GPGPU_PIPELINE)
     if (renderdoc != nullptr) {
-      renderdoc->EndFrameCapture(nullptr, nullptr);
+      static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->EndFrameCapture(nullptr,
+                                                                     nullptr);
     }
+#endif
   }
 
+#if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
-    renderdoc->RemoveHooks();
+    static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->RemoveHooks();
     delete renderdoc;
   }
+#endif
 }
 
 int main(int argc, char **argv) {
@@ -188,12 +185,15 @@ int main(int argc, char **argv) {
   Core::Environment::initialize(keys);
 
   auto loader = Core::DynamicLibraryLoader::construct(renderdoc_dll_name);
+#if !defined(GPGPU_PIPELINE)
   auto rdoc = GetRenderDocApi(loader);
   perform(rdoc);
+#else
+  perform(nullptr)
+#endif
 
   info("Exiting");
 
-  Core::Allocator::destroy();
   Core::Device::destroy();
   Core::Instance::destroy();
 

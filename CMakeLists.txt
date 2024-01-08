@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Vulkan REQUIRED)
 
+if(NOT DEFINED GPGPU_PIPELINE)
+    set(GPGPU_PIPELINE "OFF")
+endif()
+
 add_subdirectory(ThirdParty)
 add_subdirectory(Core)
 add_subdirectory(App)
