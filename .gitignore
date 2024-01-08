@@ -79,4 +79,4 @@ compile_commands.json
 build*
 
 *.txt
-
+!ThirdParty/*.txt
