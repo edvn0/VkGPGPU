@@ -14,9 +14,10 @@ struct fmt::formatter<std::filesystem::path> : formatter<const char *> {
 namespace Core::FS {
 
 template <class T, class To>
-concept CStrConvertibleTo = std::convertible_to<T, To> || requires(const T &t) {
-  { t.c_str() } -> std::convertible_to<To>;
-};
+concept CStrConvertibleTo =
+    std::convertible_to<T, To> || requires(const T &t) {
+                                    { t.c_str() } -> std::convertible_to<To>;
+                                  };
 
 template <class T>
 concept StringLike =
@@ -45,13 +46,14 @@ auto pipeline_cache(StringLike auto path, bool resolve = false)
 auto mkdir_safe(StringLike auto path) -> bool {
   const auto resolved = std::filesystem::absolute(path);
   if (std::filesystem::exists(resolved)) {
-    info("Path {} already exists.", resolved);
+    debug("mkdir_safe Path {} already exists.", resolved);
     return false;
   }
 
   if (const auto current = std::filesystem::current_path();
       resolved.parent_path() != current) {
-    info("Path {} does not share the same parent as {}.", resolved, current);
+    debug("mkdir_safe Path {} does not share the same parent as {}.", resolved,
+          current);
     return false;
   }
 

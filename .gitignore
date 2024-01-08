@@ -78,7 +78,5 @@ compile_commands.json
 # Folders
 build*
 
-App/Assets/Scene/*.json
-!App/Assets/Editor/*.png
-!App/Assets/Models/*.obj
-!App/Assets/Models/*.fbx
+*.txt
+

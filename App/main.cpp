@@ -25,11 +25,16 @@
 #include <fmt/format.h>
 #include <renderdoc_app.h>
 
-auto GetRenderDocApi() -> RENDERDOC_API_1_6_0 * {
+#ifdef _WIN32
+static constexpr std::string_view renderdoc_dll_name = "renderdoc.dll";
+#else
+static constexpr std::string_view renderdoc_dll_name = "librenderdoc.so";
+#endif
+
+auto GetRenderDocApi(auto &loader) -> RENDERDOC_API_1_6_0 * {
   Core::DebugMarker::setup(Core::Device::get()->get_device(),
                            Core::Device::get()->get_physical_device());
 
-  auto loader = Core::DynamicLibraryLoader::construct("renderdoc.dll");
   if (!loader->is_valid()) {
     info("Dynamic loader could not be constructed.");
     return nullptr;
@@ -49,7 +54,7 @@ auto GetRenderDocApi() -> RENDERDOC_API_1_6_0 * {
 }
 
 template <Core::u64 N, Core::u64 M> struct Matrix {
-  std::array<std::array<float, N>, M> data;
+  std::array<std::array<float, N>, M> data{};
 };
 
 auto randomize_span_of_matrices(std::span<Matrix<4, 4>> matrices) -> void {
@@ -132,7 +137,7 @@ void perform(auto *renderdoc) {
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  for (auto i = 0U; i < 2; i++) {
+  for (auto i = 0U; i < 3; i++) {
     Core::Timer timer;
 
     if (renderdoc != nullptr) {
@@ -165,6 +170,11 @@ void perform(auto *renderdoc) {
       renderdoc->EndFrameCapture(nullptr, nullptr);
     }
   }
+
+  if (renderdoc != nullptr) {
+    renderdoc->RemoveHooks();
+    delete renderdoc;
+  }
 }
 
 int main(int argc, char **argv) {
@@ -177,7 +187,8 @@ int main(int argc, char **argv) {
   std::array<std::string, 2> keys{"LOG_LEVEL", "ENABLE_VALIDATION_LAYERS"};
   Core::Environment::initialize(keys);
 
-  auto rdoc = GetRenderDocApi();
+  auto loader = Core::DynamicLibraryLoader::construct(renderdoc_dll_name);
+  auto rdoc = GetRenderDocApi(loader);
   perform(rdoc);
 
   info("Exiting");

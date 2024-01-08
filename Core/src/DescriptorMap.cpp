@@ -1,25 +1,36 @@
-#include "DescriptorMap.hpp"
+#include "Types.hpp"
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Config.hpp"
+#include "DescriptorMap.hpp"
 #include "Device.hpp"
-#include "Verify.hpp"
 #include "Formatters.hpp"
+#include "Verify.hpp"
 
 #include <array>
 #include <fmt/ranges.h>
 #include <ranges>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
-
-static constexpr auto for_each_frame = []() {
-  return std::views::iota(0, Core::Config::frame_count);
-};
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
-DescriptorMap::DescriptorMap() {
-  for (const auto i : for_each_frame()) {
+struct DescriptorMap::MapStorageImpl {
+  std::unordered_map<u32, DescriptorMap::DescriptorSets> descriptors{};
+};
+
+auto DescriptorMap::descriptors() -> std::unordered_map<u32, DescriptorSets> & {
+  return pimpl->descriptors;
+}
+
+DescriptorMap::DescriptorMap()
+    : pimpl(std::make_unique<DescriptorMap::MapStorageImpl>()) {
+
+  for (auto i = 0; i < Config::frame_count; ++i) {
     // We'll start with just one descriptor set, and try to update if we add
     // two!
-    m_descriptors[i].resize(1);
+    descriptors()[i].resize(1);
   }
 
   // Create pool sizes for 10 storage buffers and 10 uniform buffers
@@ -37,7 +48,7 @@ DescriptorMap::DescriptorMap() {
   pool_info.maxSets = 1000;
 
   verify(vkCreateDescriptorPool(Device::get()->get_device(), &pool_info,
-                                nullptr, &m_descriptor_pool),
+                                nullptr, &descriptor_pool),
          "vkCreateDescriptorPool", "Failed to create descriptor pool!");
 
   VkDescriptorSetLayoutBinding binding_0{};
@@ -66,45 +77,36 @@ DescriptorMap::DescriptorMap() {
   layout_info.pBindings = bindings.data();
 
   verify(vkCreateDescriptorSetLayout(Device::get()->get_device(), &layout_info,
-                                     nullptr, &m_descriptor_set_layout),
+                                     nullptr, &descriptor_set_layout),
          "vkCreateDescriptorSetLayout",
          "Failed to create descriptor set layout!");
 
-  const std::vector layouts(Config::frame_count, m_descriptor_set_layout);
+  const std::vector layouts(Config::frame_count, descriptor_set_layout);
   VkDescriptorSetAllocateInfo allocation_info{};
   allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocation_info.descriptorPool = m_descriptor_pool;
+  allocation_info.descriptorPool = descriptor_pool;
   allocation_info.descriptorSetCount = static_cast<u32>(layouts.size());
   allocation_info.pSetLayouts = layouts.data();
 
-  for (const auto i : for_each_frame()) {
-    auto &frame_descriptors = m_descriptors.at(i);
-    if (vkAllocateDescriptorSets(Device::get()->get_device(), &allocation_info,
-                                 frame_descriptors.data()) != VK_SUCCESS) {
-      throw std::runtime_error("failed to allocate descriptor sets!");
-    }
+  for (auto i = 0; i < Config::frame_count; ++i) {
+    auto &frame_descriptors = descriptors().at(i);
+    verify(vkAllocateDescriptorSets(Device::get()->get_device(),
+                                    &allocation_info, frame_descriptors.data()),
+           "vkAllocateDescriptorSets", "Failed to allocate descriptor sets!");
   }
 }
 
 DescriptorMap::~DescriptorMap() {
-
-  // Destroy all layouts, pools, and sets
   vkDestroyDescriptorSetLayout(Device::get()->get_device(),
-                               m_descriptor_set_layout, nullptr);
-  for (auto &&[k, v] : this->m_descriptors) {
-    info("{}, {}", k, fmt::join(v, ", "));
-  }
+                               descriptor_set_layout, nullptr);
 
-  m_descriptors.clear();
-
-  vkDestroyDescriptorPool(Device::get()->get_device(), m_descriptor_pool,
+  vkDestroyDescriptorPool(Device::get()->get_device(), descriptor_pool,
                           nullptr);
-
 }
 
 auto DescriptorMap::bind(CommandBuffer &buffer, u32 current_frame,
                          VkPipelineLayout layout) -> void {
-  auto &current_descriptor = m_descriptors.at(current_frame);
+  auto &current_descriptor = descriptors().at(current_frame);
 
   vkCmdBindDescriptorSets(buffer.get_command_buffer(),
                           VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0,
@@ -113,14 +115,14 @@ auto DescriptorMap::bind(CommandBuffer &buffer, u32 current_frame,
 }
 
 auto DescriptorMap::get_descriptor_pool() -> VkDescriptorPool {
-  return m_descriptor_pool;
+  return descriptor_pool;
 }
 
 auto DescriptorMap::add_for_frames(u32 set, u32 binding, const Buffer &buffer)
     -> void {
 
-  for (const auto i : for_each_frame()) {
-    const auto current_set = m_descriptors.at(i).at(set);
+  for (auto i = 0; i < Config::frame_count; ++i) {
+    const auto current_set = descriptors().at(i).at(set);
     std::vector descriptor_writes(Config::frame_count, VkWriteDescriptorSet{});
     for (auto i = 0U; i < Config::frame_count; ++i) {
       auto &descriptor_write = descriptor_writes[i];

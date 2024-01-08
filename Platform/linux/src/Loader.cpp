@@ -4,7 +4,9 @@
 
 namespace Core::Linux {
 
-DynamicLibraryLoader::DynamicLibraryLoader(std::string_view dll_name) {}
+DynamicLibraryLoader::DynamicLibraryLoader(std::string_view dll_name) {
+  lib_handle = dlopen(dll_name.data(), RTLD_NOW);
+}
 
 DynamicLibraryLoader::~DynamicLibraryLoader() {
   if (lib_handle) {

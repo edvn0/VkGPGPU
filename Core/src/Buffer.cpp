@@ -1,3 +1,5 @@
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Buffer.hpp"
 
 #include <cassert>
@@ -55,7 +57,7 @@ void Buffer::initialise_uniform_buffer() {
   buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   VmaAllocationCreateInfo allocation_create_info{};
-  allocation_create_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+  allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
   allocation_create_info.flags =
       VMA_ALLOCATION_CREATE_MAPPED_BIT |
       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;

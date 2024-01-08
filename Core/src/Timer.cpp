@@ -1,3 +1,5 @@
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Timer.hpp"
 #include <fstream>
 

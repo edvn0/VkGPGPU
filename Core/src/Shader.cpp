@@ -1,10 +1,13 @@
-#include "Shader.hpp"
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Device.hpp"
 #include "Exception.hpp"
+#include "Shader.hpp"
 #include "Verify.hpp"
 #include <bit>
 #include <fstream>
 #include <vulkan/vulkan.h>
+
 
 namespace Core {
 

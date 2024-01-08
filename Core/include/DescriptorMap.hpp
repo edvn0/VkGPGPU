@@ -14,6 +14,8 @@ template <> struct fmt::formatter<VkDescriptorSet> : formatter<const char *> {
 namespace Core {
 
 class DescriptorMap {
+  using DescriptorSets = std::vector<VkDescriptorSet>;
+
 public:
   DescriptorMap();
   ~DescriptorMap();
@@ -24,15 +26,17 @@ public:
 
   [[nodiscard]] auto get_descriptor_pool() -> VkDescriptorPool;
   [[nodiscard]] auto get_descriptor_set_layout() -> VkDescriptorSetLayout {
-    return m_descriptor_set_layout;
+    return descriptor_set_layout;
   }
 
-private:
-  using DescriptorSets = std::vector<VkDescriptorSet>;
-  std::unordered_map<u32, DescriptorSets> m_descriptors{};
+  auto descriptors() -> std::unordered_map<u32, DescriptorSets> &;
 
-  VkDescriptorPool m_descriptor_pool{};
-  VkDescriptorSetLayout m_descriptor_set_layout{};
+private:
+  struct MapStorageImpl;
+
+  VkDescriptorPool descriptor_pool{};
+  VkDescriptorSetLayout descriptor_set_layout{};
+  Scope<MapStorageImpl> pimpl{nullptr};
 };
 
 } // namespace Core

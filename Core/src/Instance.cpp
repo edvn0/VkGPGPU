@@ -1,8 +1,11 @@
-#include "Instance.hpp"
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Environment.hpp"
+#include "Instance.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
 #include "Verify.hpp"
+
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
