@@ -46,7 +46,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 if(GPGPU_PIPELINE STREQUAL "ON")
+    message(STATUS "GPGPU_PIPELINE is ON")
     target_compile_definitions(Core PUBLIC GPGPU_PIPELINE)
+else()
+    message(STATUS "GPGPU_PIPELINE is OFF")
 endif()
 
 # If we're on Linux + clang/gnu, need to set -Wno-nullability-completeness

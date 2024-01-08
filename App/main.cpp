@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
   auto rdoc = GetRenderDocApi(loader);
   perform(rdoc);
 #else
-  perform(nullptr)
+  perform(nullptr);
 #endif
 
   info("Exiting");
