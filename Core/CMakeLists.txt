@@ -44,3 +44,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
 endif()
+
+# If we're on Linux + clang/gnu, need to set -Wno-nullability-completeness
+if(UNIX AND NOT APPLE)
+    target_compile_options(Core PRIVATE -Wno-nullability-completeness)
+endif()
