@@ -20,31 +20,30 @@ LogLevel Logger::get_level() const { return current_level; }
 
 auto to_lower(const std::string &str) {
   std::string lowerStr;
-  for (char ch : str) {
+  for (const char ch : str) {
     lowerStr += static_cast<char>(std::tolower(ch));
   }
   return lowerStr;
 }
 
 LogLevel Logger::get_log_level_from_environment() {
-  const auto env_value = std::getenv("LOG_LEVEL");
-  if (env_value != nullptr) {
+  if (const auto env_value = std::getenv("LOG_LEVEL"); env_value != nullptr) {
     std::cout << "Log level: " << env_value << "\n";
-    std::string logLevelStr = to_lower(env_value);
-    if (logLevelStr == "trace" || logLevelStr == "t" || logLevelStr == "tr" ||
-        logLevelStr == "tra")
+    const std::string log_level = to_lower(env_value);
+    if (log_level == "trace" || log_level == "t" || log_level == "tr" ||
+        log_level == "tra")
       return LogLevel::Trace;
-    if (logLevelStr == "debug" || logLevelStr == "d" || logLevelStr == "de" ||
-        logLevelStr == "deb")
+    if (log_level == "debug" || log_level == "d" || log_level == "de" ||
+        log_level == "deb")
       return LogLevel::Debug;
-    if (logLevelStr == "info" || logLevelStr == "i" || logLevelStr == "in" ||
-        logLevelStr == "inf")
+    if (log_level == "info" || log_level == "i" || log_level == "in" ||
+        log_level == "inf")
       return LogLevel::Info;
-    if (logLevelStr == "error" || logLevelStr == "e" || logLevelStr == "er" ||
-        logLevelStr == "err")
+    if (log_level == "error" || log_level == "e" || log_level == "er" ||
+        log_level == "err")
       return LogLevel::Error;
-    if (logLevelStr == "none" || logLevelStr == "n" || logLevelStr == "no" ||
-        logLevelStr == "non")
+    if (log_level == "none" || log_level == "n" || log_level == "no" ||
+        log_level == "non")
       return LogLevel::None;
   }
   return LogLevel::Info; // Default log level

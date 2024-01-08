@@ -64,10 +64,10 @@ Pipeline::~Pipeline() {
 
 auto Pipeline::try_load_pipeline_cache(const std::string &name)
     -> std::vector<u8> {
-  auto cache_path = FS::pipeline_cache(name + ".cache");
-  if (std::filesystem::exists(cache_path)) {
+  if (const auto cache_path = FS::pipeline_cache(name + ".cache");
+      std::filesystem::exists(cache_path)) {
     info("Pipeline cache exists. Loading...");
-    auto cache_file = std::ifstream{cache_path, std::ios::binary};
+    auto cache_file = std::ifstream{cache_path};
     if (!cache_file) {
       info("Failed to open pipeline cache file at {}", cache_path.string());
     } else {

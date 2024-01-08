@@ -24,13 +24,16 @@ auto DescriptorMap::descriptors() -> std::unordered_map<u32, DescriptorSets> & {
   return pimpl->descriptors;
 }
 
+auto DescriptorMap::descriptors() const
+    -> std::unordered_map<u32, DescriptorSets> & {
+  return pimpl->descriptors;
+}
+
 DescriptorMap::DescriptorMap()
     : pimpl(std::make_unique<DescriptorMap::MapStorageImpl>()) {
 
   for (auto i = 0; i < Config::frame_count; ++i) {
-    // We'll start with just one descriptor set, and try to update if we add
-    // two!
-    descriptors()[i].resize(1);
+    descriptors().try_emplace(i, DescriptorSets{1});
   }
 
   // Create pool sizes for 10 storage buffers and 10 uniform buffers
@@ -90,23 +93,25 @@ DescriptorMap::DescriptorMap()
 
   for (auto i = 0; i < Config::frame_count; ++i) {
     auto &frame_descriptors = descriptors().at(i);
-    verify(vkAllocateDescriptorSets(Device::get()->get_device(),
-                                    &allocation_info, frame_descriptors.data()),
+
+    const auto &device = Device::get()->get_device();
+    verify(vkAllocateDescriptorSets(device, &allocation_info,
+                                    frame_descriptors.data()),
            "vkAllocateDescriptorSets", "Failed to allocate descriptor sets!");
   }
 }
 
 DescriptorMap::~DescriptorMap() {
-  vkDestroyDescriptorSetLayout(Device::get()->get_device(),
-                               descriptor_set_layout, nullptr);
+  const auto &device = Device::get()->get_device();
+  vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
+  vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
 
-  vkDestroyDescriptorPool(Device::get()->get_device(), descriptor_pool,
-                          nullptr);
+  descriptors().clear();
 }
 
-auto DescriptorMap::bind(CommandBuffer &buffer, u32 current_frame,
-                         VkPipelineLayout layout) -> void {
-  auto &current_descriptor = descriptors().at(current_frame);
+auto DescriptorMap::bind(const CommandBuffer &buffer, u32 current_frame,
+                         VkPipelineLayout layout) const -> void {
+  const auto &current_descriptor = descriptors().at(current_frame);
 
   vkCmdBindDescriptorSets(buffer.get_command_buffer(),
                           VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0,
@@ -120,24 +125,29 @@ auto DescriptorMap::get_descriptor_pool() -> VkDescriptorPool {
 
 auto DescriptorMap::add_for_frames(u32 set, u32 binding, const Buffer &buffer)
     -> void {
+  static constexpr auto add_for_frame = [](auto chosen_set, auto chosen_binding,
+                                           auto &descriptor_sets,
+                                           auto &chosen_buffer) {
+    // Lets begin by doing this for one frame
+    const auto &buffer_info = chosen_buffer.get_descriptor_info();
 
-  for (auto i = 0; i < Config::frame_count; ++i) {
-    const auto current_set = descriptors().at(i).at(set);
-    std::vector descriptor_writes(Config::frame_count, VkWriteDescriptorSet{});
-    for (auto i = 0U; i < Config::frame_count; ++i) {
-      auto &descriptor_write = descriptor_writes[i];
-      descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptor_write.dstSet = current_set;
-      descriptor_write.dstBinding = binding;
-      descriptor_write.dstArrayElement = 0;
-      descriptor_write.descriptorType = buffer.get_vulkan_type();
-      descriptor_write.descriptorCount = 1;
-      descriptor_write.pBufferInfo = &buffer.get_descriptor_info();
-    }
+    VkWriteDescriptorSet descriptor_write{};
+    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_write.dstSet = descriptor_sets.at(chosen_set);
+    descriptor_write.dstBinding = chosen_binding;
+    descriptor_write.dstArrayElement = 0;
+    descriptor_write.descriptorType = chosen_buffer.get_vulkan_type();
+    descriptor_write.descriptorCount = 1;
+    descriptor_write.pBufferInfo = &buffer_info;
 
-    vkUpdateDescriptorSets(Device::get()->get_device(),
-                           static_cast<u32>(descriptor_writes.size()),
-                           descriptor_writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(Device::get()->get_device(), 1, &descriptor_write, 0,
+                           nullptr);
+    info("Updated descriptor {} at set {} and binding {}!",
+         fmt::ptr(descriptor_write.dstSet), chosen_set, chosen_binding);
+  };
+
+  for (const auto i : std::views::iota(0, Config::frame_count)) {
+    add_for_frame(set, binding, descriptors().at(i), buffer);
   }
 }
 

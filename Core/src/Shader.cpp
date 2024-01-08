@@ -16,16 +16,24 @@ public:
   using BaseException::BaseException;
 };
 
-auto read_file(const std::filesystem::path &path) -> std::string {
-  const auto resolved = std::filesystem::absolute(path);
-  std::ifstream stream{resolved, std::ios::binary};
-  if (!stream) {
-    throw FileCouldNotBeOpened{"Could not open file: " +
-                               std::filesystem::absolute(resolved).string()};
+auto read_file(const std::filesystem::path& path) -> std::string {
+  // Convert to an absolute path and open the file
+  const auto& absolute_path = absolute(path);
+  std::ifstream file(absolute_path);
+  // Set exceptions on
+  file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+  // Check if the file was successfully opened
+  if (!file.is_open()) {
+    throw FileCouldNotBeOpened("Failed to open file: " + absolute_path.string());
   }
 
-  return std::string{std::istreambuf_iterator<char>{stream},
-                     std::istreambuf_iterator<char>{}};
+  // Use a std::stringstream to read the file's contents into a string
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+
+  // Return the contents of the file as a string
+  return buffer.str();
 }
 
 Shader::Shader(const std::filesystem::path &path) {

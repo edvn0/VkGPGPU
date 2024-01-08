@@ -124,10 +124,8 @@ auto Buffer::read_raw(size_t offset, size_t data_size) -> std::vector<char> {
 }
 
 Buffer::~Buffer() {
-  if (buffer_data->buffer != nullptr) {
-    vmaDestroyBuffer(Allocator::get_allocator(), buffer_data->buffer,
+  vmaDestroyBuffer(Allocator::get_allocator(), buffer_data->buffer,
                      buffer_data->allocation);
-  }
   buffer_data.reset();
 }
 

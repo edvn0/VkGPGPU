@@ -24,15 +24,16 @@ auto Device::get() -> Ptr {
 }
 
 Device::~Device() {
-  Core::Allocator::destroy();
 
   if (device != nullptr) {
     vkDestroyDevice(device, nullptr);
     info("Destroyed Device!");
   }
+
+  Core::Allocator::destroy();
 }
 
-auto Device::check_support(Feature feature, Queue::Type queue) const -> bool {
+auto Device::check_support(const Feature feature, Queue::Type queue) const -> bool {
   if (!queue_support.contains(queue)) {
     error("Unknown queue type: {}", queue);
     throw std::runtime_error("Unknown queue type");

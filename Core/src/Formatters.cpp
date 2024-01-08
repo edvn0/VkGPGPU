@@ -69,5 +69,5 @@ auto fmt::formatter<VkDescriptorSet>::format(const VkDescriptorSet &type,
                                              format_context &ctx) const
     -> decltype(ctx.out()) {
   return formatter<const char *>::format(
-      fmt::format("set={}", fmt::ptr(type)).data(), ctx);
+      fmt::format("set={}", fmt::ptr((const void*)type)).data(), ctx);
 }

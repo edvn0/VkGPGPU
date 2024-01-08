@@ -126,7 +126,7 @@ void perform(void *renderdoc) {
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  for (auto i = 0U; i < 3; i++) {
+  for (auto i = 0U; i < Core::Config::frame_count * 5; i++) {
     Core::Timer timer;
 
 #if !defined(GPGPU_PIPELINE)

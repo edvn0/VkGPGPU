@@ -8,10 +8,7 @@ namespace Core {
 
 class Allocator {
 public:
-  static auto get_allocator() -> VmaAllocator {
-    static VmaAllocator allocator{construct_allocator()};
-    return allocator;
-  }
+  static auto get_allocator() -> VmaAllocator { return allocator; }
 
   static void destroy() {
     vmaDestroyAllocator(get_allocator());
@@ -20,6 +17,8 @@ public:
 
 private:
   static auto construct_allocator() -> VmaAllocator;
+
+  static inline VmaAllocator allocator{construct_allocator()};
 };
 
 } // namespace Core

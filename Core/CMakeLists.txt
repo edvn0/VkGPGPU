@@ -42,7 +42,7 @@ target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=12)
 endif()
 
 if(GPGPU_PIPELINE STREQUAL "ON")

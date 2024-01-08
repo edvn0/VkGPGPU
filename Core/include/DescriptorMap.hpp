@@ -22,7 +22,8 @@ public:
 
   auto add_for_frames(u32 set, u32 binding, const Buffer &info) -> void;
 
-  auto bind(CommandBuffer &buffer, u32 frame, VkPipelineLayout binding) -> void;
+  auto bind(const CommandBuffer &buffer, u32 frame,
+            VkPipelineLayout binding) const -> void;
 
   [[nodiscard]] auto get_descriptor_pool() -> VkDescriptorPool;
   [[nodiscard]] auto get_descriptor_set_layout() -> VkDescriptorSetLayout {
@@ -30,6 +31,7 @@ public:
   }
 
   auto descriptors() -> std::unordered_map<u32, DescriptorSets> &;
+  auto descriptors() const -> std::unordered_map<u32, DescriptorSets> &;
 
 private:
   struct MapStorageImpl;
