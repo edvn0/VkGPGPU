@@ -90,13 +90,7 @@ DescriptorMap::DescriptorMap(const Device &dev) : device(dev) {
     binding_0.descriptorCount = 1;
     binding_0.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    VkDescriptorSetLayoutBinding binding_1{};
-    binding_1.binding = 1;
-    binding_1.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    binding_1.descriptorCount = 1;
-    binding_1.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    const std::array bindings{binding_0, binding_1};
+    const std::array bindings{binding_0};
 
     VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

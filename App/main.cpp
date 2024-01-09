@@ -14,6 +14,7 @@
 #include "Shader.hpp"
 #include "Timer.hpp"
 #include "Types.hpp"
+#include <numbers>
 #include <span>
 
 #include <array>
@@ -160,7 +161,9 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  for (auto i = 0U; i < Core::Config::frame_count * 3; i++) {
+  static constexpr auto max = Core::Config::frame_count * 3UL;
+
+  for (auto i = 0U; i < max; i++) {
     Core::Timer timer;
 
 #if !defined(GPGPU_PIPELINE)
@@ -174,6 +177,10 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
     input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
     randomize_span_of_matrices(matrices);
     other_input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
+
+    // Map a float from 0 to max to 0 to two pi
+    uniform.whatever =
+        sin((static_cast<float>(i) / max) * 2.0F * std::numbers::pi_v<float>);
     simple_uniform.write(&uniform, sizeof(Uniform));
     // Begin command buffer
     command_buffer.begin(frame);
