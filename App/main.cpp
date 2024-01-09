@@ -7,6 +7,7 @@
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
+#include "Image.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
 #include "Pipeline.hpp"
@@ -92,6 +93,19 @@ auto randomize_span_of_matrices(std::span<Matrix<4, 4>> matrices) -> void {
 
 void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
 
+  Core::Image image{
+      *device,
+      {
+          .extent = {20, 20},
+          .format = Core::ImageFormat::R8G8B8A8Unorm,
+          .tiling = Core::ImageTiling::Linear,
+          .usage = Core::ImageUsage::Sampled | Core::ImageUsage::Storage,
+          .layout = Core::ImageLayout::General,
+      },
+  };
+
+  const auto &desc_info = image.get_descriptor_info();
+
   Core::CommandBuffer command_buffer(*device,
                                      Core::CommandBuffer::Type::Compute);
 
@@ -100,13 +114,21 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
   std::array<mat4, 10> output_matrices{};
   randomize_span_of_matrices(matrices);
 
-  auto input_buffer = Core::Buffer{*device, matrices.size() * sizeof(mat4),
-                                   Core::Buffer::Type::Storage};
+  auto input_buffer = Core::Buffer{
+      *device,
+      matrices.size() * sizeof(mat4),
+      Core::Buffer::Type::Storage,
+  };
   auto other_input_buffer = Core::Buffer{
-      *device, matrices.size() * sizeof(mat4), Core::Buffer::Type::Storage};
-  auto output_buffer =
-      Core::Buffer{*device, output_matrices.size() * sizeof(mat4),
-                   Core::Buffer::Type::Storage};
+      *device,
+      matrices.size() * sizeof(mat4),
+      Core::Buffer::Type::Storage,
+  };
+  auto output_buffer = Core::Buffer{
+      *device,
+      output_matrices.size() * sizeof(mat4),
+      Core::Buffer::Type::Storage,
+  };
 
   struct Uniform {
     float whatever{};
@@ -116,27 +138,29 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
       Core::Buffer{*device, sizeof(Uniform), Core::Buffer::Type::Uniform};
 
   Core::DescriptorMap descriptor_map{*device};
-  descriptor_map.add_for_frames(0, 0, input_buffer);
-  descriptor_map.add_for_frames(0, 1, input_buffer);
-  descriptor_map.add_for_frames(0, 2, output_buffer);
-  descriptor_map.add_for_frames(0, 3, simple_uniform);
+  descriptor_map.add_for_frames(0, input_buffer);
+  descriptor_map.add_for_frames(1, input_buffer);
+  descriptor_map.add_for_frames(2, output_buffer);
+  descriptor_map.add_for_frames(3, simple_uniform);
+
+  descriptor_map.add_for_frames(0, image);
 
   Core::Shader shader{
       *device,
       Core::FS::shader("MatrixMultiply.comp.spv"),
   };
   Core::Pipeline pipeline(*device,
-                          {
+                          Core::PipelineConfiguration{
                               "MatrixMultiply",
                               Core::PipelineStage::Compute,
                               shader,
-                              descriptor_map.get_descriptor_set_layout(),
+                              descriptor_map.get_descriptor_set_layouts(),
                           });
 
   Core::u32 frame = 0;
   Core::CommandDispatcher dispatcher(&command_buffer);
 
-  for (auto i = 0U; i < Core::Config::frame_count * 1000; i++) {
+  for (auto i = 0U; i < Core::Config::frame_count * 3; i++) {
     Core::Timer timer;
 
 #if !defined(GPGPU_PIPELINE)
@@ -148,6 +172,8 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
 
     randomize_span_of_matrices(matrices);
     input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
+    randomize_span_of_matrices(matrices);
+    other_input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
     simple_uniform.write(&uniform, sizeof(Uniform));
     // Begin command buffer
     command_buffer.begin(frame);

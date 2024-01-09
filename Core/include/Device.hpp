@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ImageProperties.hpp"
 #include "Instance.hpp"
 #include "Types.hpp"
 
@@ -22,7 +23,6 @@ enum class Type : u8 {
 
 enum class Feature : u8 {
   DeviceQuery,
-
 };
 
 class Device {

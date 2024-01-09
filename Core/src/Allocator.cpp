@@ -79,6 +79,24 @@ auto Allocator::allocate_image(VkImage &image,
   return allocation;
 }
 
+auto Allocator::allocate_image(VkImage &image,
+                               VmaAllocationInfo &allocation_info,
+                               VkImageCreateInfo &image_create_info,
+                               const AllocationProperties &props)
+    -> VmaAllocation {
+  ensure(allocator != nullptr, "Allocator was null.");
+  VmaAllocationCreateInfo allocation_create_info = {};
+  allocation_create_info.usage = static_cast<VmaMemoryUsage>(props.usage);
+
+  VmaAllocation allocation{};
+  verify(vmaCreateImage(allocator, &image_create_info, &allocation_create_info,
+                        &image, &allocation, &allocation_info),
+         "vmaCreateImage", "Failed to create image");
+  vmaSetAllocationName(allocator, allocation, resource_name.data());
+
+  return allocation;
+}
+
 void Allocator::deallocate_buffer(VmaAllocation allocation, VkBuffer &buffer) {
   ensure(allocator != nullptr, "Allocator was null.");
   vmaDestroyBuffer(allocator, buffer, allocation);

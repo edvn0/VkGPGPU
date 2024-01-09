@@ -15,6 +15,7 @@ set(SOURCES
     include/Exception.hpp
     include/Filesystem.hpp
     include/Formatters.hpp
+    include/Image.hpp
     include/Instance.hpp
     include/Logger.hpp
     include/Pipeline.hpp
@@ -31,6 +32,7 @@ set(SOURCES
     src/Device.cpp
     src/DynamicLibraryLoader.cpp
     src/Formatters.cpp
+    src/Image.cpp
     src/Instance.cpp
     src/Logger.cpp
     src/Pipeline.cpp

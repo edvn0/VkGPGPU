@@ -73,6 +73,8 @@ public:
                        const AllocationProperties &) -> VmaAllocation;
   auto allocate_image(VkImage &, VkImageCreateInfo &,
                       const AllocationProperties &) -> VmaAllocation;
+  auto allocate_image(VkImage &, VmaAllocationInfo &, VkImageCreateInfo &,
+                      const AllocationProperties &) -> VmaAllocation;
 
   void deallocate_buffer(VmaAllocation, VkBuffer &);
   void deallocate_image(VmaAllocation, VkImage &);

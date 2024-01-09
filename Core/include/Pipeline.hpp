@@ -18,12 +18,13 @@ struct PipelineConfiguration {
   std::string name;
   PipelineStage stage{PipelineStage::Compute};
   const Shader &shader;
-  VkDescriptorSetLayout descriptor_set_layout{};
+  const std::span<const VkDescriptorSetLayout> descriptor_set_layouts{};
 
   PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader &shader, VkDescriptorSetLayout layout)
+                        const Shader &shader,
+                        std::span<const VkDescriptorSetLayout> layouts)
       : name(std::move(name)), stage(stage), shader(shader),
-        descriptor_set_layout(layout) {}
+        descriptor_set_layouts(layouts) {}
 };
 
 class Pipeline {
