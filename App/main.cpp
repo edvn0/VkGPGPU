@@ -14,17 +14,16 @@
 #include "Shader.hpp"
 #include "Timer.hpp"
 #include "Types.hpp"
-#include <numbers>
-#include <span>
 
 #include <array>
+#include <fmt/format.h>
+#include <numbers>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <vulkan/vulkan.h>
-
-#include <fmt/format.h>
 #include <vulkan/vulkan_core.h>
 
 #ifdef _WIN32
@@ -105,8 +104,6 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
       },
   };
 
-  const auto &desc_info = image.get_descriptor_info();
-
   Core::CommandBuffer command_buffer(*device,
                                      Core::CommandBuffer::Type::Compute);
 
@@ -178,9 +175,11 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
     randomize_span_of_matrices(matrices);
     other_input_buffer.write(matrices.data(), matrices.size() * sizeof(mat4));
 
-    // Map a float from 0 to max to 0 to two pi
-    uniform.whatever =
-        sin((static_cast<float>(i) / max) * 2.0F * std::numbers::pi_v<float>);
+    // Map a float from 0 to max include to 0 to two pi
+    const auto angle = static_cast<float>(i) / static_cast<float>(max - 1) *
+                       std::numbers::pi_v<float> * 2.0F;
+    info("Angle: {}", angle);
+    uniform.whatever = angle;
     simple_uniform.write(&uniform, sizeof(Uniform));
     // Begin command buffer
     command_buffer.begin(frame);

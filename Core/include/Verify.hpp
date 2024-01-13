@@ -2,6 +2,8 @@
 
 #include "Exception.hpp"
 #include "Logger.hpp"
+
+#include <cassert> // for assert (or your preferred debug break method)
 #include <fmt/core.h>
 #include <vulkan/vulkan.h>
 
@@ -10,12 +12,12 @@ namespace Core {
 class VulkanResultException : public BaseException {
 public:
   VulkanResultException(VkResult result, const std::string &message)
-      : BaseException(message), result_(result) {}
+      : BaseException(message), vulkan_result(result) {}
 
-  VkResult getResult() const { return result_; }
+  VkResult getResult() const { return vulkan_result; }
 
 private:
-  VkResult result_;
+  VkResult vulkan_result;
 };
 
 auto vk_result_to_string(VkResult result) -> std::string;
@@ -31,6 +33,17 @@ void verify(VkResult result, const std::string &function_name,
                                 formatted_message;
     error("{}", error_message);
     throw VulkanResultException(result, error_message);
+  }
+}
+
+template <typename... Args>
+void ensure(bool condition, fmt::format_string<Args...> message,
+            Args &&...args) {
+  if (!condition) {
+    auto formatted_message = fmt::format(message, std::forward<Args>(args)...);
+    // Log the formatted message, throw an exception, or handle the error as
+    // needed For example, using assert to trigger a debug break
+    assert(false && formatted_message.c_str());
   }
 }
 

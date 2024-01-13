@@ -1,29 +1,53 @@
-#include "Logger.hpp"
-#include "Verify.hpp"
+#include "Image.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "Allocator.hpp"
+#include "DataBuffer.hpp"
+#include "Logger.hpp"
+#include "Verify.hpp"
+
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include "Image.hpp"
-
 namespace Core {
 
+auto load_image_from_file_to_databuffer(const Core::FS::Path &path)
+    -> DataBuffer {
+  std::int32_t width{};
+  std::int32_t height{};
+  std::int32_t channels{};
+
+  constexpr auto STBI_rgb_alpha = 4;
+  auto *stbi_from_file_data =
+      stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+
+  if (stbi_from_file_data == nullptr) {
+    return DataBuffer::empty();
+  }
+
+  const auto size = width * height * STBI_rgb_alpha;
+  DataBuffer buffer{size};
+  buffer.write(stbi_from_file_data, size);
+
+  stbi_image_free(stbi_from_file_data);
+  return buffer;
+}
+
 struct Image::ImageStorageImpl {
-  const Device &device;
+  const Device *device;
   VmaAllocation allocation{};
   VmaAllocationInfo allocation_info{};
   VkImage image{};
   VkImageView image_view{};
   VkSampler sampler{};
 
-  explicit ImageStorageImpl(const Device &dev) : device(dev) {}
+  explicit ImageStorageImpl(const Device *dev) : device(dev) {}
 
   ~ImageStorageImpl() {
-    vkDestroySampler(device.get_device(), sampler, nullptr);
-    vkDestroyImageView(device.get_device(), image_view, nullptr);
+    vkDestroySampler(device->get_device(), sampler, nullptr);
+    vkDestroyImageView(device->get_device(), image_view, nullptr);
 
     info("Destroying image and allocation, and destroyed image view and "
          "sampler");
@@ -34,7 +58,16 @@ struct Image::ImageStorageImpl {
 };
 
 Image::Image(const Device &dev, ImageProperties props)
-    : device(dev), properties(std::move(props)) {
+    : device(&dev), properties(std::move(props)) {
+  ensure(device != nullptr, "Device cannot be null. This class name: {}",
+         "Image");
+  ensure(properties.extent.width > 0, "Extent width must be greater than 0");
+  ensure(properties.extent.height > 0, "Extent height must be greater than 0");
+  ensure(properties.format != ImageFormat::Undefined,
+         "Format cannot be undefined");
+  ensure(properties.layout != ImageLayout::Undefined,
+         "Layout cannot be undefined");
+
   impl = make_scope<Image::ImageStorageImpl>(device);
 
   initialise_vulkan_image();
@@ -164,7 +197,7 @@ auto Image::initialise_vulkan_image() -> void {
   image_view_create_info.subresourceRange.baseArrayLayer = 0;
   image_view_create_info.subresourceRange.layerCount = 1;
 
-  verify(vkCreateImageView(device.get_device(), &image_view_create_info,
+  verify(vkCreateImageView(device->get_device(), &image_view_create_info,
                            nullptr, &impl->image_view),
          "vkCreateImageView", "Failed to create image view");
 
@@ -191,7 +224,7 @@ auto Image::initialise_vulkan_image() -> void {
   sampler_create_info.minLod = 0.0f;
   sampler_create_info.maxLod = 1.0f;
 
-  verify(vkCreateSampler(device.get_device(), &sampler_create_info, nullptr,
+  verify(vkCreateSampler(device->get_device(), &sampler_create_info, nullptr,
                          &impl->sampler),
          "vkCreateSampler", "Failed to create sampler");
 }

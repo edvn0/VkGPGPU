@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+
 #include <concepts>
 #include <filesystem>
 #include <string>
@@ -12,6 +13,8 @@ struct fmt::formatter<std::filesystem::path> : formatter<const char *> {
 };
 
 namespace Core::FS {
+
+using Path = std::filesystem::path;
 
 template <class T, class To>
 concept CStrConvertibleTo = std::convertible_to<T, To> || requires(const T &t) {
@@ -31,6 +34,15 @@ concept StringLike =
 auto shader(StringLike auto path, bool resolve = true)
     -> std::filesystem::path {
   const auto output = std::filesystem::path("shaders") / path;
+  if (resolve) {
+    return std::filesystem::absolute(output);
+  } else {
+    return output;
+  }
+}
+
+auto image(StringLike auto path, bool resolve = true) -> std::filesystem::path {
+  const auto output = std::filesystem::path("textures") / path;
   if (resolve) {
     return std::filesystem::absolute(output);
   } else {
@@ -76,4 +88,5 @@ auto set_current_path(StringLike auto path) -> bool {
   info("set_current_path Path set to {}.", std::filesystem::current_path());
   return true;
 }
+
 } // namespace Core::FS

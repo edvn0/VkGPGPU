@@ -1,9 +1,14 @@
 #pragma once
 
+#include "DataBuffer.hpp"
 #include "Device.hpp"
+#include "Filesystem.hpp"
 #include "ImageProperties.hpp"
 
 namespace Core {
+
+auto load_image_from_file_to_databuffer(const Core::FS::Path &path)
+    -> DataBuffer;
 
 struct ImageProperties {
   Extent<u32> extent;
@@ -33,7 +38,7 @@ public:
   [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
 
 private:
-  const Device &device;
+  const Device *device{nullptr};
   ImageProperties properties;
   VkDescriptorImageInfo descriptor_image_info{};
   Scope<ImageStorageImpl> impl{nullptr};
