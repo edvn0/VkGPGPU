@@ -77,7 +77,3 @@ compile_commands.json
 
 # Folders
 build*
-
-*.txt
-!ThirdParty/*.txt
-!Test/*.txt

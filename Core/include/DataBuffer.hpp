@@ -113,7 +113,7 @@ private:
   usize buffer_size{0};
   std::unique_ptr<u8[]> data{nullptr};
 
-  auto allocate_storage(std::integral auto new_size) {
+  auto allocate_storage(std::integral auto new_size) -> void {
     if (data) {
       info("Resetting data storage at {}", fmt::ptr(data.get()));
       data.reset();
