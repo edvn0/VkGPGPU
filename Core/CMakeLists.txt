@@ -7,6 +7,7 @@ set(SOURCES
     include/CommandBuffer.hpp
     include/CommandDispatcher.hpp
     include/Config.hpp
+    include/DataBuffer.hpp
     include/DebugMarker.hpp
     include/DescriptorMap.hpp
     include/Device.hpp
@@ -20,6 +21,7 @@ set(SOURCES
     include/Logger.hpp
     include/Pipeline.hpp
     include/Shader.hpp
+    include/Texture.hpp
     include/Timer.hpp
     include/Types.hpp
     include/Verify.hpp
@@ -38,12 +40,13 @@ set(SOURCES
     src/Pipeline.cpp
     src/Shader.cpp
     src/Timer.cpp
+    src/Texture.cpp
     src/Verify.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
-target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
-target_link_libraries(Core PUBLIC Platform Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator fmt::fmt)
+target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
+target_link_libraries(Core PUBLIC Platform Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator fmt::fmt stbimage::stbimage)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

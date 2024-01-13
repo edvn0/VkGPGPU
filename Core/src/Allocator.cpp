@@ -1,8 +1,10 @@
-#include "Logger.hpp"
-#include "pch/vkgpgpu_pch.hpp"
-#include <cassert>
-
 #include "Allocator.hpp"
+
+#include "pch/vkgpgpu_pch.hpp"
+
+#include "Logger.hpp"
+
+#include <cassert>
 
 #define VMA_DEBUG_LOG_FORMAT(format, ...)                                      \
   do {                                                                         \
@@ -10,17 +12,13 @@
     printf("\n");                                                              \
   } while (false)
 #define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
-
 #include "Device.hpp"
 #include "Instance.hpp"
 #include "Verify.hpp"
 
-namespace Core {
+#include <vk_mem_alloc.h>
 
-auto ensure(bool condition, const std::string &message) -> void {
-  assert(condition);
-}
+namespace Core {
 
 Allocator::Allocator(const std::string &resource) : resource_name(resource) {}
 

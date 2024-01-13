@@ -43,7 +43,8 @@ void ensure(bool condition, fmt::format_string<Args...> message,
     auto formatted_message = fmt::format(message, std::forward<Args>(args)...);
     // Log the formatted message, throw an exception, or handle the error as
     // needed For example, using assert to trigger a debug break
-    assert(false && formatted_message.c_str());
+    error("{}", formatted_message);
+    assert(false);
   }
 }
 

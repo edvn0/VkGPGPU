@@ -1,9 +1,11 @@
+#include "Shader.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "Device.hpp"
 #include "Exception.hpp"
-#include "Shader.hpp"
 #include "Verify.hpp"
+
 #include <bit>
 #include <fstream>
 #include <vulkan/vulkan.h>
@@ -18,9 +20,7 @@ public:
 auto read_file(const std::filesystem::path &path) -> std::string {
   // Convert to an absolute path and open the file
   const auto &absolute_path = absolute(path);
-  std::ifstream file(absolute_path, std::ios::in | std::ios::binary);
-  // Set exceptions on
-  file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+  const std::ifstream file(absolute_path, std::ios::in | std::ios::binary);
 
   // Check if the file was successfully opened
   if (!file.is_open()) {

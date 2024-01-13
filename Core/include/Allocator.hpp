@@ -3,7 +3,10 @@
 
 #include "Device.hpp"
 #include "Logger.hpp"
+
 #include <vk_mem_alloc.h>
+
+#include "fmt/format.h"
 
 namespace Core {
 

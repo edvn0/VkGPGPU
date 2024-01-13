@@ -28,7 +28,7 @@ enum class Feature : u8 {
 class Device {
 public:
   explicit Device(const Instance &);
-  ~Device();
+  virtual ~Device();
 
   auto get_device() const -> VkDevice { return device; }
   auto get_physical_device() const -> VkPhysicalDevice {

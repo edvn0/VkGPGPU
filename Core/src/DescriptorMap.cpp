@@ -1,10 +1,11 @@
-#include "Types.hpp"
+#include "DescriptorMap.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "Config.hpp"
-#include "DescriptorMap.hpp"
 #include "Device.hpp"
 #include "Formatters.hpp"
+#include "Types.hpp"
 #include "Verify.hpp"
 
 #include <array>
@@ -14,12 +15,21 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+static constexpr auto range = [](std::integral auto begin,
+                                 std::integral auto end) {
+  return std::views::iota(begin, end);
+};
+
+static constexpr auto for_frame = []() {
+  return range(0, Core::Config::frame_count);
+};
+
 namespace Core {
 
 DescriptorMap::DescriptorMap(const Device &dev) : device(dev) {
 
   static constexpr auto sets_per_frame = 2;
-  for (auto i = 0; i < Config::frame_count; ++i) {
+  for (const auto i : for_frame()) {
     descriptors().try_emplace(i, sets_per_frame);
   }
   descriptor_set_layout.resize(sets_per_frame);
@@ -107,7 +117,7 @@ DescriptorMap::DescriptorMap(const Device &dev) : device(dev) {
   create_second_set_layout(device, descriptor_set_layout.at(1));
 
   std::vector<VkDescriptorSetLayout> layouts;
-  for (auto i = 0; i < Config::frame_count; ++i) {
+  for (const auto i : for_frame()) {
     layouts.push_back(descriptor_set_layout.at(0));
     layouts.push_back(descriptor_set_layout.at(1));
   }
@@ -117,7 +127,7 @@ DescriptorMap::DescriptorMap(const Device &dev) : device(dev) {
   allocation_info.descriptorPool = descriptor_pool;
   allocation_info.pSetLayouts = layouts.data();
 
-  for (auto i = 0; i < Config::frame_count; ++i) {
+  for (const auto i : for_frame()) {
     auto &frame_descriptors = descriptors().at(i);
     allocation_info.descriptorSetCount =
         static_cast<u32>(frame_descriptors.size());
@@ -172,7 +182,7 @@ auto DescriptorMap::add_for_frames(u32 binding, const Buffer &buffer) -> void {
          fmt::ptr(descriptor_write.dstSet), chosen_set, chosen_binding);
   };
 
-  for (const auto i : std::views::iota(0, Config::frame_count)) {
+  for (const auto i : for_frame()) {
     add_for_frame(device, 0, binding, descriptors().at(i), buffer);
   }
 }
@@ -198,7 +208,7 @@ auto DescriptorMap::add_for_frames(u32 binding, const Image &image) -> void {
          fmt::ptr(descriptor_write.dstSet), chosen_set, chosen_binding);
   };
 
-  for (const auto i : std::views::iota(0, Config::frame_count)) {
+  for (const auto i : for_frame()) {
     add_for_frame(device, 1, binding, descriptors().at(i), image);
   }
 }

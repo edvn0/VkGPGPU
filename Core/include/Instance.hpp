@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+
 #include <vulkan/vulkan.h>
 
 namespace Core {
@@ -8,7 +9,7 @@ namespace Core {
 class Instance {
 public:
   Instance();
-  ~Instance();
+  virtual ~Instance();
 
   [[nodiscard]] auto get_instance() const -> VkInstance { return instance; }
 

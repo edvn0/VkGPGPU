@@ -7,6 +7,7 @@
 #include "Logger.hpp"
 #include "Verify.hpp"
 
+#include <stb_image.h>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -20,8 +21,8 @@ auto load_image_from_file_to_databuffer(const Core::FS::Path &path)
   std::int32_t channels{};
 
   constexpr auto STBI_rgb_alpha = 4;
-  auto *stbi_from_file_data =
-      stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+  auto *stbi_from_file_data = stbi_load(path.string().c_str(), &width, &height,
+                                        &channels, STBI_rgb_alpha);
 
   if (stbi_from_file_data == nullptr) {
     return DataBuffer::empty();
@@ -82,46 +83,32 @@ auto to_vulkan_layout(ImageLayout layout) -> VkImageLayout {
   case ImageLayout::General:
     return VK_IMAGE_LAYOUT_GENERAL;
   case ImageLayout::ColorAttachmentOptimal:
-
     return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   case ImageLayout::DepthStencilAttachmentOptimal:
-
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   case ImageLayout::DepthStencilReadOnlyOptimal:
-
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   case ImageLayout::ShaderReadOnlyOptimal:
-
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   case ImageLayout::TransferSrcOptimal:
-
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   case ImageLayout::TransferDstOptimal:
-
     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   case ImageLayout::Preinitialized:
-
     return VK_IMAGE_LAYOUT_PREINITIALIZED;
   case ImageLayout::PresentSrcKHR:
-
     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   case ImageLayout::SharedPresentKHR:
-
     return VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
   case ImageLayout::ShadingRateOptimalNV:
-
     return VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
   case ImageLayout::FragmentDensityMapOptimalEXT:
-
     return VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
   case ImageLayout::DepthReadOnlyStencilAttachmentOptimal:
-
     return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
   case ImageLayout::DepthAttachmentStencilReadOnlyOptimal:
-
     return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
   case ImageLayout::DepthAttachmentOptimal:
-
     return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
   default:
     assert(false);

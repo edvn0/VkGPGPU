@@ -71,6 +71,7 @@ jobs:
         run: cmake
           -B build
           -D GPGPU_PIPELINE=ON
+          -D ENABLE_TESTING=ON
           -D CMAKE_C_COMPILER=${{env.CC}}
           -D CMAKE_C_COMPILER_LAUNCHER=ccache
           -D CMAKE_CXX_COMPILER=${{env.CXX}}

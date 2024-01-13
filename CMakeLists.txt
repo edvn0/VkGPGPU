@@ -9,3 +9,12 @@ add_subdirectory(ThirdParty)
 add_subdirectory(Core)
 add_subdirectory(App)
 add_subdirectory(Platform)
+
+# IF enable testing
+if(ENABLE_TESTING)
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/ThirdParty/Catch2/extras)
+    include(Catch)
+    include(CTest)
+    enable_testing()
+    add_subdirectory(Test)
+endif()
