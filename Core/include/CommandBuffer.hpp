@@ -17,13 +17,28 @@ concept CommandBufferBindable =
     } || requires(T &object, CommandBuffer &command_buffer) {
       object.bind(command_buffer);
     };
-;
+
+class ImmediateCommandBuffer {
+public:
+  explicit ImmediateCommandBuffer(const Device &device);
+  ~ImmediateCommandBuffer();
+
+  [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer;
+
+private:
+  Scope<CommandBuffer> command_buffer{nullptr};
+
+  auto begin() -> void;
+  auto submit_and_end() -> void;
+};
+
+auto create_immediate(const Device &device) -> ImmediateCommandBuffer;
 
 class CommandBuffer {
 public:
   enum class Type : u8 { Compute, Graphics };
 
-  explicit CommandBuffer(const Device &, Type type);
+  explicit CommandBuffer(const Device &, Type type, u32 = Config::frame_count);
   ~CommandBuffer();
 
   auto begin(u32 current_frame) -> void;
@@ -40,6 +55,7 @@ private:
   auto submit() -> void;
   const Device &device;
   bool supports_device_query{false};
+  u32 frame_count{Config::frame_count};
 
   struct FrameCommandBuffer {
     VkCommandBuffer command_buffer{};
@@ -57,7 +73,6 @@ private:
 
   void create_query_objects();
   void destroy_query_objects();
-  ;
 };
 
 } // namespace Core

@@ -7,8 +7,10 @@
 
 namespace Core {
 
-auto load_image_from_file_to_databuffer(const Core::FS::Path &path)
-    -> DataBuffer;
+auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer;
+auto load_databuffer_from_file(FS::StringLike auto path) -> DataBuffer {
+  load_databuffer_from_file(path);
+}
 
 struct ImageProperties {
   Extent<u32> extent;
@@ -22,20 +24,25 @@ struct ImageProperties {
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
 };
 
+struct ImageInfo {
+  VkImageView image_view{};
+  VkSampler sampler{};
+};
+
 class Image {
   struct ImageStorageImpl;
 
 public:
-  Image(const Device &device, ImageProperties properties);
-
-  template <std::floating_point T>
-  Image(const Device &device, Extent<T> extent, ImageFormat format)
-      : Device(device, extent.template as<u32>(), format) {}
-
+  Image(const Device &, ImageProperties properties);
+  Image(const Device &, ImageProperties properties,
+        const DataBuffer &data_buffer);
   ~Image();
 
-  auto get_descriptor_info() const -> const VkDescriptorImageInfo &;
+  [[nodiscard]] auto get_descriptor_info() const
+      -> const VkDescriptorImageInfo &;
   [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
+
+  [[nodiscard]] auto get_extent() const noexcept -> const Extent<u32> &;
 
 private:
   const Device *device{nullptr};

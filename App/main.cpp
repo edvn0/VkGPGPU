@@ -12,6 +12,7 @@
 #include "Logger.hpp"
 #include "Pipeline.hpp"
 #include "Shader.hpp"
+#include "Texture.hpp"
 #include "Timer.hpp"
 #include "Types.hpp"
 
@@ -103,6 +104,15 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
           .layout = Core::ImageLayout::General,
       },
   };
+
+  Core::Texture texture{*device, Core::FS::texture("viking_room.png")};
+  if (texture.valid()) {
+    const auto could = texture.write_to_file("viking_room_copy.png");
+
+    if (!could) {
+      error("Could not write to file");
+    }
+  }
 
   Core::CommandBuffer command_buffer(*device,
                                      Core::CommandBuffer::Type::Compute);

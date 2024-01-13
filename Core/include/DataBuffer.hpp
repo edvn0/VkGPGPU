@@ -23,6 +23,20 @@ public:
       : buffer_size(static_cast<usize>(input_size)) {
     // Zero is valid here!
   }
+  DataBuffer() = default;
+  ~DataBuffer() = default;
+
+  DataBuffer(DataBuffer &&other) noexcept
+      : buffer_size(other.buffer_size), data(std::move(other.data)) {
+    other.buffer_size = 0;
+  }
+
+  [[nodiscard]] auto operator=(DataBuffer &&other) noexcept -> DataBuffer & {
+    buffer_size = other.buffer_size;
+    data = std::move(other.data);
+    other.buffer_size = 0;
+    return *this;
+  }
 
   template <typename T>
   auto write(const T *input_data, std::integral auto input_size) -> void {

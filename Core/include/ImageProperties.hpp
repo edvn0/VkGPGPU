@@ -8,8 +8,10 @@ template <std::integral T> struct Extent {
   T height{0};
 
   // Cast to another type Other, not the same as T
-  template <std::integral Other> auto as() const {
-    return Extent{
+  template <std::integral Other>
+    requires(!std::is_same_v<Other, T>)
+  auto as() const {
+    return Extent<Other>{
         .width = static_cast<Other>(width),
         .height = static_cast<Other>(height),
     };

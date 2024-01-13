@@ -9,31 +9,26 @@
 
 #include <stb_image.h>
 #include <vk_mem_alloc.h>
-#include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
 namespace Core {
 
-auto load_image_from_file_to_databuffer(const Core::FS::Path &path)
-    -> DataBuffer {
+auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer {
+  if (!FS::exists(path)) {
+    error("File does not exist: {}", path);
+    return DataBuffer::empty();
+  }
   std::int32_t width{};
   std::int32_t height{};
   std::int32_t channels{};
+  auto *stbi_pixels = stbi_load(path.string().c_str(), &width, &height,
+                                &channels, STBI_rgb_alpha);
 
-  constexpr auto STBI_rgb_alpha = 4;
-  auto *stbi_from_file_data = stbi_load(path.string().c_str(), &width, &height,
-                                        &channels, STBI_rgb_alpha);
+  DataBuffer databuffer{static_cast<std::size_t>(width * height * channels)};
+  databuffer.write(stbi_pixels, databuffer.size());
 
-  if (stbi_from_file_data == nullptr) {
-    return DataBuffer::empty();
-  }
-
-  const auto size = width * height * STBI_rgb_alpha;
-  DataBuffer buffer{size};
-  buffer.write(stbi_from_file_data, size);
-
-  stbi_image_free(stbi_from_file_data);
-  return buffer;
+  stbi_image_free(stbi_pixels);
+  return databuffer;
 }
 
 struct Image::ImageStorageImpl {
@@ -59,7 +54,7 @@ struct Image::ImageStorageImpl {
 };
 
 Image::Image(const Device &dev, ImageProperties props)
-    : device(&dev), properties(std::move(props)) {
+    : device(&dev), properties(props) {
   ensure(device != nullptr, "Device cannot be null. This class name: {}",
          "Image");
   ensure(properties.extent.width > 0, "Extent width must be greater than 0");
@@ -69,10 +64,31 @@ Image::Image(const Device &dev, ImageProperties props)
   ensure(properties.layout != ImageLayout::Undefined,
          "Layout cannot be undefined");
 
-  impl = make_scope<Image::ImageStorageImpl>(device);
+  impl = make_scope<ImageStorageImpl>(device);
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
+}
+
+Image::Image(const Device &dev, ImageProperties properties,
+             const DataBuffer &data_buffer)
+    : Image(dev, properties) {
+
+  // Create staging image
+  VkImageCreateInfo staging_image_create_info{};
+  staging_image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  staging_image_create_info.imageType = VK_IMAGE_TYPE_2D;
+  staging_image_create_info.format = static_cast<VkFormat>(properties.format);
+  staging_image_create_info.extent.width = properties.extent.width;
+  staging_image_create_info.extent.height = properties.extent.height;
+  staging_image_create_info.extent.depth = 1;
+  staging_image_create_info.mipLevels = 1;
+  staging_image_create_info.arrayLayers = 1;
+  staging_image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+  staging_image_create_info.tiling = VK_IMAGE_TILING_LINEAR;
+  staging_image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  staging_image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  staging_image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 namespace {
@@ -146,7 +162,11 @@ auto Image::get_vulkan_type() const noexcept -> VkDescriptorType {
   return VK_DESCRIPTOR_TYPE_MAX_ENUM;
 }
 
-Image::~Image() { impl.reset(); }
+auto Image::get_extent() const noexcept -> const Extent<u32> & {
+  return properties.extent;
+}
+
+Image::~Image() = default;
 
 auto Image::initialise_vulkan_image() -> void {
   Allocator allocator{"Image"};

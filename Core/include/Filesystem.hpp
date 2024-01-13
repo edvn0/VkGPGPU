@@ -31,6 +31,10 @@ template <class T>
 concept StringLike =
     CStrConvertibleTo<T, const char *> || CStrConvertibleTo<T, const wchar_t *>;
 
+auto resolve(StringLike auto path) -> std::filesystem::path {
+  return std::filesystem::absolute(path);
+}
+
 auto shader(StringLike auto path, bool resolve = true)
     -> std::filesystem::path {
   const auto output = std::filesystem::path("shaders") / path;
@@ -41,7 +45,8 @@ auto shader(StringLike auto path, bool resolve = true)
   }
 }
 
-auto image(StringLike auto path, bool resolve = true) -> std::filesystem::path {
+auto texture(StringLike auto path, bool resolve = true)
+    -> std::filesystem::path {
   const auto output = std::filesystem::path("textures") / path;
   if (resolve) {
     return std::filesystem::absolute(output);
@@ -61,7 +66,7 @@ auto pipeline_cache(StringLike auto path, bool resolve = true)
 }
 
 auto mkdir_safe(StringLike auto path) -> bool {
-  const auto resolved = std::filesystem::absolute(path);
+  const auto resolved = FS::resolve(path);
   if (std::filesystem::exists(resolved)) {
     debug("mkdir_safe Path {} already exists.", resolved);
     return false;
@@ -77,8 +82,13 @@ auto mkdir_safe(StringLike auto path) -> bool {
   return std::filesystem::create_directory(resolved);
 }
 
+auto exists(StringLike auto path) -> bool {
+  const auto resolved = FS::resolve(path);
+  return std::filesystem::exists(resolved);
+}
+
 auto set_current_path(StringLike auto path) -> bool {
-  const auto resolved = std::filesystem::absolute(path);
+  const auto resolved = FS::resolve(path);
   if (!std::filesystem::exists(resolved)) {
     debug("set_current_path Path {} does not exist.", resolved);
     return false;

@@ -1,6 +1,6 @@
-#include "pch/vkgpgpu_pch.hpp"
-
 #include "CommandBuffer.hpp"
+
+#include "pch/vkgpgpu_pch.hpp"
 
 #include "Device.hpp"
 #include "Verify.hpp"
@@ -13,9 +13,17 @@ namespace Core {
 
 static constexpr auto timeout = std::numeric_limits<u64>::max();
 
-CommandBuffer::CommandBuffer(const Device &dev, Type type)
-    : device(dev), supports_device_query(device.check_support(
-                       Feature::DeviceQuery, Queue::Type::Compute)) {
+ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device) {
+  command_buffer =
+      make_scope<CommandBuffer>(device, CommandBuffer::Type::Graphics);
+  command_buffer->begin(0);
+}
+
+CommandBuffer::CommandBuffer(const Device &dev, Type type,
+                             u32 input_frame_count)
+    : device(dev), frame_count(input_frame_count),
+      supports_device_query(
+          device.check_support(Feature::DeviceQuery, Queue::Type::Compute)) {
   switch (type) {
   case Type::Compute:
     queue_type = Queue::Type::Compute;
@@ -52,7 +60,7 @@ CommandBuffer::CommandBuffer(const Device &dev, Type type)
   fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (auto i = 0U; i < Config::frame_count; ++i) {
+  for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateFence(device.get_device(), &fence_info, nullptr,
                          &command_buffers[i].fence),
            "vkCreateFence", "Failed to create fence");
@@ -62,7 +70,7 @@ CommandBuffer::CommandBuffer(const Device &dev, Type type)
   VkSemaphoreCreateInfo semaphore_info{};
   semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-  for (auto i = 0U; i < Config::frame_count; ++i) {
+  for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateSemaphore(device.get_device(), &semaphore_info, nullptr,
                              &command_buffers[i].finished_semaphore),
            "vkCreateSemaphore", "Failed to create semaphore");
@@ -181,7 +189,7 @@ void CommandBuffer::create_query_objects() {
   query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
   query_pool_info.queryCount = 2;
 
-  for (auto i = 0U; i < Config::frame_count; ++i) {
+  for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateQueryPool(device.get_device(), &query_pool_info, nullptr,
                              &query_pools[i]),
            "vkCreateQueryPool", "Failed to create query pool");
@@ -189,7 +197,7 @@ void CommandBuffer::create_query_objects() {
 }
 
 void CommandBuffer::destroy_query_objects() {
-  for (auto i = 0U; i < Config::frame_count; ++i) {
+  for (auto i = 0U; i < frame_count; ++i) {
     vkDestroyQueryPool(device.get_device(), query_pools[i], nullptr);
   }
 }
