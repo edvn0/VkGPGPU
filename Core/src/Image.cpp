@@ -115,10 +115,6 @@ struct Image::ImageStorageImpl {
   ~ImageStorageImpl() {
     vkDestroySampler(device->get_device(), sampler, nullptr);
     vkDestroyImageView(device->get_device(), image_view, nullptr);
-
-    info("Destroying image and allocation, and destroyed image view and "
-         "sampler");
-
     Allocator allocator{"Image"};
     allocator.deallocate_image(allocation, image);
   }

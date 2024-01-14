@@ -30,6 +30,8 @@ private:
   const Device *device{nullptr};
   Extent<u32> extent{};
   DataBuffer data_buffer;
+
+  std::string texture_filename{};
   std::unique_ptr<Image> image{nullptr};
 };
 

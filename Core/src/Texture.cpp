@@ -15,10 +15,14 @@ auto Texture::empty_with_size(const Device &device, usize size,
   return texture;
 }
 
-Texture::~Texture() = default;
+Texture::~Texture() {
+  info("Destroyed Texture '{}', size: {}", texture_filename,
+       data_buffer.size());
+}
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
-    : device(&dev), data_buffer(size) {
+    : device(&dev), data_buffer(size),
+      texture_filename(fmt::format("Empty-Size{}", size)) {
   data_buffer.fill_zero();
   image = std::make_unique<Image>(
       *device,
@@ -38,7 +42,8 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
 }
 
 Texture::Texture(const Device &dev, const FS::Path &path)
-    : device(&dev), data_buffer(load_databuffer_from_file(path, extent)) {
+    : device(&dev), data_buffer(load_databuffer_from_file(path, extent)),
+      texture_filename(path.filename().string()) {
   image = std::make_unique<Image>(
       *device,
       ImageProperties{
@@ -77,8 +82,8 @@ auto Texture::write_to_file(const FS::Path &path) -> bool {
   buffer.resize(data_buffer.size());
   data_buffer.read(buffer, buffer.size());
 
-  const auto &extent = image->get_extent();
-  const auto [width, height] = extent.as<std::int32_t>();
+  const auto &ext = image->get_extent();
+  const auto [width, height] = ext.as<std::int32_t>();
 
   stbi_write_png(path.string().c_str(), width, height, 4, buffer.data(), 0);
 

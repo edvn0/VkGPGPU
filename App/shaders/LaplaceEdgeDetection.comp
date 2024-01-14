@@ -36,10 +36,10 @@ void main() {
     if (pos.x >= imageSize.x || pos.y >= imageSize.y) {
         return;
     }
-float kernel[3][3];
-kernel[0][0] = -1; kernel[0][1] = -1; kernel[0][2] = -1;
-kernel[1][0] = -1; kernel[1][1] = 8;  kernel[1][2] = -1;
-kernel[2][0] = -1; kernel[2][1] = -1; kernel[2][2] = -1;
+    float kernel[3][3];
+    kernel[0][0] = -1; kernel[0][1] = -1; kernel[0][2] = -1;
+    kernel[1][0] = -1; kernel[1][1] = 8;  kernel[1][2] = -1;
+    kernel[2][0] = -1; kernel[2][1] = -1; kernel[2][2] = -1;
 
     vec4 sum = vec4(0.0);
 

@@ -198,15 +198,15 @@ auto CommandBuffer::submit() -> void {
 
     const auto timestamp_period =
         device.get_device_properties().limits.timestampPeriod;
-    static constexpr auto convert_to_double =
-        [](const auto timestamp) -> double {
+    static constexpr auto convert_to_double = [](const auto timestamp) {
       return static_cast<double>(timestamp);
     };
-    double timeTakenInSeconds =
+    double time_taken_seconds =
         (convert_to_double(timestamps[1]) - convert_to_double(timestamps[0])) *
         timestamp_period * 1e-9;
+    const auto times_in_ms = time_taken_seconds * 1000.0;
 
-    info("Time taken: {} seconds", timeTakenInSeconds);
+    // info("Time taken: {}ms", times_in_ms);
   }
 }
 
