@@ -1,13 +1,41 @@
 #include "Texture.hpp"
 
+#include "DataBuffer.hpp"
 #include "Formatters.hpp"
+#include "Types.hpp"
 
 #include <stb_image.h>
 #include <stb_image_write.h>
 
 namespace Core {
 
+auto Texture::empty_with_size(const Device &device, usize size,
+                              const Extent<u32> &extent) -> Scope<Texture> {
+  auto texture = make_scope<Texture>(device, size, extent);
+  return texture;
+}
+
 Texture::~Texture() = default;
+
+Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
+    : device(&dev), data_buffer(size) {
+  data_buffer.fill_zero();
+  image = std::make_unique<Image>(
+      *device,
+      ImageProperties{
+          .extent = extent,
+          .format = ImageFormat::R8G8B8A8Unorm,
+          .tiling = ImageTiling::Linear,
+          .usage = ImageUsage::Sampled | ImageUsage::Storage,
+          .layout = ImageLayout::General,
+          .min_filter = SamplerFilter::Linear,
+          .max_filter = SamplerFilter::Linear,
+          .address_mode = SamplerAddressMode::Repeat,
+          .border_color = SamplerBorderColor::FloatOpaqueBlack,
+      },
+      data_buffer);
+  info("Created Texture!, extent: {}", extent);
+}
 
 Texture::Texture(const Device &dev, const FS::Path &path)
     : device(&dev), data_buffer(load_databuffer_from_file(path, extent)) {
@@ -16,7 +44,7 @@ Texture::Texture(const Device &dev, const FS::Path &path)
       ImageProperties{
           .extent = extent,
           .format = ImageFormat::R8G8B8A8Unorm,
-          .tiling = ImageTiling::Optimal,
+          .tiling = ImageTiling::Linear,
           .usage = ImageUsage::Sampled | ImageUsage::Storage,
           .layout = ImageLayout::General,
           .min_filter = SamplerFilter::Linear,

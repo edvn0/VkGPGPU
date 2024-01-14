@@ -3,6 +3,7 @@ project(Core)
 
 set(SOURCES
     include/Allocator.hpp
+    include/App.hpp
     include/Buffer.hpp
     include/CommandBuffer.hpp
     include/CommandDispatcher.hpp
@@ -12,6 +13,7 @@ set(SOURCES
     include/DescriptorMap.hpp
     include/Device.hpp
     include/DynamicLibraryLoader.hpp
+    include/Entry.hpp
     include/Environment.hpp
     include/Exception.hpp
     include/Filesystem.hpp
@@ -27,6 +29,7 @@ set(SOURCES
     include/Verify.hpp
     include/pch/vkgpgpu_pch.hpp
     src/Allocator.cpp
+    src/App.cpp
     src/Buffer.cpp
     src/CommandBuffer.cpp
     src/DebugMarker.cpp

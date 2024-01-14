@@ -39,6 +39,8 @@ public:
     return *this;
   }
 
+  auto fill_zero() { fill_with(0); }
+
   template <typename T>
   auto write(const T *input_data, std::integral auto input_size) -> void {
     if (input_size > buffer_size) {
@@ -185,6 +187,15 @@ private:
       data.reset();
     }
     data = std::make_unique<u8[]>(new_size);
+  }
+
+  auto fill_with(std::integral auto value) -> void {
+    if (!data) {
+      allocate_storage(size());
+    }
+
+    const auto value_to_fill = value;
+    std::memset(data.get(), value_to_fill, size());
   }
 };
 

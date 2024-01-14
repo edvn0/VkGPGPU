@@ -47,7 +47,6 @@ public:
   [[nodiscard]] auto get_descriptor_info() const
       -> const VkDescriptorImageInfo &;
   [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
-
   [[nodiscard]] auto get_extent() const noexcept -> const Extent<u32> &;
 
 private:

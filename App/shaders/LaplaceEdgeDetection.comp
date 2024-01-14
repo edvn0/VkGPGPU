@@ -1,0 +1,60 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+struct Mat4 {
+  mat4 matrix;
+};
+
+layout(std140, set = 0, binding = 0) readonly buffer InputBufferA {
+  Mat4 inputMatrix[];
+}
+input_buffer_a;
+
+layout(std140, set = 0, binding = 1) readonly buffer InputBufferB {
+  Mat4 inputMatrix[];
+}
+input_buffer_b;
+
+layout(std140, set = 0, binding = 2) writeonly buffer OutputBuffer {
+  Mat4 outputMatrix[];
+}
+output_buffer;
+
+layout(std140, set = 0, binding = 3) uniform UniformBuffer { float something; }
+ubo;
+
+// Image you are processing
+layout(set = 1, binding = 0, rgba8) readonly uniform image2D input_image;
+layout(set = 1, binding = 1, rgba8) writeonly uniform image2D output_image;
+
+void main() {
+    ivec2 imageSize = imageSize(input_image);
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+
+    // Ensure we don't read or write outside the image bounds
+    if (pos.x >= imageSize.x || pos.y >= imageSize.y) {
+        return;
+    }
+float kernel[3][3];
+kernel[0][0] = -1; kernel[0][1] = -1; kernel[0][2] = -1;
+kernel[1][0] = -1; kernel[1][1] = 8;  kernel[1][2] = -1;
+kernel[2][0] = -1; kernel[2][1] = -1; kernel[2][2] = -1;
+
+    vec4 sum = vec4(0.0);
+
+    // Apply the convolution kernel
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            ivec2 readPos = pos + ivec2(i, j);
+
+            // Check image boundaries
+            if (readPos.x >= 0 && readPos.y >= 0 && readPos.x < imageSize.x && readPos.y < imageSize.y) {
+                sum += imageLoad(input_image, readPos) * kernel[j+1][i+1];
+            }
+        }
+    }
+
+    // Write the result to the output image
+    imageStore(output_image, pos, sum);
+}
