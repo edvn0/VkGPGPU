@@ -39,16 +39,19 @@ TEST_CASE("Test MessageBusClient") {
     client.send_message("test_queue", "test_message");
 
     // Lets cast it to MockClient to access the published_messages
-    auto mock_client = static_cast<MockClient *>(api.get());
-    REQUIRE(mock_client->published_messages.size() == 1);
-    REQUIRE(mock_client->published_messages[0] == "test_message");
+    const auto &mock_client =
+        dynamic_cast<const MockClient &>(client.get_api());
+    REQUIRE(mock_client.published_messages.size() == 1);
+    REQUIRE(mock_client.published_messages[0] == "test_message");
   }
 
   SECTION("Test MessageBusClient::MessageBusClient") {
     Core::Scope<IMessagingAPI> api =
         std::make_unique<MockClient>("localhost", 5672);
     auto client = MessageBusClient(std::move(api));
+    const auto &mock_client =
+        dynamic_cast<const MockClient &>(client.get_api());
 
-    REQUIRE(api->get_host_name() == "localhost");
+    REQUIRE(mock_client.host == "localhost");
   }
 }

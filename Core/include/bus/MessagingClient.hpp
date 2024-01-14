@@ -11,9 +11,12 @@ public:
     messagingAPI->connect();
   }
 
-  void send_message(const std::string &queueName, const std::string &message) {
-    messagingAPI->publish_message(queueName, message);
+  void send_message(const std::string &queue_name,
+                    const std::string &message) const {
+    messagingAPI->publish_message(queue_name, message);
   }
+
+  auto get_api() const -> const IMessagingAPI & { return *messagingAPI; }
 };
 
 } // namespace Core::Bus

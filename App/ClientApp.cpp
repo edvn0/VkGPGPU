@@ -100,7 +100,7 @@ void ClientApp::on_destroy() {
   instance.reset();
 #if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
-    static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->RemoveHooks();
+    renderdoc->RemoveHooks();
   }
 #endif
 }
@@ -112,8 +112,7 @@ auto ClientApp::compute(double ts) -> void {
 
 #if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
-    static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->StartFrameCapture(nullptr,
-                                                                     nullptr);
+    renderdoc->StartFrameCapture(nullptr, nullptr);
   }
 #endif
 
@@ -158,19 +157,13 @@ auto ClientApp::compute(double ts) -> void {
 
 #if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
-    static_cast<RENDERDOC_API_1_6_0 *>(renderdoc)->EndFrameCapture(nullptr,
-                                                                   nullptr);
+    renderdoc->EndFrameCapture(nullptr, nullptr);
   }
 #endif
 }
 
 void ClientApp::perform(const Scope<Device> &device) {
   texture = make_scope<Texture>(*device, FS::texture("viking_room.png"));
-  if (texture->valid()) {
-    if (!texture->write_to_file("viking_room_copy.png")) {
-      error("Could not write to file");
-    }
-  }
   output_texture = Texture::empty_with_size(*device, texture->size_bytes(),
                                             texture->get_extent());
 
