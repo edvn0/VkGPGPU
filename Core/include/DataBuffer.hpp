@@ -4,12 +4,11 @@
 #include "Filesystem.hpp"
 #include "Types.hpp"
 
-#include <algorithm>
-#include <bit>
 #include <cstring>
 #include <fmt/format.h>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace Core {
 
