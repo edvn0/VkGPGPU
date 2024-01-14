@@ -1,17 +1,17 @@
+#include "Device.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "Allocator.hpp"
-#include "Device.hpp"
+#include "Instance.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
-
-#include "Instance.hpp"
 #include "Verify.hpp"
-#include <vector>
-#include <vulkan/vulkan_core.h>
 
 #include <fmt/format.h>
 #include <fmt/std.h>
+#include <vector>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
@@ -53,20 +53,17 @@ auto Device::construct(const Instance &instance) -> Scope<Device> {
   return make_scope<Device>(instance);
 }
 
-auto Device::construct_vulkan_device() -> void {
-  auto vk_instance = instance.get_instance();
-
+auto Device::enumerate_physical_devices(VkInstance instance)
+    -> std::vector<VkPhysicalDevice> {
   u32 device_count = 0;
-  vkEnumeratePhysicalDevices(vk_instance, &device_count, nullptr);
+  vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
   std::vector<VkPhysicalDevice> devices(device_count);
-  vkEnumeratePhysicalDevices(vk_instance, &device_count, devices.data());
+  vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+  return devices;
+}
 
-  for (const auto &dev : devices) {
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(dev, &properties);
-    debug("Found device: {}", properties.deviceName);
-  }
-
+auto Device::select_physical_device(
+    const std::vector<VkPhysicalDevice> &devices) -> VkPhysicalDevice {
   // Prefer devices with discrete GPUs
   for (const auto &dev : devices) {
     VkPhysicalDeviceProperties properties;
@@ -116,63 +113,82 @@ auto Device::construct_vulkan_device() -> void {
     }
 
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-      physical_device = dev;
+      return dev;
       info("Selected device: {}", properties.deviceName);
       break;
     }
   }
 
-  auto find_all_possible_queue_infos = [](VkPhysicalDevice dev) {
-    u32 queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(dev, &queue_family_count, nullptr);
-    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(dev, &queue_family_count,
-                                             queue_families.data());
+  return devices[0];
+}
 
-    using IndexQueueTypePair =
-        std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
-    std::vector<IndexQueueTypePair> queue_infos;
-    for (u32 i = 0; i < queue_families.size(); ++i) {
-      const auto &queue_family = queue_families[i];
-      // Is there a unique compute queue?
-      bool already_found = false;
-      if (queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-        auto priority = 1.0F;
-        VkDeviceQueueCreateInfo queue_info{
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .queueFamilyIndex = i,
-            .queueCount = 1,
-            .pQueuePriorities = &priority,
-        };
-        queue_infos.emplace_back(Queue::Type::Compute, queue_info,
-                                 queue_family.timestampValidBits > 0);
-        already_found = true;
-      }
+auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
+    -> std::vector<IndexQueueTypePair> {
+  u32 queue_family_count = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(dev, &queue_family_count, nullptr);
+  std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+  vkGetPhysicalDeviceQueueFamilyProperties(dev, &queue_family_count,
+                                           queue_families.data());
 
-      // Is there a unique graphics queue?
-      if (!already_found && queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        auto priority = 0.1F;
-        VkDeviceQueueCreateInfo queue_info{
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .queueFamilyIndex = i,
-            .queueCount = 1,
-            .pQueuePriorities = &priority,
-        };
-        queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
-                                 queue_family.timestampValidBits > 0);
-      }
+  std::vector<IndexQueueTypePair> queue_infos;
+  for (u32 i = 0; i < queue_families.size(); ++i) {
+    const auto &queue_family = queue_families[i];
+    // Is there a unique compute queue?
+    bool already_found = false;
+    if (queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+      auto priority = 1.0F;
+      VkDeviceQueueCreateInfo queue_info{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .pNext = nullptr,
+          .flags = 0,
+          .queueFamilyIndex = i,
+          .queueCount = 1,
+          .pQueuePriorities = &priority,
+      };
+      queue_infos.emplace_back(Queue::Type::Compute, queue_info,
+                               queue_family.timestampValidBits > 0);
+      already_found = true;
     }
 
-    return queue_infos;
-  };
+    // Is there a unique graphics queue?
+    if (!already_found && queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+      auto priority = 0.1F;
+      VkDeviceQueueCreateInfo queue_info{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .pNext = nullptr,
+          .flags = 0,
+          .queueFamilyIndex = i,
+          .queueCount = 1,
+          .pQueuePriorities = &priority,
+      };
+      queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
+                               queue_family.timestampValidBits > 0);
+    }
 
-  auto index_queue_type_pairs = find_all_possible_queue_infos(physical_device);
+    if (!already_found && queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+      auto priority = 1.0F;
+      VkDeviceQueueCreateInfo queue_info{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .pNext = nullptr,
+          .flags = 0,
+          .queueFamilyIndex = i,
+          .queueCount = 1,
+          .pQueuePriorities = &priority,
+      };
+      queue_infos.emplace_back(Queue::Type::Transfer, queue_info,
+                               queue_family.timestampValidBits > 0);
+    }
+  }
+
+  return queue_infos;
+}
+
+auto Device::create_vulkan_device(
+    VkPhysicalDevice dev,
+    std::vector<IndexQueueTypePair> &index_queue_type_pairs) -> VkDevice {
 
   VkPhysicalDeviceFeatures device_features{};
+  device_features.pipelineStatisticsQuery = VK_TRUE;
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
   for (auto &&[type, queue_info, supports_timestamping] :
@@ -190,9 +206,14 @@ auto Device::construct_vulkan_device() -> void {
       .pEnabledFeatures = &device_features,
   };
 
-  verify(vkCreateDevice(physical_device, &create_info, nullptr, &device),
+  VkDevice temp{};
+  verify(vkCreateDevice(physical_device, &create_info, nullptr, &temp),
          "vkCreateDevice", "Failed to create Vulkan device");
+  return temp;
+}
 
+auto Device::initialize_queues(
+    const std::vector<IndexQueueTypePair> &index_queue_type_pairs) -> void {
   auto &queue_map = queues;
   for (const auto &[type, queue_info, supports_timestamping] :
        index_queue_type_pairs) {
@@ -204,9 +225,20 @@ auto Device::construct_vulkan_device() -> void {
     };
     queue_map[type] = indexed_queue;
   }
+}
 
-  info("Created Vulkan device with {} queue(s)", queue_infos.size());
-  for (auto &&[k, v] : queue_map) {
+auto Device::construct_vulkan_device() -> void {
+
+  auto vk_instance = instance.get_instance();
+  auto devices = enumerate_physical_devices(vk_instance);
+  physical_device = select_physical_device(devices);
+
+  auto index_queue_type_pairs = find_all_possible_queue_infos(physical_device);
+  device = create_vulkan_device(physical_device, index_queue_type_pairs);
+  initialize_queues(index_queue_type_pairs);
+
+  info("Created Vulkan device with {} queue(s)", queues.size());
+  for (auto &&[k, v] : queues) {
     static constexpr auto as_string = [](Queue::Type type) {
       switch (type) {
         using enum Queue::Type;

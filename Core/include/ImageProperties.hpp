@@ -1,5 +1,10 @@
 #pragma once
 
+#include "Types.hpp"
+
+#include <fmt/core.h>
+#include <type_traits>
+
 namespace Core {
 
 template <std::integral T> struct Extent {
@@ -7,8 +12,10 @@ template <std::integral T> struct Extent {
   T height{0};
 
   // Cast to another type Other, not the same as T
-  template <std::integral Other> auto as() const {
-    return Extent{
+  template <std::integral Other>
+    requires(!std::is_same_v<Other, T>)
+  auto as() const {
+    return Extent<Other>{
         .width = static_cast<Other>(width),
         .height = static_cast<Other>(height),
     };
@@ -145,3 +152,9 @@ struct ToFromStringView {
 };
 
 } // namespace Core
+
+template <>
+struct fmt::formatter<Core::Extent<Core::u32>> : fmt::formatter<const char *> {
+  auto format(const Core::Extent<Core::u32> &extent, format_context &ctx) const
+      -> decltype(ctx.out());
+};

@@ -12,7 +12,7 @@ class CommandDispatcher {
   };
 
 public:
-  CommandDispatcher(CommandBuffer *command_buffer)
+  explicit CommandDispatcher(CommandBuffer *command_buffer)
       : command_buffer(command_buffer) {}
 
   // Non-owning destructor
@@ -23,7 +23,7 @@ public:
     object.bind(*command_buffer, std::forward<Args>(args)...);
   }
 
-  auto dispatch(const GroupSize &group_size) -> void {
+  auto dispatch(const GroupSize &group_size) const -> void {
     vkCmdDispatch(command_buffer->get_command_buffer(),
                   group_size.group_count_x, group_size.group_count_y,
                   group_size.group_count_z);

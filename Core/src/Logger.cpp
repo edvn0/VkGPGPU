@@ -1,6 +1,6 @@
-#include "pch/vkgpgpu_pch.hpp"
-
 #include "Logger.hpp"
+
+#include "pch/vkgpgpu_pch.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -9,7 +9,7 @@ namespace Core {
 
 Logger::Logger() : current_level(get_log_level_from_environment()) {}
 
-Logger &Logger::getInstance() {
+Logger &Logger::get_instance() {
   static Logger instance;
   return instance;
 }
@@ -19,11 +19,12 @@ void Logger::set_level(LogLevel level) { current_level = level; }
 LogLevel Logger::get_level() const { return current_level; }
 
 auto to_lower(const std::string &str) {
-  std::string lowerStr;
+  std::string lower_str;
+  lower_str.reserve(str.size());
   for (const char ch : str) {
-    lowerStr += static_cast<char>(std::tolower(ch));
+    lower_str += static_cast<char>(std::tolower(ch));
   }
-  return lowerStr;
+  return lower_str;
 }
 
 LogLevel Logger::get_log_level_from_environment() {
@@ -50,5 +51,3 @@ LogLevel Logger::get_log_level_from_environment() {
 }
 
 } // namespace Core
-
-// Implementation of the logger methods will be in Logger.inl

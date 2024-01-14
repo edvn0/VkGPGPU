@@ -35,6 +35,7 @@ jobs:
           packages: g++-12 gcc-12 libtbb-dev libxinerama-dev libxcursor-dev
             libxi-dev mesa-utils libglu1-mesa-dev mesa-common-dev
             libglew-dev libglfw3-dev libglm-dev libao-dev libmpg123-dev
+            mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers
           version: 1.0
 
       - name: Install ninja-build tool
@@ -71,6 +72,7 @@ jobs:
         run: cmake
           -B build
           -D GPGPU_PIPELINE=ON
+          -D ENABLE_TESTING=ON
           -D CMAKE_C_COMPILER=${{env.CC}}
           -D CMAKE_C_COMPILER_LAUNCHER=ccache
           -D CMAKE_CXX_COMPILER=${{env.CXX}}
@@ -83,4 +85,13 @@ jobs:
 
       - name: Test
         working-directory: build
-        run: ctest -C ${{env.BUILD_TYPE}} --output_on_failure
+        run: |
+          ctest -C ${{env.BUILD_TYPE}} -T Test --output-junit Testing/junit-output.xml
+
+      - name: Upload Test Results
+        if: always()  # This ensures the artifact is uploaded even if the build or test fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/Testing/**/*.xml

@@ -15,7 +15,7 @@ enum class LogLevel {
 
 class Logger {
 public:
-  static Logger &getInstance();
+  static Logger &get_instance();
   ~Logger() = default;
 
   void set_level(LogLevel level);
@@ -25,16 +25,16 @@ public:
   Logger &operator=(const Logger &) = delete;
 
   template <typename... Args>
-  void info(fmt::format_string<Args...> format, Args &&...args);
+  void info(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
   template <typename... Args>
-  void debug(fmt::format_string<Args...> format, Args &&...args);
+  void debug(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
   template <typename... Args>
-  void trace(fmt::format_string<Args...> format, Args &&...args);
+  void trace(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
   template <typename... Args>
-  void error(fmt::format_string<Args...> format, Args &&...args);
+  void error(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
 private:
   Logger();
@@ -46,23 +46,23 @@ private:
 } // namespace Core
 
 template <typename... Args>
-void info(fmt::format_string<Args...> format, Args &&...args) {
-  Core::Logger::getInstance().info(format, std::forward<Args>(args)...);
+void info(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  Core::Logger::get_instance().info(format, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-void debug(fmt::format_string<Args...> format, Args &&...args) {
-  Core::Logger::getInstance().debug(format, std::forward<Args>(args)...);
+void debug(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  Core::Logger::get_instance().debug(format, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-void trace(fmt::format_string<Args...> format, Args &&...args) {
-  Core::Logger::getInstance().trace(format, std::forward<Args>(args)...);
+void trace(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  Core::Logger::get_instance().trace(format, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-void error(fmt::format_string<Args...> format, Args &&...args) {
-  Core::Logger::getInstance().error(format, std::forward<Args>(args)...);
+void error(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  Core::Logger::get_instance().error(format, std::forward<Args>(args)...);
 }
 
 #include "Logger.inl"

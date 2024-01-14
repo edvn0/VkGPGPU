@@ -1,10 +1,9 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-
 #include <bit>
 #include <cstdint>
 #include <string>
+#include <vulkan/vulkan.h>
 
 namespace Core {
 
