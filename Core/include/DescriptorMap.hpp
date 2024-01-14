@@ -3,7 +3,9 @@
 #include "Buffer.hpp"
 #include "CommandBuffer.hpp"
 #include "Image.hpp"
+#include "Texture.hpp"
 #include "Types.hpp"
+
 #include <map>
 #include <vulkan/vulkan.h>
 
@@ -34,6 +36,13 @@ public:
    * @param image The image to add
    */
   auto add_for_frames(u32 binding, const Image &image) -> void;
+
+  /**
+   * @brief Add a texture to the descriptor map. Adds to descriptor set 1.
+   * @param binding The binding point in the shader
+   * @param texture The texture to add
+   */
+  auto add_for_frames(u32 binding, const Texture &texture) -> void;
 
   auto bind(const CommandBuffer &buffer, u32 frame,
             VkPipelineLayout binding) const -> void;

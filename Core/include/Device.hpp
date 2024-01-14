@@ -71,6 +71,17 @@ private:
   };
   std::unordered_map<Queue::Type, IndexedQueue> queues{};
   std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support{};
+
+  auto enumerate_physical_devices(VkInstance) -> std::vector<VkPhysicalDevice>;
+  auto select_physical_device(const std::vector<VkPhysicalDevice> &)
+      -> VkPhysicalDevice;
+  using IndexQueueTypePair =
+      std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
+  auto find_all_possible_queue_infos(VkPhysicalDevice)
+      -> std::vector<IndexQueueTypePair>;
+  auto create_vulkan_device(VkPhysicalDevice, std::vector<IndexQueueTypePair> &)
+      -> VkDevice;
+  auto initialize_queues(const std::vector<IndexQueueTypePair> &) -> void;
 };
 
 } // namespace Core

@@ -1,6 +1,10 @@
 #pragma once
 
+#include "Types.hpp"
+
+#include <fmt/core.h>
 #include <type_traits>
+
 namespace Core {
 
 template <std::integral T> struct Extent {
@@ -148,3 +152,9 @@ struct ToFromStringView {
 };
 
 } // namespace Core
+
+template <>
+struct fmt::formatter<Core::Extent<Core::u32>> : fmt::formatter<const char *> {
+  auto format(const Core::Extent<Core::u32> &extent, format_context &ctx) const
+      -> decltype(ctx.out());
+};

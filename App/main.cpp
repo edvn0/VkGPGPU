@@ -94,18 +94,10 @@ auto randomize_span_of_matrices(std::span<Matrix<4, 4>> matrices) -> void {
 
 void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
 
-  Core::Image image{
+  Core::Texture texture{
       *device,
-      {
-          .extent = {20, 20},
-          .format = Core::ImageFormat::R8G8B8A8Unorm,
-          .tiling = Core::ImageTiling::Linear,
-          .usage = Core::ImageUsage::Sampled | Core::ImageUsage::Storage,
-          .layout = Core::ImageLayout::General,
-      },
+      Core::FS::texture("viking_room.png"),
   };
-
-  Core::Texture texture{*device, Core::FS::texture("viking_room.png")};
   if (texture.valid()) {
     const auto could = texture.write_to_file("viking_room_copy.png");
 
@@ -151,7 +143,7 @@ void perform(const Core::Scope<Core::Device> &device, void *renderdoc) {
   descriptor_map.add_for_frames(2, output_buffer);
   descriptor_map.add_for_frames(3, simple_uniform);
 
-  descriptor_map.add_for_frames(0, image);
+  descriptor_map.add_for_frames(0, texture);
 
   Core::Shader shader{
       *device,

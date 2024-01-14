@@ -8,22 +8,58 @@
 #include <array>
 #include <limits>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
+class NoQueueTypeException final : public BaseException {
+public:
+  using BaseException::BaseException;
+};
+
 static constexpr auto timeout = std::numeric_limits<u64>::max();
 
-ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device) {
+auto create_immediate(const Device &device, Queue::Type type)
+    -> ImmediateCommandBuffer {
+  return ImmediateCommandBuffer(device, type);
+}
+
+ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device,
+                                               Queue::Type type) {
+
+  const auto appropriate_commandbuffer_type = [&]() {
+    switch (type) {
+    case Queue::Type::Compute:
+      return CommandBuffer::Type::Compute;
+    case Queue::Type::Graphics:
+      return CommandBuffer::Type::Graphics;
+    case Queue::Type::Transfer:
+      return CommandBuffer::Type::Transfer;
+    default:
+      throw NoQueueTypeException(
+          fmt::format("Unknown queue type. Chosen was: {}", type));
+    }
+  }();
   command_buffer =
-      make_scope<CommandBuffer>(device, CommandBuffer::Type::Graphics);
+      make_scope<CommandBuffer>(device, appropriate_commandbuffer_type);
   command_buffer->begin(0);
 }
 
-CommandBuffer::CommandBuffer(const Device &dev, Type type,
+ImmediateCommandBuffer::~ImmediateCommandBuffer() {
+  try {
+    command_buffer->end_and_submit();
+  } catch (...) {
+    error("Failed to submit command buffer");
+  }
+}
+
+auto ImmediateCommandBuffer::get_command_buffer() const -> VkCommandBuffer {
+  return command_buffer->get_command_buffer();
+}
+
+CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
                              u32 input_frame_count)
-    : device(dev), frame_count(input_frame_count),
-      supports_device_query(
-          device.check_support(Feature::DeviceQuery, Queue::Type::Compute)) {
+    : device(dev), frame_count(input_frame_count) {
   switch (type) {
   case Type::Compute:
     queue_type = Queue::Type::Compute;
@@ -31,9 +67,15 @@ CommandBuffer::CommandBuffer(const Device &dev, Type type,
   case Type::Graphics:
     queue_type = Queue::Type::Graphics;
     break;
+  case Type::Transfer:
+    queue_type = Queue::Type::Transfer;
+    break;
   default:
-    throw std::runtime_error("Unknown queue type");
+    throw NoQueueTypeException("Unknown queue type");
   }
+
+  supports_device_query =
+      device.check_support(Feature::DeviceQuery, queue_type);
 
   VkCommandPoolCreateInfo pool_info{};
   pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;

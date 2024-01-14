@@ -7,26 +7,25 @@
 
 namespace Core {
 
-namespace {} // namespace
-
 Texture::~Texture() = default;
 
 Texture::Texture(const Device &dev, const FS::Path &path)
-    : Texture(dev, load_databuffer_from_file(path)) {}
-
-Texture::Texture(const Device &dev, DataBuffer &&buffer)
-    : device(&dev), data_buffer(std::move(buffer)) {
-  info("Creating texture from buffer of size {}", data_buffer.size());
-  image =
-      make_scope<Image>(*device,
-                        ImageProperties{
-                            .extent = {20, 20},
-                            .format = ImageFormat::R8G8B8A8Unorm,
-                            .tiling = ImageTiling::Linear,
-                            .usage = ImageUsage::Sampled | ImageUsage::Storage,
-                            .layout = ImageLayout::General,
-                        },
-                        data_buffer);
+    : device(&dev), data_buffer(load_databuffer_from_file(path, extent)) {
+  image = std::make_unique<Image>(
+      *device,
+      ImageProperties{
+          .extent = extent,
+          .format = ImageFormat::R8G8B8A8Unorm,
+          .tiling = ImageTiling::Optimal,
+          .usage = ImageUsage::Sampled | ImageUsage::Storage,
+          .layout = ImageLayout::General,
+          .min_filter = SamplerFilter::Linear,
+          .max_filter = SamplerFilter::Linear,
+          .address_mode = SamplerAddressMode::Repeat,
+          .border_color = SamplerBorderColor::FloatOpaqueBlack,
+      },
+      data_buffer);
+  info("Created Texture!, extent: {}", extent);
 }
 
 auto Texture::valid() const noexcept -> bool {
@@ -36,6 +35,8 @@ auto Texture::valid() const noexcept -> bool {
 auto Texture::get_image_info() const noexcept -> const VkDescriptorImageInfo & {
   return image->get_descriptor_info();
 }
+
+auto Texture::get_image() const noexcept -> const Image & { return *image; }
 
 auto Texture::write_to_file(const FS::Path &path) -> bool {
   // ensure that parent path exists

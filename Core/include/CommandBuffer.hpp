@@ -20,7 +20,7 @@ concept CommandBufferBindable =
 
 class ImmediateCommandBuffer {
 public:
-  explicit ImmediateCommandBuffer(const Device &device);
+  explicit ImmediateCommandBuffer(const Device &device, Queue::Type);
   ~ImmediateCommandBuffer();
 
   [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer;
@@ -32,11 +32,12 @@ private:
   auto submit_and_end() -> void;
 };
 
-auto create_immediate(const Device &device) -> ImmediateCommandBuffer;
+auto create_immediate(const Device &device, Queue::Type = Queue::Type::Graphics)
+    -> ImmediateCommandBuffer;
 
 class CommandBuffer {
 public:
-  enum class Type : u8 { Compute, Graphics };
+  enum class Type : u8 { Compute, Graphics, Transfer };
 
   explicit CommandBuffer(const Device &, Type type, u32 = Config::frame_count);
   ~CommandBuffer();
@@ -54,8 +55,8 @@ public:
 private:
   auto submit() -> void;
   const Device &device;
-  bool supports_device_query{false};
   u32 frame_count{Config::frame_count};
+  bool supports_device_query{false};
 
   struct FrameCommandBuffer {
     VkCommandBuffer command_buffer{};

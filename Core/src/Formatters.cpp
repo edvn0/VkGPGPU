@@ -4,6 +4,7 @@
 #include "DescriptorMap.hpp"
 #include "Device.hpp"
 #include "Filesystem.hpp"
+#include "ImageProperties.hpp"
 
 #include <fmt/format.h>
 #include <vulkan/vulkan_core.h>
@@ -70,4 +71,11 @@ auto fmt::formatter<VkDescriptorSet>::format(const VkDescriptorSet &type,
     -> decltype(ctx.out()) {
   return formatter<const char *>::format(
       fmt::format("set={}", fmt::ptr((const void *)type)).data(), ctx);
+}
+
+auto fmt::formatter<Core::Extent<Core::u32>>::format(
+    const Core::Extent<Core::u32> &extent, format_context &ctx) const
+    -> decltype(ctx.out()) {
+  auto formatted = fmt::format("extent={},{}", extent.width, extent.height);
+  return formatter<const char *>::format(formatted.data(), ctx);
 }

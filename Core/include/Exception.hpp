@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Logger.hpp"
-#include <exception>
 
+#include <exception>
 #include <string>
 
 namespace Core {

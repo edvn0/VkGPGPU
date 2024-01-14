@@ -9,6 +9,7 @@
 #include <cstring>
 #include <fmt/format.h>
 #include <memory>
+#include <span>
 
 namespace Core {
 
@@ -50,8 +51,28 @@ public:
     std::memcpy(data.get(), input_data, input_size);
   }
 
+  template <typename T>
+  auto write(const std::vector<T> &input_data, std::integral auto input_size)
+      -> void {
+    write(input_data.data(), input_size);
+  }
+
+  template <typename T> auto write(const std::vector<T> &input_data) -> void {
+    write(input_data.data(), input_data.size() * sizeof(T));
+  }
+
   template <typename T, std::size_t Extent = std::dynamic_extent>
-  auto read(std::span<T, Extent> output, std::integral auto input_size)
+  auto write(std::span<T, Extent> input_data) -> void {
+    write(input_data.data(), input_data.size_bytes());
+  }
+
+  template <typename T, std::size_t Count>
+  auto write(const std::array<T, Count> &input_data) -> void {
+    write(input_data.data(), input_data.size() * sizeof(T));
+  }
+
+  template <typename T, std::size_t Extent = std::dynamic_extent>
+  auto read(std::span<T, Extent> output, std::integral auto input_size) const
       -> void {
     if (input_size > buffer_size) {
       throw WriteRangeException{"DataBuffer::read: input_size > size"};
@@ -63,6 +84,19 @@ public:
     std::memcpy(output.data(), data.get(), input_size);
   }
 
+  template <typename T, std::size_t Extent = std::dynamic_extent>
+  auto read(std::span<T, Extent> output) const -> void {
+    const auto size = output.size_bytes();
+    if (size > buffer_size) {
+      throw WriteRangeException{"DataBuffer::read: input_size > size"};
+    }
+    if (!data) {
+      throw WriteRangeException{"DataBuffer::read: data is null"};
+    }
+    // Do i need to cast the input_data to u8*?
+    std::memcpy(output.data(), data.get(), size);
+  }
+
   /***
    * @brief Read a vector of T from the databuffer
    * @tparam T The type of the vector
@@ -70,7 +104,8 @@ public:
    * @param input_count The number of elements to read
    */
   template <typename T>
-  auto read(std::vector<T> &output, std::integral auto input_count) -> void {
+  auto read(std::vector<T> &output, std::integral auto input_count) const
+      -> void {
     const auto actual_size = input_count * sizeof(T);
     // check vector size too
     if (output.size() < input_count) {
@@ -86,6 +121,23 @@ public:
     std::memcpy(output.data(), data.get(), actual_size);
   }
 
+  template <typename T> auto read(std::vector<T> &output) const -> void {
+    const auto actual_size = output.size() * sizeof(T);
+    // check vector size too
+    if (output.size() < output.size()) {
+      throw WriteRangeException{
+          "DataBuffer::read: output.size() > vector size"};
+    }
+    if (actual_size > buffer_size) {
+      throw WriteRangeException{"DataBuffer::read: output.size() > size"};
+    }
+    if (!data) {
+      throw WriteRangeException{"DataBuffer::read: data is null"};
+    }
+    // Do i need to cast the input_data to u8*?
+    std::memcpy(output.data(), data.get(), actual_size);
+  }
+
   /***
    * @brief Read an array of T from the databuffer
    * @tparam T The type of the vector
@@ -93,7 +145,7 @@ public:
    * @param output The vector to write to
    */
   template <typename T, std::size_t Count>
-  auto read(std::array<T, Count> &output) -> void {
+  auto read(std::array<T, Count> &output) const -> void {
     if (sizeof(T) * Count > buffer_size) {
       throw WriteRangeException{"DataBuffer::read: input_size > size"};
     }

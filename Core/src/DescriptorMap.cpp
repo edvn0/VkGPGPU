@@ -213,4 +213,9 @@ auto DescriptorMap::add_for_frames(u32 binding, const Image &image) -> void {
   }
 }
 
+auto DescriptorMap::add_for_frames(u32 binding, const Texture &texture)
+    -> void {
+  add_for_frames(binding, texture.get_image());
+}
+
 } // namespace Core
