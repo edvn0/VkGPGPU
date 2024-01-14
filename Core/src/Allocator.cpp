@@ -5,6 +5,7 @@
 #include "Logger.hpp"
 
 #include <cassert>
+#include <utility>
 
 #define VMA_IMPLEMENTATION
 #include "Device.hpp"
@@ -15,7 +16,8 @@
 
 namespace Core {
 
-Allocator::Allocator(const std::string &resource) : resource_name(resource) {}
+Allocator::Allocator(std::string resource)
+    : resource_name(std::move(resource)) {}
 
 auto Allocator::allocate_buffer(VkBuffer &buffer,
                                 VkBufferCreateInfo &buffer_info,

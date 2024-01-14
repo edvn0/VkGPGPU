@@ -27,6 +27,7 @@ set(SOURCES
     include/Timer.hpp
     include/Types.hpp
     include/Verify.hpp
+    include/Window.hpp
     include/pch/vkgpgpu_pch.hpp
     src/Allocator.cpp
     src/App.cpp
@@ -45,11 +46,16 @@ set(SOURCES
     src/Timer.cpp
     src/Texture.cpp
     src/Verify.cpp
+    src/Window.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
-target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
-target_link_libraries(Core PUBLIC Platform Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator fmt::fmt stbimage::stbimage)
+target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/inline
+        ${CMAKE_SOURCE_DIR}/Platform
+        ${CMAKE_SOURCE_DIR}/ThirdParty/stb
+        ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
+target_link_libraries(Core PUBLIC Platform Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator fmt::fmt stbimage::stbimage glfw)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

@@ -41,7 +41,9 @@ template <std::size_t N = 10000> struct FPSAverage {
     frame_counter++;
   }
 
-  auto should_print() const -> bool { return frame_counter % N == 0; }
+  [[nodiscard]] auto should_print() const -> bool {
+    return (frame_counter + 1) % N == 0;
+  }
 
   auto print() const -> void {
     const auto avg_frame_time = frame_time_sum / N;
@@ -56,14 +58,11 @@ template <std::size_t N = 10000> struct FPSAverage {
 namespace Core {
 
 App::App(const ApplicationProperties &props) : properties(props) {
-  std::signal(SIGINT, signal_handler);
-}
-
-auto App::signal_handler(int signal) -> void {
-  if (signal == SIGINT) {
-    graceful_exit_requested = true;
-    info("Graceful exit requested.");
-  }
+  window = make_scope<Window>(WindowProperties{
+      .headless = properties.headless,
+      .extent = {.width = 800, .height = 600},
+      .title = "VkGPGPU",
+  });
 }
 
 auto App::run() -> void {
@@ -76,8 +75,8 @@ auto App::run() -> void {
     on_create();
 
     auto last_time = std::chrono::high_resolution_clock::now();
-    auto total_time = last_time;
-    while (running && !graceful_exit_requested) {
+    const auto total_time = last_time;
+    while (!window->should_close()) {
       const auto current_time = std::chrono::high_resolution_clock::now();
       const auto delta_time_seconds =
           std::chrono::duration<double>(current_time - last_time).count();

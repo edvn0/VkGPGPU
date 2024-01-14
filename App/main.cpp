@@ -3,7 +3,7 @@
 #define GPGPU_ENTRY
 #include "Entry.hpp"
 
-extern auto Core::make_application(const Core::ApplicationProperties &props)
-    -> Core::Scope<Core::App> {
+extern auto Core::make_application(const ApplicationProperties &props)
+    -> Scope<App> {
   return Core::make_scope<ClientApp>(props);
 }

@@ -16,10 +16,15 @@ using i16 = std::int16_t;
 using i32 = std::int32_t;
 using i64 = std::int64_t;
 
-template <class T> using Scope = std::unique_ptr<T>;
+template <class T, class Deleter = std::default_delete<T>>
+using Scope = std::unique_ptr<T, Deleter>;
 template <class T, typename... Args>
 auto make_scope(Args &&...args) -> Scope<T> {
   return std::make_unique<T>(std::forward<Args>(args)...);
+}
+template <class T, class Deleter, typename... Args>
+auto make_scope(Args &&...args) -> Scope<T> {
+  return std::make_unique<T, Deleter>(std::forward<Args>(args)...);
 }
 
 } // namespace Core

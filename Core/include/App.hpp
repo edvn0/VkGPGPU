@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include "Window.hpp"
 
 #include <atomic>
 
@@ -22,16 +23,15 @@ protected:
 
   explicit App(const ApplicationProperties &);
 
-  static auto frame() -> u32 { return current_frame; }
+  [[nodiscard]] auto frame() const -> u32 { return current_frame; }
 
 private:
   ApplicationProperties properties{};
+  Scope<Window> window{nullptr};
 
-  static auto signal_handler(int signal) -> void;
+  auto signal_handler(int signal) -> void;
 
-  static inline u32 current_frame{0};
-  static inline bool running{true};
-  static inline std::atomic_bool graceful_exit_requested{false};
+  u32 current_frame{0};
 };
 
 auto extern make_application(const ApplicationProperties &) -> Scope<App>;

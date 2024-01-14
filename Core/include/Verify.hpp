@@ -26,7 +26,7 @@ template <typename... Args>
 void verify(VkResult result, const std::string &function_name,
             fmt::format_string<Args...> format, Args &&...args) {
   if (result != VK_SUCCESS) {
-    std::string formatted_message =
+    const auto formatted_message =
         fmt::format(format, std::forward<Args>(args)...);
     std::string error_message = function_name + " failed with VkResult: " +
                                 vk_result_to_string(result) + ", " +

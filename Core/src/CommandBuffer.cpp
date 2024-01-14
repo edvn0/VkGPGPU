@@ -25,7 +25,8 @@ auto create_immediate(const Device &device, Queue::Type type)
 }
 
 ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device,
-                                               Queue::Type type) {
+                                               Queue::Type queue_type)
+    : type(queue_type) {
 
   const auto appropriate_commandbuffer_type = [&]() {
     switch (type) {
@@ -42,12 +43,12 @@ ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device,
   }();
   command_buffer =
       make_scope<CommandBuffer>(device, appropriate_commandbuffer_type);
-  command_buffer->begin(0);
+  command_buffer->begin(0, type);
 }
 
 ImmediateCommandBuffer::~ImmediateCommandBuffer() {
   try {
-    command_buffer->end_and_submit();
+    command_buffer->end_and_submit(type);
   } catch (...) {
     error("Failed to submit command buffer");
   }
@@ -104,7 +105,10 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
 
   for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateFence(device.get_device(), &fence_info, nullptr,
-                         &command_buffers[i].fence),
+                         &command_buffers[i].compute_in_flight_fence),
+           "vkCreateFence", "Failed to create fence");
+    verify(vkCreateFence(device.get_device(), &fence_info, nullptr,
+                         &command_buffers[i].graphics_in_flight_fence),
            "vkCreateFence", "Failed to create fence");
   }
 
@@ -114,14 +118,20 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
 
   for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateSemaphore(device.get_device(), &semaphore_info, nullptr,
-                             &command_buffers[i].finished_semaphore),
+                             &command_buffers[i].compute_finished_semaphore),
+           "vkCreateSemaphore", "Failed to create semaphore");
+
+    verify(vkCreateSemaphore(device.get_device(), &semaphore_info, nullptr,
+                             &command_buffers[i].image_available_semaphore),
+           "vkCreateSemaphore", "Failed to create semaphore");
+
+    verify(vkCreateSemaphore(device.get_device(), &semaphore_info, nullptr,
+                             &command_buffers[i].render_finished_semaphore),
            "vkCreateSemaphore", "Failed to create semaphore");
   }
 
   if (supports_device_query) {
     create_query_objects();
-  } else {
-    query_pools.fill(VK_NULL_HANDLE);
   }
 }
 
@@ -134,95 +144,108 @@ CommandBuffer::~CommandBuffer() {
   vkDestroyCommandPool(device.get_device(), command_pool, nullptr);
 
   for (const auto &command_buffer : command_buffers) {
-    vkDestroyFence(device.get_device(), command_buffer.fence, nullptr);
+    vkDestroyFence(device.get_device(), command_buffer.compute_in_flight_fence,
+                   nullptr);
+    vkDestroyFence(device.get_device(), command_buffer.graphics_in_flight_fence,
+                   nullptr);
   }
 
   // Destroy semaphores
   for (const auto &command_buffer : command_buffers) {
-    vkDestroySemaphore(device.get_device(), command_buffer.finished_semaphore,
-                       nullptr);
+    vkDestroySemaphore(device.get_device(),
+                       command_buffer.compute_finished_semaphore, nullptr);
+    vkDestroySemaphore(device.get_device(),
+                       command_buffer.image_available_semaphore, nullptr);
+    vkDestroySemaphore(device.get_device(),
+                       command_buffer.render_finished_semaphore, nullptr);
   }
 }
 
-auto CommandBuffer::begin(u32 provided_frame) -> void {
+auto CommandBuffer::begin(u32 provided_frame, Queue::Type type) -> void {
   active_frame = &command_buffers.at(provided_frame);
-  active_pool = &query_pools.at(provided_frame);
 
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+  const auto chosen_fence = type == Queue::Type::Compute
+                                ? &active_frame->compute_in_flight_fence
+                                : &active_frame->graphics_in_flight_fence;
+  verify(vkResetCommandBuffer(active_frame->command_buffer, 0),
+         "vkResetCommandBuffer", "Failed to reset command buffer");
   verify(vkBeginCommandBuffer(active_frame->command_buffer, &begin_info),
          "vkBeginCommandBuffer", "Failed to begin recording command buffer");
-  verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
-                         timeout),
-         "vkWaitForFences", "Failed to wait for fence");
+  verify(
+      vkWaitForFences(device.get_device(), 1, chosen_fence, VK_TRUE, timeout),
+      "vkWaitForFences", "Failed to wait for fence");
   if (supports_device_query) {
-    vkCmdResetQueryPool(active_frame->command_buffer, *active_pool, 0, 2);
+    vkCmdResetQueryPool(active_frame->command_buffer, active_frame->query_pool,
+                        0, 2);
     vkCmdWriteTimestamp(active_frame->command_buffer,
-                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, *active_pool, 0);
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        active_frame->query_pool, 0);
   }
 }
 
-auto CommandBuffer::submit() -> void {
-  VkSubmitInfo submit_info{};
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+auto CommandBuffer::submit(Queue::Type type) const -> void {
+  if (type == Queue::Type::Compute) {
+    const auto vk_device = device.get_device();
+    vkWaitForFences(vk_device, 1, &active_frame->compute_in_flight_fence,
+                    VK_TRUE, UINT64_MAX);
+    vkResetFences(vk_device, 1, &active_frame->compute_in_flight_fence);
 
-  constexpr VkPipelineStageFlags wait_stage_mask =
-      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-  submit_info.pWaitDstStageMask = &wait_stage_mask;
-  // submit_info.signalSemaphoreCount = 1;
-  // submit_info.pSignalSemaphores = &active_frame->finished_semaphore;
+    VkSubmitInfo submit_info{};
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &active_frame->command_buffer;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &active_frame->compute_finished_semaphore;
 
-  submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = &active_frame->command_buffer;
+    verify(vkQueueSubmit(device.get_queue(Queue::Type::Compute), 1,
+                         &submit_info, active_frame->compute_in_flight_fence),
+           "vkQueueSubmit", "Failed to submit queue");
+  } else {
+    const auto vk_device = device.get_device();
+    vkWaitForFences(vk_device, 1, &active_frame->graphics_in_flight_fence,
+                    VK_TRUE, UINT64_MAX);
+    vkResetFences(vk_device, 1, &active_frame->graphics_in_flight_fence);
 
-  verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
-                         timeout),
-         "vkWaitForFences", "Failed to wait for fence");
-  verify(vkResetFences(device.get_device(), 1, &active_frame->fence),
-         "vkResetFences", "Failed to reset fence");
+    VkSubmitInfo submit_info{};
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &active_frame->command_buffer;
 
-  verify(vkQueueSubmit(device.get_queue(Queue::Type::Compute), 1, &submit_info,
-                       active_frame->fence),
-         "vkQueueSubmit", "Failed to submit queue");
-  verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
-                         timeout),
-         "vkWaitForFences", "Failed to wait for fence");
-
-  if (supports_device_query) {
-    std::array<u64, 2> timestamps{};
-    vkGetQueryPoolResults(device.get_device(), *active_pool, 0, 2,
-                          sizeof(timestamps), timestamps.data(), sizeof(u64),
-                          VK_QUERY_RESULT_64_BIT);
-
-    const auto timestamp_period =
-        device.get_device_properties().limits.timestampPeriod;
-    static constexpr auto convert_to_double = [](const auto timestamp) {
-      return static_cast<double>(timestamp);
+    const std::array wait_semaphores = {
+        active_frame->compute_finished_semaphore,
+        active_frame->image_available_semaphore,
     };
-    double time_taken_seconds =
-        (convert_to_double(timestamps[1]) - convert_to_double(timestamps[0])) *
-        timestamp_period * 1e-9;
-    const auto times_in_ms = time_taken_seconds * 1000.0;
+    constexpr VkPipelineStageFlags wait_stages[] = {
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submit_info.pWaitDstStageMask = wait_stages;
+    submit_info.waitSemaphoreCount = static_cast<u32>(wait_semaphores.size());
+    submit_info.pWaitSemaphores = wait_semaphores.data();
+    submit_info.pSignalSemaphores = &active_frame->render_finished_semaphore;
+    submit_info.signalSemaphoreCount = 1;
 
-    // info("Time taken: {}ms", times_in_ms);
+    verify(vkQueueSubmit(device.get_queue(Queue::Type::Graphics), 1,
+                         &submit_info, active_frame->graphics_in_flight_fence),
+           "vkQueueSubmit", "Failed to submit queue");
   }
 }
 
-auto CommandBuffer::end() -> void {
+auto CommandBuffer::end() const -> void {
   if (supports_device_query) {
     vkCmdWriteTimestamp(active_frame->command_buffer,
-                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, *active_pool, 1);
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        active_frame->query_pool, 1);
   }
 
   verify(vkEndCommandBuffer(active_frame->command_buffer), "vkEndCommandBuffer",
          "Failed to record command buffer");
 }
 
-auto CommandBuffer::end_and_submit() -> void {
+auto CommandBuffer::end_and_submit(Queue::Type type) const -> void {
   end();
-  submit();
+  submit(type);
 }
 
 void CommandBuffer::create_query_objects() {
@@ -233,14 +256,15 @@ void CommandBuffer::create_query_objects() {
 
   for (auto i = 0U; i < frame_count; ++i) {
     verify(vkCreateQueryPool(device.get_device(), &query_pool_info, nullptr,
-                             &query_pools[i]),
+                             &command_buffers.at(i).query_pool),
            "vkCreateQueryPool", "Failed to create query pool");
   }
 }
 
-void CommandBuffer::destroy_query_objects() {
+void CommandBuffer::destroy_query_objects() const {
   for (auto i = 0U; i < frame_count; ++i) {
-    vkDestroyQueryPool(device.get_device(), query_pools[i], nullptr);
+    vkDestroyQueryPool(device.get_device(), command_buffers.at(i).query_pool,
+                       nullptr);
   }
 }
 

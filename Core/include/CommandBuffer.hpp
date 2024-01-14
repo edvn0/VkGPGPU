@@ -27,6 +27,7 @@ public:
 
 private:
   Scope<CommandBuffer> command_buffer{nullptr};
+  Queue::Type type;
 
   auto begin() -> void;
   auto submit_and_end() -> void;
@@ -42,9 +43,15 @@ public:
   explicit CommandBuffer(const Device &, Type type, u32 = Config::frame_count);
   ~CommandBuffer();
 
-  auto begin(u32 current_frame) -> void;
-  auto end() -> void;
-  auto end_and_submit() -> void;
+  auto begin(u32 current_frame, Queue::Type) -> void;
+  auto end() const -> void;
+
+  /**
+   * @brief Ends the command buffer and submits it to the queue.
+   *
+   * @param type The queue type to submit to.
+   */
+  auto end_and_submit(Queue::Type type) const -> void;
 
   [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer {
     return active_frame->command_buffer;
@@ -53,27 +60,28 @@ public:
   template <class T> void bind(T &object) { object.bind(*this); }
 
 private:
-  auto submit() -> void;
+  auto submit(Queue::Type) const -> void;
   const Device &device;
   u32 frame_count{Config::frame_count};
   bool supports_device_query{false};
 
   struct FrameCommandBuffer {
     VkCommandBuffer command_buffer{};
-    VkFence fence{};
-    VkSemaphore finished_semaphore{};
+    VkFence compute_in_flight_fence{};
+    VkFence graphics_in_flight_fence{};
+    VkSemaphore compute_finished_semaphore{};
+    VkSemaphore image_available_semaphore{};
+    VkSemaphore render_finished_semaphore{};
+    VkQueryPool query_pool{};
   };
   FrameCommandBuffer *active_frame{nullptr};
-  VkQueryPool *active_pool{nullptr};
   std::array<FrameCommandBuffer, Config::frame_count> command_buffers{};
 
   Queue::Type queue_type{Queue::Type::Unknown};
   VkCommandPool command_pool{};
 
-  std::array<VkQueryPool, Config::frame_count> query_pools{};
-
   void create_query_objects();
-  void destroy_query_objects();
+  void destroy_query_objects() const;
 };
 
 } // namespace Core

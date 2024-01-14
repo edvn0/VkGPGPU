@@ -1,46 +1,68 @@
+#include "Instance.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "Environment.hpp"
-#include "Instance.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
 #include "Verify.hpp"
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <set>
+#include <unordered_set>
 #include <vector>
+#include <vulkan/vulkan_core.h>
+
+#include "GLFW/glfw3.h"
 
 namespace Core {
 
-Instance::Instance() { construct_vulkan_instance(); }
+Instance::Instance(bool headless) { construct_vulkan_instance(headless); }
 
 Instance::~Instance() {
   vkDestroyInstance(instance, nullptr);
   info("Destroyed Instance!");
 }
 
-auto Instance::construct() -> Scope<Instance> { return make_scope<Instance>(); }
+auto Instance::construct() -> Scope<Instance> {
+  return make_scope<Instance>(false);
+}
 
-auto Instance::construct_vulkan_instance() -> void {
+auto Instance::construct_headless() -> Scope<Instance> {
+  return make_scope<Instance>(true);
+}
+
+auto Instance::construct_vulkan_instance(bool headless) -> void {
+  glfwInit();
+
   VkApplicationInfo application_info{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pNext = nullptr,
-      .pApplicationName = "Vulkan Application",
+      .pApplicationName = "VkGPGPU",
       .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
       .pEngineName = "No Engine",
       .engineVersion = VK_MAKE_VERSION(1, 0, 0),
       .apiVersion = VK_API_VERSION_1_0,
   };
 
-  // Add layers and extensions as needed
+  const auto use_graphical_interface = !headless;
   std::vector<const char *> enabled_layers = {};
+  std::vector<const char *> enabled_extensions = {};
   if (Environment::get("ENABLE_VALIDATION_LAYERS")) {
-    enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
+    enabled_layers.emplace_back("VK_LAYER_KHRONOS_validation");
+  }
+  if (use_graphical_interface) {
+    u32 glfw_count{0};
+    glfwGetRequiredInstanceExtensions(&glfw_count);
+    const auto *glfw_extensions =
+        glfwGetRequiredInstanceExtensions(&glfw_count);
+
+    enabled_extensions =
+        std::vector(glfw_extensions, glfw_extensions + glfw_count);
   }
 
-  std::vector<const char *> enabled_extensions = {};
-
-  VkInstanceCreateInfo create_info{
+  const VkInstanceCreateInfo create_info{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
       .pApplicationInfo = &application_info,

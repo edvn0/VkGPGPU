@@ -7,3 +7,6 @@
 [submodule "ThirdParty/Catch2"]
 	path = ThirdParty/Catch2
 	url = git@github.com:catchorg/Catch2.git
+[submodule "ThirdParty/glfw"]
+	path = ThirdParty/glfw
+	url = git@github.com:glfw/glfw.git

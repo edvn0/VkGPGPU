@@ -127,33 +127,30 @@ auto ClientApp::compute(double ts) -> void {
   angle += ts * 0.1;
 
   // Map angle to 0 to 2pi
-  const auto angle_in_radians =
-      std::sin(static_cast<float>(angle * std::numbers::pi * 2.0));
+  const auto angle_in_radians = std::sin(static_cast<float>(angle));
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
   // Begin command buffer
-  command_buffer->begin(App::frame());
+  command_buffer->begin(frame(), Queue::Type::Compute);
   // Bind pipeline
   DebugMarker::begin_region(command_buffer->get_command_buffer(),
                             "MatrixMultiply", {1.0F, 0.0F, 0.0F, 1.0F});
   dispatcher->bind(*pipeline);
   // Bind descriptor sets
-  descriptor_map->bind(*command_buffer, App::frame(),
+  descriptor_map->bind(*command_buffer, frame(),
                        pipeline->get_pipeline_layout());
   // Dispatch
-
   constexpr auto wg_size = 16UL;
-
   // Number of groups in each dimension
-  constexpr auto dispatchX = 1024 / wg_size;
-  constexpr auto dispatchY = 1024 / wg_size;
+  constexpr auto d_x = 1024 / wg_size;
+  constexpr auto d_y = 1024 / wg_size;
   dispatcher->dispatch({
-      .group_count_x = dispatchX,
-      .group_count_y = dispatchY,
+      .group_count_x = d_x,
+      .group_count_y = d_y,
       .group_count_z = 1,
   });
   // End command buffer
   DebugMarker::end_region(command_buffer->get_command_buffer());
-  command_buffer->end_and_submit();
+  command_buffer->end_and_submit(Queue::Type::Compute);
 
 #if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
@@ -194,25 +191,15 @@ void ClientApp::perform(const Scope<Device> &device) {
   descriptor_map->add_for_frames(0, *texture);
   descriptor_map->add_for_frames(1, *output_texture);
 
-  if (true) {
-    shader = make_scope<Shader>(*device,
-                                FS::shader("LaplaceEdgeDetection.comp.spv"));
-    pipeline = make_scope<Pipeline>(
-        *device, PipelineConfiguration{
-                     "ImageLoadStore",
-                     PipelineStage::Compute,
-                     *shader,
-                     descriptor_map->get_descriptor_set_layouts(),
-                 });
-  } else {
-    shader = make_scope<Shader>(*device, FS::shader("MatrixMultiply.comp.spv"));
-    pipeline = make_scope<Pipeline>(
-        *device, PipelineConfiguration{
-                     "MatrixMultiply",
-                     PipelineStage::Compute,
-                     *shader,
-                     descriptor_map->get_descriptor_set_layouts(),
-                 });
-  }
+  shader =
+      make_scope<Shader>(*device, FS::shader("LaplaceEdgeDetection.comp.spv"));
+  pipeline = make_scope<Pipeline>(
+      *device, PipelineConfiguration{
+                   "ImageLoadStore",
+                   PipelineStage::Compute,
+                   *shader,
+                   descriptor_map->get_descriptor_set_layouts(),
+               });
+
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
 }

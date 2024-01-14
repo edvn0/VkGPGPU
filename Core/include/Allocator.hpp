@@ -59,7 +59,7 @@ struct AllocationProperties {
 
 class Allocator {
 public:
-  explicit Allocator(const std::string &resource_name);
+  explicit Allocator(std::string resource_name);
 
   template <typename T = void *>
   auto map_memory(VmaAllocation allocation) -> T * {
