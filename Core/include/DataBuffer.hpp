@@ -5,7 +5,6 @@
 #include "Types.hpp"
 
 #include <cstring>
-#include <fmt/format.h>
 #include <memory>
 #include <span>
 #include <vector>
@@ -180,12 +179,10 @@ private:
   usize buffer_size{0};
   std::unique_ptr<u8[]> data{nullptr};
 
+  auto allocate_storage(usize new_size) -> void;
+
   auto allocate_storage(std::integral auto new_size) -> void {
-    if (data) {
-      info("Resetting data storage at {}", fmt::ptr(data.get()));
-      data.reset();
-    }
-    data = std::make_unique<u8[]>(new_size);
+    allocate_storage(static_cast<usize>(new_size));
   }
 
   auto fill_with(std::integral auto value) -> void {

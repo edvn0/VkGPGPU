@@ -194,25 +194,12 @@ void ClientApp::perform(const Scope<Device> &device) {
   descriptor_map->add_for_frames(0, *texture);
   descriptor_map->add_for_frames(1, *output_texture);
 
-  if (true) {
-    shader = make_scope<Shader>(*device,
-                                FS::shader("LaplaceEdgeDetection.comp.spv"));
-    pipeline = make_scope<Pipeline>(
-        *device, PipelineConfiguration{
-                     "ImageLoadStore",
-                     PipelineStage::Compute,
-                     *shader,
-                     descriptor_map->get_descriptor_set_layouts(),
-                 });
-  } else {
-    shader = make_scope<Shader>(*device, FS::shader("MatrixMultiply.comp.spv"));
-    pipeline = make_scope<Pipeline>(
-        *device, PipelineConfiguration{
-                     "MatrixMultiply",
-                     PipelineStage::Compute,
-                     *shader,
-                     descriptor_map->get_descriptor_set_layouts(),
-                 });
-  }
+  shader =
+      make_scope<Shader>(*device, FS::shader("LaplaceEdgeDetection.comp.spv"));
+  pipeline = make_scope<Pipeline>(*device, PipelineConfiguration{
+                                               "ImageLoadStore",
+                                               PipelineStage::Compute,
+                                               *shader,
+                                           });
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
 }
