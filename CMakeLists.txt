@@ -18,3 +18,5 @@ if(ENABLE_TESTING)
     enable_testing()
     add_subdirectory(Test)
 endif()
+
+add_subdirectory(Reflection)

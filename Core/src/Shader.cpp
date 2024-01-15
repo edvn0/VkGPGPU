@@ -10,6 +10,8 @@
 #include <fstream>
 #include <vulkan/vulkan.h>
 
+#include "reflection/Reflector.hpp"
+
 namespace Core {
 
 class FileCouldNotBeOpened : public BaseException {
@@ -24,6 +26,7 @@ auto read_file(const std::filesystem::path &path) -> std::string {
 
   // Check if the file was successfully opened
   if (!file.is_open()) {
+    error("Failed to open file: {}", absolute_path.string());
     throw FileCouldNotBeOpened("Failed to open file: " +
                                absolute_path.string());
   }
@@ -37,9 +40,9 @@ auto read_file(const std::filesystem::path &path) -> std::string {
 }
 
 Shader::Shader(const Device &dev, const std::filesystem::path &path)
-    : device(dev) {
-  auto shader_code = read_file(path);
-
+    : device(dev), name(path.stem().string()) {
+  parsed_spirv_per_stage[Type::Compute] = read_file(path);
+  const auto &shader_code = parsed_spirv_per_stage.at(Type::Compute);
   VkShaderModuleCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   create_info.codeSize = shader_code.size();
@@ -48,6 +51,9 @@ Shader::Shader(const Device &dev, const std::filesystem::path &path)
   verify(vkCreateShaderModule(device.get_device(), &create_info, nullptr,
                               &shader_module),
          "vkCreateShaderModule", "Failed to create shader module");
+
+  Reflection::Reflector reflector{*this};
+  reflector.reflect(descriptor_set_layouts);
 }
 
 Shader::~Shader() {
