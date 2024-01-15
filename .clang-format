@@ -1,12 +1,9 @@
 BasedOnStyle: LLVM
 IncludeBlocks:   Regroup
 IncludeCategories:
-  - Regex:           '^"pch/vkgpgpu_pch\.hpp"'
-    Priority:        1
-    SortPriority:    0
+  - Regex:           '"pch/vkgpgpu_pch.hpp"'
+    Priority:        -1000
   - Regex:           '^"[^/]+\.hpp"'
-    Priority:        2
-    SortPriority:    0
+    Priority:        1
   - Regex:           '^<.*>'
-    Priority:        3
-    SortPriority:    0
+    Priority:        2

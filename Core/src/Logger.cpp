@@ -1,6 +1,6 @@
-#include "Logger.hpp"
-
 #include "pch/vkgpgpu_pch.hpp"
+
+#include "Logger.hpp"
 
 #include <cctype>
 #include <cstdlib>
