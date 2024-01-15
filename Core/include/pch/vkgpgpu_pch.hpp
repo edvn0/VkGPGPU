@@ -1,37 +1,28 @@
 #pragma once
 
-#include <cstring>
-#include <span>
-#include <vector>
-
 #include <array>
 #include <bit>
+#include <cassert>
+#include <cctype>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <string>
-
+#include <cstdlib>
+#include <cstring>
 #include <exception>
+#include <filesystem>
+#include <iostream>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-
-#include <chrono>
-#include <filesystem>
-#include <mutex>
-#include <string>
+#include <thread>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
-
-#include <array>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <limits>
-#include <memory>
-#include <ranges>
-
 #include <vulkan/vulkan_core.h>

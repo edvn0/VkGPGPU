@@ -108,13 +108,25 @@ void ClientApp::on_destroy() {
 auto ClientApp::graphics(double ts) -> void {}
 
 auto ClientApp::compute(double ts) -> void {
+  static auto begin_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->StartFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
+  static auto end_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->EndFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
   Timer timer;
 
-#if !defined(GPGPU_PIPELINE)
-  if (renderdoc != nullptr) {
-    renderdoc->StartFrameCapture(nullptr, nullptr);
-  }
-#endif
+  begin_renderdoc();
 
   randomize_span_of_matrices(matrices);
   input_buffer->write(matrices.data(), matrices.size() * sizeof(Math::Mat4));
@@ -155,11 +167,7 @@ auto ClientApp::compute(double ts) -> void {
   DebugMarker::end_region(command_buffer->get_command_buffer());
   command_buffer->end_and_submit();
 
-#if !defined(GPGPU_PIPELINE)
-  if (renderdoc != nullptr) {
-    renderdoc->EndFrameCapture(nullptr, nullptr);
-  }
-#endif
+  end_renderdoc();
 }
 
 void ClientApp::perform(const Scope<Device> &device) {

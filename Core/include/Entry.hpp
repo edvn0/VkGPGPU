@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
     application->run();
   }
 
+  Logger::stop();
+
   // Close dll
   info("Exiting");
   return 0;
