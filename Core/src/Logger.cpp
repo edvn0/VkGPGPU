@@ -35,9 +35,8 @@ void Logger::stop_all() {
 }
 
 void Logger::log(std::string &&message, LogLevel level) {
-  BackgroundLogMessage log_message{std::move(message), level};
   std::lock_guard lock(queue_mutex);
-  log_queue.emplace(log_message);
+  log_queue.emplace(std::move(message), level);
   cv.notify_one();
 }
 

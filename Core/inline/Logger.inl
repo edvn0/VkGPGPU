@@ -2,7 +2,7 @@
 
 namespace Core {
 
-#ifdef GPGPU_DEBUG
+#ifndef GPGPU_RELEASE
 template <typename... Args>
 void Logger::trace(fmt::format_string<Args...> format,
                    Args &&...args) noexcept {

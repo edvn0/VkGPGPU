@@ -21,7 +21,7 @@ layout(std140, set = 0, binding = 2) writeonly buffer OutputBuffer {
 }
 output_buffer;
 
-layout(std140, set = 0, binding = 3) uniform UniformBuffer { float something; }
+layout(std140, set = 0, binding = 3) uniform UniformBuffer { float angle; }
 ubo;
 
 // Image you are processing
@@ -56,5 +56,5 @@ void main() {
     }
 
     // Write the result to the output image
-    imageStore(output_image, pos, sum);
+    imageStore(output_image, pos, (0.5*ubo.angle+0.5) * sum);
 }

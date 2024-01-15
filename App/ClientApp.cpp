@@ -139,17 +139,16 @@ auto ClientApp::compute(double ts) -> void {
   angle += ts * 0.1;
 
   // Map angle to 0 to 2pi
-  const auto angle_in_radians =
-      std::sin(static_cast<float>(angle * std::numbers::pi * 2.0));
+  const auto angle_in_radians = std::sin(angle);
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
   // Begin command buffer
-  command_buffer->begin(App::frame());
+  command_buffer->begin(frame());
   // Bind pipeline
   DebugMarker::begin_region(command_buffer->get_command_buffer(),
                             "MatrixMultiply", {1.0F, 0.0F, 0.0F, 1.0F});
   dispatcher->bind(*pipeline);
   // Bind descriptor sets
-  descriptor_map->bind(*command_buffer, App::frame(),
+  descriptor_map->bind(*command_buffer, frame(),
                        pipeline->get_pipeline_layout());
   // Dispatch
 
