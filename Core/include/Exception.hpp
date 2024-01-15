@@ -13,7 +13,7 @@ public:
     debug("Exception: {}", input);
   }
 
-  auto what() const noexcept -> const char * override {
+  [[nodiscard]] auto what() const noexcept -> const char * override {
     return message.c_str();
   }
 

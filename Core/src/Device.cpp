@@ -131,51 +131,67 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
                                            queue_families.data());
 
   std::vector<IndexQueueTypePair> queue_infos;
+
+  int dedicated_compute_queue_index = -1;
+  int dedicated_transfer_queue_index = -1;
+
+  // First pass: Look for dedicated compute and transfer queues
+  for (auto i = 0ULL; i < queue_families.size(); ++i) {
+    const auto &queue_family = queue_families[i];
+
+    bool is_graphics_queue = queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT;
+    bool is_compute_queue = queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT;
+    bool is_transfer_queue = queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT;
+
+    if (is_compute_queue && !is_graphics_queue) { // Dedicated compute queue
+      dedicated_compute_queue_index = i;
+    }
+
+    if (is_transfer_queue && !is_graphics_queue &&
+        !is_compute_queue) { // Dedicated transfer queue
+      dedicated_transfer_queue_index = i;
+    }
+  }
+
+  // Second pass: Create queue infos
   for (u32 i = 0; i < queue_families.size(); ++i) {
     const auto &queue_family = queue_families[i];
-    // Is there a unique compute queue?
-    bool already_found = false;
-    if (queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+
+    if (i == dedicated_compute_queue_index) {
       auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-          .pNext = nullptr,
-          .flags = 0,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
       queue_infos.emplace_back(Queue::Type::Compute, queue_info,
                                queue_family.timestampValidBits > 0);
-      already_found = true;
+      continue;
     }
 
-    // Is there a unique graphics queue?
-    if (!already_found && queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      auto priority = 0.1F;
-      VkDeviceQueueCreateInfo queue_info{
-          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-          .pNext = nullptr,
-          .flags = 0,
-          .queueFamilyIndex = i,
-          .queueCount = 1,
-          .pQueuePriorities = &priority,
-      };
-      queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
-                               queue_family.timestampValidBits > 0);
-    }
-
-    if (!already_found && queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+    if (i == dedicated_transfer_queue_index) {
       auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-          .pNext = nullptr,
-          .flags = 0,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
       queue_infos.emplace_back(Queue::Type::Transfer, queue_info,
+                               queue_family.timestampValidBits > 0);
+      continue;
+    }
+
+    if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+      auto priority = 0.1F;
+      VkDeviceQueueCreateInfo queue_info{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .queueFamilyIndex = i,
+          .queueCount = 1,
+          .pQueuePriorities = &priority,
+      };
+      queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
                                queue_family.timestampValidBits > 0);
     }
   }
@@ -198,6 +214,7 @@ auto Device::create_vulkan_device(
     queue_infos.push_back(queue_info);
     queue_support[type] = {supports_timestamping};
   }
+
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = nullptr,

@@ -8,6 +8,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Debug",
+      "stopOnEntry": true,
       "windows": {
         "program": "${workspaceFolder}/build/App/App.exe",
         "args": [

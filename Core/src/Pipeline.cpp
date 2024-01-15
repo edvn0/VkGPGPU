@@ -1,6 +1,6 @@
-#include "pch/vkgpgpu_pch.hpp"
-
 #include "Pipeline.hpp"
+
+#include "pch/vkgpgpu_pch.hpp"
 
 #include "Device.hpp"
 #include "Filesystem.hpp"
@@ -66,9 +66,9 @@ Pipeline::~Pipeline() {
   vkDestroyPipeline(device.get_device(), pipeline, nullptr);
 }
 
-auto Pipeline::try_load_pipeline_cache(const std::string &name)
+auto Pipeline::try_load_pipeline_cache(const std::string &pipeline_name)
     -> std::vector<u8> {
-  if (const auto cache_path = FS::pipeline_cache(name + ".cache");
+  if (const auto cache_path = FS::pipeline_cache(pipeline_name + ".cache");
       std::filesystem::exists(cache_path)) {
     info("Pipeline cache exists. Loading...");
     auto cache_file = std::ifstream{cache_path};
@@ -76,7 +76,7 @@ auto Pipeline::try_load_pipeline_cache(const std::string &name)
       info("Failed to open pipeline cache file at {}", cache_path.string());
     } else {
       auto cache_data = std::vector<u8>(std::filesystem::file_size(cache_path));
-      cache_file.read(reinterpret_cast<char *>(cache_data.data()),
+      cache_file.read(std::bit_cast<char *>(cache_data.data()),
                       cache_data.size());
       return cache_data;
     }

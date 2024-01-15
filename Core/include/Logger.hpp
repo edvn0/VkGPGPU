@@ -1,7 +1,12 @@
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <fmt/core.h>
+#include <mutex>
+#include <queue>
 #include <string>
+#include <thread>
 
 namespace Core {
 
@@ -13,10 +18,16 @@ enum class LogLevel {
   None // To disable logging
 };
 
+struct BackgroundLogMessage {
+  std::string message;
+  LogLevel level{LogLevel::None};
+};
+
 class Logger {
 public:
   static Logger &get_instance();
-  ~Logger() = default;
+  static void stop();
+  ~Logger();
 
   void set_level(LogLevel level);
   auto get_level() const -> LogLevel;
@@ -39,8 +50,19 @@ public:
 private:
   Logger();
 
+  void stop_all();
+  void log(std::string &&message, LogLevel level);
+  void process_queue(const std::stop_token &);
+
   LogLevel current_level{LogLevel::None};
+  static void process_single(const BackgroundLogMessage &message);
   static LogLevel get_log_level_from_environment();
+
+  std::queue<BackgroundLogMessage> log_queue;
+  std::mutex queue_mutex;
+  std::condition_variable cv;
+  std::jthread worker;
+  std::atomic_bool exitFlag;
 };
 
 } // namespace Core

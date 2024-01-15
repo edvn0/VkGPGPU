@@ -108,13 +108,25 @@ void ClientApp::on_destroy() {
 auto ClientApp::graphics(double ts) -> void {}
 
 auto ClientApp::compute(double ts) -> void {
+  static auto begin_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->StartFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
+  static auto end_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->EndFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
   Timer timer;
 
-#if !defined(GPGPU_PIPELINE)
-  if (renderdoc != nullptr) {
-    renderdoc->StartFrameCapture(nullptr, nullptr);
-  }
-#endif
+  begin_renderdoc();
 
   randomize_span_of_matrices(matrices);
   input_buffer->write(matrices.data(), matrices.size() * sizeof(Math::Mat4));
@@ -127,17 +139,16 @@ auto ClientApp::compute(double ts) -> void {
   angle += ts * 0.1;
 
   // Map angle to 0 to 2pi
-  const auto angle_in_radians =
-      std::sin(static_cast<float>(angle * std::numbers::pi * 2.0));
+  const auto angle_in_radians = std::sin(angle);
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
   // Begin command buffer
-  command_buffer->begin(App::frame());
+  command_buffer->begin(frame());
   // Bind pipeline
   DebugMarker::begin_region(command_buffer->get_command_buffer(),
                             "MatrixMultiply", {1.0F, 0.0F, 0.0F, 1.0F});
   dispatcher->bind(*pipeline);
   // Bind descriptor sets
-  descriptor_map->bind(*command_buffer, App::frame(),
+  descriptor_map->bind(*command_buffer, frame(),
                        pipeline->get_pipeline_layout());
   // Dispatch
 
@@ -155,11 +166,7 @@ auto ClientApp::compute(double ts) -> void {
   DebugMarker::end_region(command_buffer->get_command_buffer());
   command_buffer->end_and_submit();
 
-#if !defined(GPGPU_PIPELINE)
-  if (renderdoc != nullptr) {
-    renderdoc->EndFrameCapture(nullptr, nullptr);
-  }
-#endif
+  end_renderdoc();
 }
 
 void ClientApp::perform(const Scope<Device> &device) {

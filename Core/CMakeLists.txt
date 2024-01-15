@@ -59,6 +59,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
+    target_compile_definitions(Core PUBLIC GPGPU_RELEASE)
+endif()
+
 if(GPGPU_PIPELINE STREQUAL "ON")
     message(STATUS "GPGPU_PIPELINE is ON")
     target_compile_definitions(Core PUBLIC GPGPU_PIPELINE)
