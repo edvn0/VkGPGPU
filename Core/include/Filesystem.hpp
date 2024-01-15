@@ -29,7 +29,9 @@ concept CStrConvertibleTo = std::convertible_to<T, To> || requires(const T &t) {
 
 template <class T>
 concept StringLike =
-    CStrConvertibleTo<T, const char *> || CStrConvertibleTo<T, const wchar_t *>;
+    std::is_same_v<const char *, T> || std::is_same_v<std::string_view, T> ||
+    std::is_same_v<std::string, T> || CStrConvertibleTo<T, const char *> ||
+    CStrConvertibleTo<T, const wchar_t *>;
 
 auto resolve(StringLike auto path) -> std::filesystem::path {
   return std::filesystem::absolute(path);

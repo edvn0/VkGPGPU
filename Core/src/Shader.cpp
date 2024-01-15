@@ -53,7 +53,7 @@ Shader::Shader(const Device &dev, const std::filesystem::path &path)
          "vkCreateShaderModule", "Failed to create shader module");
 
   Reflection::Reflector reflector{*this};
-  reflector.reflect(descriptor_set_layouts);
+  reflector.reflect(descriptor_set_layouts, reflection_data);
 }
 
 Shader::~Shader() {

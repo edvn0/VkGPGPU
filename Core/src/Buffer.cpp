@@ -1,16 +1,16 @@
-#include "pch/vkgpgpu_pch.hpp"
-
 #include "Buffer.hpp"
 
-#include <cassert>
-#include <cstring>
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan_core.h>
+#include "pch/vkgpgpu_pch.hpp"
 
 #include "Allocator.hpp"
 #include "DebugMarker.hpp"
 #include "Device.hpp"
 #include "Verify.hpp"
+
+#include <cassert>
+#include <cstring>
+#include <vk_mem_alloc.h>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
@@ -69,7 +69,7 @@ void Buffer::initialise_vulkan_buffer() {
     break;
   }
 
-  DebugMarker::set_object_name(device.get_device(), buffer_data->buffer,
+  DebugMarker::set_object_name(device, buffer_data->buffer,
                                VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT,
                                fmt::format("Buffer-{}", type).data());
 }

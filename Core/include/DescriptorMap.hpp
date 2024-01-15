@@ -2,7 +2,9 @@
 
 #include "Buffer.hpp"
 #include "CommandBuffer.hpp"
+#include "DescriptorResource.hpp"
 #include "Image.hpp"
+#include "Shader.hpp"
 #include "Texture.hpp"
 #include "Types.hpp"
 
@@ -20,7 +22,8 @@ class DescriptorMap {
   using DescriptorSets = std::vector<VkDescriptorSet>;
 
 public:
-  explicit DescriptorMap(const Device &);
+  explicit DescriptorMap(const Device &, const DescriptorResource &,
+                         const Shader &);
   ~DescriptorMap();
 
   /***
@@ -44,18 +47,20 @@ public:
    */
   auto add_for_frames(u32 binding, const Texture &texture) -> void;
 
+  auto set_descriptor_set_layouts(const Shader &) -> void;
+
   auto bind(const CommandBuffer &buffer, u32 frame,
             VkPipelineLayout binding) const -> void;
 
   [[nodiscard]] auto get_descriptor_pool() -> VkDescriptorPool;
   [[nodiscard]] auto get_descriptor_set_layout(std::size_t set = 0) const
       -> VkDescriptorSetLayout {
-    return descriptor_set_layout.at(set);
+    return descriptor_set_layouts.at(set);
   }
 
   [[nodiscard]] auto get_descriptor_set_layouts() const
       -> std::span<const VkDescriptorSetLayout> {
-    return std::span{descriptor_set_layout};
+    return std::span{descriptor_set_layouts};
   }
 
   auto descriptors() -> auto & { return descriptor_sets; }
@@ -64,11 +69,11 @@ public:
   }
 
 private:
-  const Device &device;
+  const Device *device;
+  const DescriptorResource *descriptor_resource;
 
   std::map<u32, std::vector<VkDescriptorSet>> descriptor_sets{};
-  VkDescriptorPool descriptor_pool{nullptr};
-  std::vector<VkDescriptorSetLayout> descriptor_set_layout{};
+  std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
 };
 
 } // namespace Core

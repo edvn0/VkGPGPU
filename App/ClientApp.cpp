@@ -10,7 +10,7 @@ static constexpr std::string_view renderdoc_dll_name = "librenderdoc.so";
 
 #if !defined(GPGPU_PIPELINE)
 auto get_renderdoc_api(auto &device, auto &loader) -> RENDERDOC_API_1_6_0 * {
-  DebugMarker::setup(device.get_device(), device.get_physical_device());
+  DebugMarker::setup(device, device.get_physical_device());
 
   if (!loader->is_valid()) {
     info("Dynamic loader could not be constructed.");
@@ -67,17 +67,13 @@ auto ClientApp::on_update(double ts) -> void {
 }
 
 void ClientApp::on_create() {
-  instance = Instance::construct();
-  device = Device::construct(*instance);
-  Allocator::construct(*device, *instance);
-
   loader = DynamicLibraryLoader::construct(renderdoc_dll_name);
 #if !defined(GPGPU_PIPELINE)
-  renderdoc = get_renderdoc_api(*device, loader);
+  renderdoc = get_renderdoc_api(*get_device(), loader);
   if (renderdoc != nullptr) {
     renderdoc->SetCaptureTitle("Matrix Multiply");
   }
-  perform(device);
+  perform();
 #endif
 }
 
@@ -95,9 +91,6 @@ void ClientApp::on_destroy() {
   texture.reset();
   output_texture.reset();
 
-  Allocator::destroy();
-  device.reset();
-  instance.reset();
 #if !defined(GPGPU_PIPELINE)
   if (renderdoc != nullptr) {
     renderdoc->RemoveHooks();
@@ -141,6 +134,7 @@ auto ClientApp::compute(double ts) -> void {
   // Map angle to 0 to 2pi
   const auto angle_in_radians = std::sin(angle);
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
+
   // Begin command buffer
   command_buffer->begin(frame());
   // Bind pipeline
@@ -169,30 +163,43 @@ auto ClientApp::compute(double ts) -> void {
   end_renderdoc();
 }
 
-void ClientApp::perform(const Scope<Device> &device) {
-  texture = make_scope<Texture>(*device, FS::texture("viking_room.png"));
-  output_texture = Texture::empty_with_size(*device, texture->size_bytes(),
-                                            texture->get_extent());
+void ClientApp::perform() {
+  texture = make_scope<Texture>(*get_device(), FS::texture("viking_room.png"));
+  output_texture = Texture::empty_with_size(
+      *get_device(), texture->size_bytes(), texture->get_extent());
 
   command_buffer =
-      make_scope<CommandBuffer>(*device, CommandBuffer::Type::Compute);
+      make_scope<CommandBuffer>(*get_device(), CommandBuffer::Type::Compute);
   randomize_span_of_matrices(matrices);
 
-  input_buffer = make_scope<Buffer>(
-      *device, matrices.size() * sizeof(Math::Mat4), Buffer::Type::Storage);
-  other_input_buffer = make_scope<Buffer>(
-      *device, matrices.size() * sizeof(Math::Mat4), Buffer::Type::Storage);
-  output_buffer =
-      make_scope<Buffer>(*device, output_matrices.size() * sizeof(Math::Mat4),
+  input_buffer =
+      make_scope<Buffer>(*get_device(), matrices.size() * sizeof(Math::Mat4),
                          Buffer::Type::Storage);
+  other_input_buffer =
+      make_scope<Buffer>(*get_device(), matrices.size() * sizeof(Math::Mat4),
+                         Buffer::Type::Storage);
+  output_buffer = make_scope<Buffer>(
+      *get_device(), output_matrices.size() * sizeof(Math::Mat4),
+      Buffer::Type::Storage);
 
   struct Uniform {
     float whatever{};
   };
   simple_uniform =
-      make_scope<Buffer>(*device, sizeof(Uniform), Buffer::Type::Uniform);
+      make_scope<Buffer>(*get_device(), sizeof(Uniform), Buffer::Type::Uniform);
 
-  descriptor_map = make_scope<DescriptorMap>(*device);
+  shader = make_scope<Shader>(*get_device(),
+                              FS::shader("LaplaceEdgeDetection.comp.spv"));
+
+  material = Material::construct(*get_device(), *shader);
+  pipeline = make_scope<Pipeline>(*get_device(), PipelineConfiguration{
+                                                     "LaplaceEdgeDetection",
+                                                     PipelineStage::Compute,
+                                                     *shader,
+                                                 });
+
+  descriptor_map = make_scope<DescriptorMap>(
+      *get_device(), *get_descriptor_resource(), *shader);
   descriptor_map->add_for_frames(0, *input_buffer);
   descriptor_map->add_for_frames(1, *input_buffer);
   descriptor_map->add_for_frames(2, *output_buffer);
@@ -201,12 +208,5 @@ void ClientApp::perform(const Scope<Device> &device) {
   descriptor_map->add_for_frames(0, *texture);
   descriptor_map->add_for_frames(1, *output_texture);
 
-  shader =
-      make_scope<Shader>(*device, FS::shader("LaplaceEdgeDetection.comp.spv"));
-  pipeline = make_scope<Pipeline>(*device, PipelineConfiguration{
-                                               "ImageLoadStore",
-                                               PipelineStage::Compute,
-                                               *shader,
-                                           });
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
 }

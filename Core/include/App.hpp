@@ -1,8 +1,10 @@
 #pragma once
 
+#include "DescriptorResource.hpp"
+#include "Device.hpp"
+#include "DynamicLibraryLoader.hpp"
+#include "Instance.hpp"
 #include "Types.hpp"
-
-#include <atomic>
 
 namespace Core {
 
@@ -13,7 +15,7 @@ struct ApplicationProperties {
 class App {
 public:
   auto run() -> void;
-  virtual ~App() = default;
+  virtual ~App();
 
 protected:
   virtual auto on_update(double ts) -> void = 0;
@@ -24,7 +26,19 @@ protected:
 
   [[nodiscard]] auto frame() const -> u32;
 
+  [[nodiscard]] auto get_device() const -> const Scope<Device> & {
+    return device;
+  }
+  [[nodiscard]] auto get_descriptor_resource() const
+      -> const Scope<DescriptorResource> & {
+    return descriptor_resource;
+  }
+
 private:
+  Scope<Instance> instance;
+  Scope<Device> device;
+  Scope<DescriptorResource> descriptor_resource;
+
   ApplicationProperties properties{};
 
   u32 current_frame{0};

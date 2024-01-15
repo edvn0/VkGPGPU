@@ -2,7 +2,9 @@
 
 #include "pch/vkgpgpu_pch.hpp"
 
+#include "Allocator.hpp"
 #include "Config.hpp"
+#include "DescriptorResource.hpp"
 #include "Formatters.hpp"
 #include "Logger.hpp"
 
@@ -56,7 +58,25 @@ template <std::size_t N = 10000> struct FPSAverage {
 
 namespace Core {
 
-App::App(const ApplicationProperties &props) : properties(props) {}
+App::App(const ApplicationProperties &props) : properties(props) {
+  // Initialize the instance
+  instance = Instance::construct();
+
+  // Initialize the device
+  device = Device::construct(*instance);
+
+  Allocator::construct(*device, *instance);
+
+  // Initialize the descriptor resource
+  descriptor_resource = DescriptorResource::construct(*device);
+}
+
+App::~App() {
+  descriptor_resource.reset();
+  Allocator::destroy();
+  device.reset();
+  instance.reset();
+}
 
 auto App::frame() const -> u32 { return current_frame; }
 
@@ -74,6 +94,7 @@ auto App::run() -> void {
 
     // Main loop
     while (running) {
+      descriptor_resource->begin_frame(current_frame);
       const auto current_time =
           now(); // Get the current time at the start of the loop.
 
@@ -97,6 +118,8 @@ auto App::run() -> void {
 
       // Update the last_time to the current time after the frame update.
       last_time = current_time;
+
+      descriptor_resource->end_frame();
     }
 
     // Calculate and log the total runtime.

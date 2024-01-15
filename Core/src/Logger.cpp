@@ -70,19 +70,19 @@ void Logger::process_single(const BackgroundLogMessage &message) {
     using enum Core::LogLevel;
   case Trace:
     std::cout << AnsiColor::Blue << "[TRACE] " << message.message
-              << AnsiColor::Reset << "\n";
+              << AnsiColor::Reset << std::endl;
     break;
   case Debug:
     std::cout << AnsiColor::Yellow << "[DEBUG] " << message.message
-              << AnsiColor::Reset << "\n";
+              << AnsiColor::Reset << std::endl;
     break;
   case Info:
     std::cout << AnsiColor::Green << "[INFO] " << message.message
-              << AnsiColor::Reset << "\n";
+              << AnsiColor::Reset << std::endl;
     break;
   case Error:
     std::cout << AnsiColor::Red << "[ERROR] " << message.message
-              << AnsiColor::Reset << "\n";
+              << AnsiColor::Reset << std::endl;
     break;
   case None:
     break;

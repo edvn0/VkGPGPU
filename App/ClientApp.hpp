@@ -7,12 +7,14 @@
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"
 #include "DescriptorMap.hpp"
+#include "DescriptorResource.hpp"
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
 #include "Image.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
+#include "Material.hpp"
 #include "Math.hpp"
 #include "Pipeline.hpp"
 #include "Shader.hpp"
@@ -39,17 +41,16 @@ public:
   void on_destroy() override;
 
 private:
-  Scope<Instance> instance;
-  Scope<Device> device;
-  Scope<DynamicLibraryLoader> loader;
   Scope<DescriptorMap> descriptor_map;
   Scope<CommandDispatcher> dispatcher;
+  Scope<DynamicLibraryLoader> loader;
 
   Scope<CommandBuffer> command_buffer;
   Scope<Buffer> input_buffer;
   Scope<Buffer> other_input_buffer;
   Scope<Buffer> output_buffer;
   Scope<Buffer> simple_uniform;
+  Scope<Material> material;
 
   Scope<Pipeline> pipeline;
   Scope<Shader> shader;
@@ -66,5 +67,5 @@ private:
   auto compute(double ts) -> void;
   auto graphics(double ts) -> void;
 
-  void perform(const Scope<Device> &device);
+  void perform();
 };

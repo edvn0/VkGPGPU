@@ -11,6 +11,7 @@ set(SOURCES
     include/DataBuffer.hpp
     include/DebugMarker.hpp
     include/DescriptorMap.hpp
+    include/DescriptorResource.hpp
     include/Device.hpp
     include/DynamicLibraryLoader.hpp
     include/Entry.hpp
@@ -21,6 +22,7 @@ set(SOURCES
     include/Image.hpp
     include/Instance.hpp
     include/Logger.hpp
+    include/Material.hpp
     include/Pipeline.hpp
     include/Shader.hpp
     include/Texture.hpp
@@ -36,12 +38,14 @@ set(SOURCES
     src/DataBuffer.cpp
     src/DebugMarker.cpp
     src/DescriptorMap.cpp
+    src/DescriptorResource.cpp
     src/Device.cpp
     src/DynamicLibraryLoader.cpp
     src/Formatters.cpp
     src/Image.cpp
     src/Instance.cpp
     src/Logger.cpp
+    src/Material.cpp
     src/Pipeline.cpp
     src/Shader.cpp
     src/Timer.cpp

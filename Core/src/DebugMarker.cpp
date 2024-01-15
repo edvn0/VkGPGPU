@@ -1,12 +1,12 @@
+#include "DebugMarker.hpp"
+
 #include "pch/vkgpgpu_pch.hpp"
 
-#include "DebugMarker.hpp"
+#include "Logger.hpp"
 
 #include <cstring>
 #include <span>
 #include <vector>
-
-#include "Logger.hpp"
 
 namespace Core {
 
@@ -21,7 +21,8 @@ PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin = VK_NULL_HANDLE;   // NOLINT
 PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd = VK_NULL_HANDLE;       // NOLINT
 PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert = VK_NULL_HANDLE; // NOLINT
 
-void DebugMarker::setup(VkDevice device, VkPhysicalDevice physical_device) {
+void DebugMarker::setup(const Device &device,
+                        VkPhysicalDevice physical_device) {
   uint32_t extension_count = 0;
   vkEnumerateDeviceExtensionProperties(physical_device, nullptr,
                                        &extension_count, nullptr);
@@ -39,17 +40,18 @@ void DebugMarker::setup(VkDevice device, VkPhysicalDevice physical_device) {
   }
 
   if (extension_present) {
-    vkDebugMarkerSetObjectTag = std::bit_cast<PFN_vkDebugMarkerSetObjectTagEXT>(
-        vkGetDeviceProcAddr(device, "vkDebugMarkerSetObjectTagEXT"));
+    vkDebugMarkerSetObjectTag =
+        std::bit_cast<PFN_vkDebugMarkerSetObjectTagEXT>(vkGetDeviceProcAddr(
+            device.get_device(), "vkDebugMarkerSetObjectTagEXT"));
     vkDebugMarkerSetObjectName =
-        std::bit_cast<PFN_vkDebugMarkerSetObjectNameEXT>(
-            vkGetDeviceProcAddr(device, "vkDebugMarkerSetObjectNameEXT"));
+        std::bit_cast<PFN_vkDebugMarkerSetObjectNameEXT>(vkGetDeviceProcAddr(
+            device.get_device(), "vkDebugMarkerSetObjectNameEXT"));
     vkCmdDebugMarkerBegin = std::bit_cast<PFN_vkCmdDebugMarkerBeginEXT>(
-        vkGetDeviceProcAddr(device, "vkCmdDebugMarkerBeginEXT"));
+        vkGetDeviceProcAddr(device.get_device(), "vkCmdDebugMarkerBeginEXT"));
     vkCmdDebugMarkerEnd = std::bit_cast<PFN_vkCmdDebugMarkerEndEXT>(
-        vkGetDeviceProcAddr(device, "vkCmdDebugMarkerEndEXT"));
+        vkGetDeviceProcAddr(device.get_device(), "vkCmdDebugMarkerEndEXT"));
     vkCmdDebugMarkerInsert = std::bit_cast<PFN_vkCmdDebugMarkerInsertEXT>(
-        vkGetDeviceProcAddr(device, "vkCmdDebugMarkerInsertEXT"));
+        vkGetDeviceProcAddr(device.get_device(), "vkCmdDebugMarkerInsertEXT"));
     // Set flag if at least one function pointer is present
     active = (vkDebugMarkerSetObjectName != VK_NULL_HANDLE);
 
@@ -59,7 +61,7 @@ void DebugMarker::setup(VkDevice device, VkPhysicalDevice physical_device) {
   }
 }
 
-void DebugMarker::set_object_name(VkDevice device, uint64_t object,
+void DebugMarker::set_object_name(const Device &device, uint64_t object,
                                   VkDebugReportObjectTypeEXT object_type,
                                   const char *name) {
   if (active) {
@@ -68,11 +70,11 @@ void DebugMarker::set_object_name(VkDevice device, uint64_t object,
     name_info.objectType = object_type;
     name_info.object = object;
     name_info.pObjectName = name;
-    vkDebugMarkerSetObjectName(device, &name_info);
+    vkDebugMarkerSetObjectName(device.get_device(), &name_info);
   }
 }
 
-void DebugMarker::set_object_tag(VkDevice device, uint64_t object,
+void DebugMarker::set_object_tag(const Device &device, uint64_t object,
                                  VkDebugReportObjectTypeEXT object_tag,
                                  uint64_t name, size_t tag_size,
                                  const void *tag) {
@@ -84,7 +86,7 @@ void DebugMarker::set_object_tag(VkDevice device, uint64_t object,
     tag_info.tagName = name;
     tag_info.tagSize = tag_size;
     tag_info.pTag = tag;
-    vkDebugMarkerSetObjectTag(device, &tag_info);
+    vkDebugMarkerSetObjectTag(device.get_device(), &tag_info);
   }
 }
 
