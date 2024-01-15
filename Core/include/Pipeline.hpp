@@ -3,6 +3,7 @@
 #include "CommandBuffer.hpp"
 #include "Shader.hpp"
 #include "Types.hpp"
+
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -20,8 +21,7 @@ struct PipelineConfiguration {
   const Shader &shader;
 
   PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader &shader,
-                        std::span<const VkDescriptorSetLayout> layouts)
+                        const Shader &shader)
       : name(std::move(name)), stage(stage), shader(shader) {}
 };
 

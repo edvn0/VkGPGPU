@@ -9,11 +9,12 @@
 #include "Verify.hpp"
 
 #include <array>
-#include <fmt/ranges.h>
 #include <ranges>
 #include <unordered_map>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
+
+#include "fmt/format.h"
 
 static constexpr auto range = [](std::integral auto begin,
                                  std::integral auto end) {

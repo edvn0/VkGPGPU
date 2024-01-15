@@ -1,7 +1,7 @@
 #include "reflection/Reflector.hpp"
 
-#include <spirv_cross/spirv_cross.hpp>
-#include <spirv_cross/spirv_glsl.hpp>
+#include <SPIRV-Cross/spirv_cross.hpp>
+#include <SPIRV-Cross/spirv_glsl.hpp>
 
 #include "Logger.hpp"
 #include "Shader.hpp"
