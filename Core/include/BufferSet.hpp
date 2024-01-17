@@ -3,6 +3,7 @@
 #include "Buffer.hpp"
 #include "Config.hpp"
 #include "Device.hpp"
+#include "Types.hpp"
 
 namespace Core {
 
@@ -43,8 +44,8 @@ public:
     }
   }
 
-  auto get(DescriptorBinding binding, FrameIndex frame_index, DescriptorSet set)
-      -> auto & {
+  auto get(DescriptorBinding binding, FrameIndex frame_index,
+           DescriptorSet set = 0) -> auto & {
     ensure(frame_set_binding_buffers.contains(frame_index),
            "BufferSet does not contain frame index");
     ensure(frame_set_binding_buffers.at(frame_index).contains(set),
@@ -59,6 +60,10 @@ public:
     ensure(frame_index < frame_count, "BufferSet frame index out of range");
     frame_set_binding_buffers[frame_index][set].try_emplace(
         buffer->get_binding(), std::move(buffer));
+  }
+
+  static auto construct(const Device &device) -> Scope<BufferSet> {
+    return make_scope<BufferSet>(device);
   }
 
 private:

@@ -18,7 +18,7 @@ public:
   virtual ~App();
 
 protected:
-  virtual auto on_update(double ts) -> void = 0;
+  virtual auto on_update(floating ts) -> void = 0;
   virtual auto on_create() -> void = 0;
   virtual auto on_destroy() -> void = 0;
 

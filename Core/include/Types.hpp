@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -15,6 +16,12 @@ using i8 = std::int8_t;
 using i16 = std::int16_t;
 using i32 = std::int32_t;
 using i64 = std::int64_t;
+
+#ifdef GPGPU_DOUBLE_PRECISION
+using floating = std::double_t;
+#else
+using floating = std::float_t;
+#endif
 
 template <class T> using Scope = std::unique_ptr<T>;
 template <class T, typename... Args>

@@ -37,7 +37,7 @@ public:
   explicit ClientApp(const ApplicationProperties &props) : App(props){};
   ~ClientApp() override = default;
 
-  void on_update(double ts) override;
+  void on_update(floating ts) override;
   void on_create() override;
   void on_destroy() override;
 
@@ -65,8 +65,8 @@ private:
   RENDERDOC_API_1_6_0 *renderdoc{nullptr};
 #endif
 
-  auto compute(double ts) -> void;
-  auto graphics(double ts) -> void;
+  auto compute(floating ts) -> void;
+  auto graphics(floating ts) -> void;
 
   void perform();
 };

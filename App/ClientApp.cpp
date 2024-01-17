@@ -72,7 +72,7 @@ consteval auto compute_kernel_size() -> std::tuple<u32, u32, u32> {
   return {kernel_size, half_size, center_value};
 }
 
-auto ClientApp::on_update(double ts) -> void {
+auto ClientApp::on_update(floating ts) -> void {
   compute(ts);
   graphics(ts);
 }
@@ -110,9 +110,9 @@ void ClientApp::on_destroy() {
 #endif
 }
 
-auto ClientApp::graphics(double ts) -> void {}
+auto ClientApp::graphics(floating ts) -> void {}
 
-auto ClientApp::compute(double ts) -> void {
+auto ClientApp::compute(floating ts) -> void {
   static auto begin_renderdoc = [&]() {
 #if !defined(GPGPU_PIPELINE)
     if (renderdoc != nullptr) {

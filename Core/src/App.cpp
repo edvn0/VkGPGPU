@@ -12,8 +12,8 @@
 #include <exception>
 
 template <std::size_t N = 10000> struct FPSAverage {
-  std::array<double, N> frame_times{};
-  double frame_time_sum = 0.0;
+  std::array<Core::floating, N> frame_times{};
+  Core::floating frame_time_sum = 0.0;
   Core::i32 frame_time_index = 0;
   Core::i32 frame_counter = 0;
 
@@ -29,7 +29,7 @@ template <std::size_t N = 10000> struct FPSAverage {
 
     const auto current_time = std::chrono::high_resolution_clock::now();
     const auto delta_time_seconds =
-        std::chrono::duration<double>(current_time - last_time).count();
+        std::chrono::duration<Core::floating>(current_time - last_time).count();
     last_time = current_time;
 
     // Update moving average for frame time
@@ -100,7 +100,7 @@ auto App::run() -> void {
 
       // Calculate the time delta since the last frame.
       const auto delta_time_seconds =
-          std::chrono::duration<double>(current_time - last_time).count();
+          std::chrono::duration<floating>(current_time - last_time).count();
 
       // Update the fps average.
       fps_average.update();
@@ -124,7 +124,7 @@ auto App::run() -> void {
 
     // Calculate and log the total runtime.
     info("Total time: {} seconds.",
-         std::chrono::duration<double>(now() - total_time).count());
+         std::chrono::duration<floating>(now() - total_time).count());
     on_destroy(); // Clean up resources.
 
   } catch (const std::exception &exc) {

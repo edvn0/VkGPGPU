@@ -1,6 +1,7 @@
 add_subdirectory(VulkanMemoryAllocator)
 add_subdirectory(fmt)
 add_subdirectory(stb)
+add_subdirectory(entt)
 
 function(add_spirv_cross)
     set(SPIRV_CROSS_STATIC ON CACHE BOOL "Enable SPIRV-Cross static library")

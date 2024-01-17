@@ -10,10 +10,10 @@
 namespace Core {
 
 struct Colour {
-  float r{};
-  float g{};
-  float b{};
-  float a{1.0F};
+  floating r{};
+  floating g{};
+  floating b{};
+  floating a{1.0F};
 };
 
 class DebugMarker {

@@ -96,7 +96,7 @@ void DebugMarker::begin_region(VkCommandBuffer cmdbuffer,
     VkDebugMarkerMarkerInfoEXT marker_info{};
     marker_info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
     std::span colour_span = marker_info.color;
-    std::memcpy(colour_span.data(), &color, sizeof(float) * 4);
+    std::memcpy(colour_span.data(), &color, sizeof(floating) * 4);
     marker_info.pMarkerName = marker_name;
     vkCmdDebugMarkerBegin(cmdbuffer, &marker_info);
   }
@@ -108,7 +108,7 @@ void DebugMarker::insert(VkCommandBuffer cmdbuffer,
     VkDebugMarkerMarkerInfoEXT marker_info{};
     marker_info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
     std::span colour_span = marker_info.color;
-    std::memcpy(colour_span.data(), &color, sizeof(float) * 4);
+    std::memcpy(colour_span.data(), &color, sizeof(floating) * 4);
     marker_info.pMarkerName = marker_name.c_str();
     vkCmdDebugMarkerInsert(cmdbuffer, &marker_info);
   }
