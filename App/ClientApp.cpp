@@ -1,5 +1,7 @@
 #include "ClientApp.hpp"
 
+#include "BufferSet.hpp"
+
 #include <array>
 
 #ifdef _WIN32
@@ -61,12 +63,22 @@ auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
   }
 }
 
+template <u32 N>
+  requires(N % 2 == 1)
+consteval auto compute_kernel_size() -> std::tuple<u32, u32, u32> {
+  constexpr auto half_size = N / 2;
+  constexpr auto kernel_size = N * N;
+  constexpr auto center_value = N * N - 1;
+  return {kernel_size, half_size, center_value};
+}
+
 auto ClientApp::on_update(double ts) -> void {
   compute(ts);
   graphics(ts);
 }
 
 void ClientApp::on_create() {
+
   loader = DynamicLibraryLoader::construct(renderdoc_dll_name);
 #if !defined(GPGPU_PIPELINE)
   renderdoc = get_renderdoc_api(*get_device(), loader);
@@ -127,19 +139,28 @@ auto ClientApp::compute(double ts) -> void {
   other_input_buffer->write(matrices.data(),
                             matrices.size() * sizeof(Math::Mat4));
 
-  // Single ts is a small float that varies very little
-  static double angle = 0.0;
+  static long double angle = 0.0;
   angle += ts * 0.1;
 
   // Map angle to 0 to 2pi
   const auto angle_in_radians = std::sin(angle);
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
 
+  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+  material->set("pc.kernelSize", kernel_size);
+  material->set("pc.halfSize", half_size);
+  material->set("pc.precomputedCenterValue", center_value);
+
   // Begin command buffer
   command_buffer->begin(frame());
   // Bind pipeline
   DebugMarker::begin_region(command_buffer->get_command_buffer(),
-                            "MatrixMultiply", {1.0F, 0.0F, 0.0F, 1.0F});
+                            "MatrixMultiply",
+                            {
+                                1.0F,
+                                0.0F,
+                                0.0F,
+                            });
   dispatcher->bind(*pipeline);
   // Bind descriptor sets
   descriptor_map->bind(*command_buffer, frame(),
@@ -151,6 +172,7 @@ auto ClientApp::compute(double ts) -> void {
   // Number of groups in each dimension
   constexpr auto dispatchX = 1024 / wg_size;
   constexpr auto dispatchY = 1024 / wg_size;
+  dispatcher->push_constant(*pipeline, *material);
   dispatcher->dispatch({
       .group_count_x = dispatchX,
       .group_count_y = dispatchY,
@@ -172,21 +194,27 @@ void ClientApp::perform() {
       make_scope<CommandBuffer>(*get_device(), CommandBuffer::Type::Compute);
   randomize_span_of_matrices(matrices);
 
-  input_buffer =
-      make_scope<Buffer>(*get_device(), matrices.size() * sizeof(Math::Mat4),
-                         Buffer::Type::Storage);
-  other_input_buffer =
-      make_scope<Buffer>(*get_device(), matrices.size() * sizeof(Math::Mat4),
-                         Buffer::Type::Storage);
-  output_buffer = make_scope<Buffer>(
-      *get_device(), output_matrices.size() * sizeof(Math::Mat4),
-      Buffer::Type::Storage);
+  static constexpr auto matrices_size =
+      std::array<Math::Mat4, 10>{}.size() * sizeof(Math::Mat4);
+  input_buffer = make_scope<Buffer>(*get_device(), matrices_size,
+                                    Buffer::Type::Storage, 0);
+  other_input_buffer = make_scope<Buffer>(*get_device(), matrices_size,
+                                          Buffer::Type::Storage, 1);
+  output_buffer = make_scope<Buffer>(*get_device(), matrices_size,
+                                     Buffer::Type::Storage, 2);
 
   struct Uniform {
     float whatever{};
   };
-  simple_uniform =
-      make_scope<Buffer>(*get_device(), sizeof(Uniform), Buffer::Type::Uniform);
+  simple_uniform = make_scope<Buffer>(*get_device(), sizeof(Uniform),
+                                      Buffer::Type::Uniform, 3);
+
+  BufferSet<Buffer::Type::Storage> storage_buffer_set{*get_device()};
+  BufferSet<Buffer::Type::Uniform> uniform_buffer_set{*get_device()};
+  storage_buffer_set.create(matrices_size, SetBinding(0));
+  storage_buffer_set.create(matrices_size, SetBinding(1));
+  storage_buffer_set.create(matrices_size, SetBinding(2));
+  uniform_buffer_set.create(4, SetBinding(3));
 
   shader = make_scope<Shader>(*get_device(),
                               FS::shader("LaplaceEdgeDetection.comp.spv"));
@@ -209,4 +237,9 @@ void ClientApp::perform() {
   descriptor_map->add_for_frames(1, *output_texture);
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
+
+  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+  material->set("pc.kernelSize", kernel_size);
+  material->set("pc.halfSize", half_size);
+  material->set("pc.precomputedCenterValue", center_value);
 }

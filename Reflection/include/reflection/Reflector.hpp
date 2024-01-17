@@ -16,8 +16,8 @@ class Reflector {
 public:
   explicit Reflector(Core::Shader &);
   ~Reflector();
-  auto reflect(std::vector<VkDescriptorSetLayout> &, ReflectionData &output)
-      -> void;
+  auto reflect(std::vector<VkDescriptorSetLayout> &,
+               ReflectionData &output) const -> void;
 
 private:
   Core::Shader &shader;

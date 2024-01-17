@@ -86,8 +86,8 @@ auto App::run() -> void {
   };
 
   try {
-    FPSAverage fps_average; // Object for tracking the frames per second.
-    on_create();            // Initialize your application.
+    FPSAverage<1000> fps_average; // Object for tracking the frames per second.
+    on_create();                  // Initialize your application.
 
     auto last_time = now();            // Record the starting time.
     const auto total_time = last_time; // Store the total time of the app.
@@ -129,6 +129,7 @@ auto App::run() -> void {
 
   } catch (const std::exception &exc) {
     error("Main loop exception: {}", exc);
+    throw;
   }
 }
 

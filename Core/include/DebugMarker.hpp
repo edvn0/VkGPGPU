@@ -13,7 +13,7 @@ struct Colour {
   float r{};
   float g{};
   float b{};
-  float a{};
+  float a{1.0F};
 };
 
 class DebugMarker {

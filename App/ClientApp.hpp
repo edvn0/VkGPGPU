@@ -3,6 +3,7 @@
 #include "Allocator.hpp"
 #include "App.hpp"
 #include "Buffer.hpp"
+#include "BufferSet.hpp"
 #include "CommandBuffer.hpp"
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"

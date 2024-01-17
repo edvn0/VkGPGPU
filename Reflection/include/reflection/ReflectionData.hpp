@@ -12,18 +12,36 @@
 
 namespace Reflection {
 
+namespace Detail {
 struct StringLikeHasher {
-  using is_transparent = void;
-  [[nodiscard]] size_t operator()(const char *txt) const {
-    return std::hash<std::string_view>{}(txt);
+  using is_transparent = void; // This enables heterogeneous lookup
+
+  size_t operator()(const std::string &s) const {
+    return std::hash<std::string>{}(s);
   }
-  [[nodiscard]] size_t operator()(std::string_view txt) const {
-    return std::hash<std::string_view>{}(txt);
-  }
-  [[nodiscard]] size_t operator()(const std::string &txt) const {
-    return std::hash<std::string>{}(txt);
+
+  size_t operator()(const std::string_view sv) const {
+    return std::hash<std::string_view>{}(sv);
   }
 };
+
+struct StringLikeEqual {
+  using is_transparent = void; // This enables heterogeneous lookup
+
+  bool operator()(const std::string &lhs, const std::string &rhs) const {
+    return lhs == rhs;
+  }
+
+  bool operator()(const std::string_view lhs,
+                  const std::string_view rhs) const {
+    return lhs == rhs;
+  }
+};
+
+template <class Value>
+using StringLikeMap =
+    std::unordered_map<std::string, Value, StringLikeHasher, StringLikeEqual>;
+} // namespace Detail
 
 struct Uniform {
   Core::u32 binding{0};
@@ -84,7 +102,7 @@ struct ShaderStorageBuffer {
 struct ShaderBuffer {
   std::string name;
   Core::u32 size{0};
-  std::unordered_map<std::string, ShaderUniform> uniforms;
+  Detail::StringLikeMap<ShaderUniform> uniforms;
 };
 
 struct UniformBuffer {
@@ -132,10 +150,9 @@ class ShaderResourceDeclaration final {
 public:
   ~ShaderResourceDeclaration() = default;
   ShaderResourceDeclaration() = default;
-  ShaderResourceDeclaration(std::string input_name, Core::u32 reg,
+  ShaderResourceDeclaration(std::string_view input_name, Core::u32 reg,
                             Core::u32 input_count)
-      : name(std::move(input_name)), resource_register(reg),
-        count(input_count) {}
+      : name(input_name), resource_register(reg), count(input_count) {}
 
   [[nodiscard]] auto get_name() const -> const std::string & { return name; }
   [[nodiscard]] auto get_register() const -> Core::u32 {
@@ -163,12 +180,8 @@ struct ShaderInOut {
 struct ReflectionData {
   std::vector<ShaderDescriptorSet> shader_descriptor_sets{};
   std::vector<PushConstantRange> push_constant_ranges{};
-  std::unordered_map<std::string, ShaderBuffer, StringLikeHasher,
-                     std::equal_to<>>
-      constant_buffers{};
-  std::unordered_map<std::string, ShaderResourceDeclaration, StringLikeHasher,
-                     std::equal_to<>>
-      resources{};
+  Detail::StringLikeMap<ShaderBuffer> constant_buffers{};
+  Detail::StringLikeMap<ShaderResourceDeclaration> resources{};
 };
 
 } // namespace Reflection

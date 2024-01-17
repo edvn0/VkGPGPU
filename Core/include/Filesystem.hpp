@@ -1,8 +1,8 @@
 #pragma once
 
+#include "Concepts.hpp"
 #include "Logger.hpp"
 
-#include <concepts>
 #include <filesystem>
 #include <string>
 
@@ -15,23 +15,6 @@ struct fmt::formatter<std::filesystem::path> : formatter<const char *> {
 namespace Core::FS {
 
 using Path = std::filesystem::path;
-
-template <class T, class To>
-concept CStrConvertibleTo = std::convertible_to<T, To> || requires(const T &t) {
-  { t.c_str() } -> std::convertible_to<To>;
-} || requires(const T &t) {
-  { t.data() } -> std::convertible_to<To>;
-} || requires(const T &t) {
-  { t.c_str() } -> std::convertible_to<const char *>;
-} || requires(const T &t) {
-  { t.data() } -> std::convertible_to<const char *>;
-};
-
-template <class T>
-concept StringLike =
-    std::is_same_v<const char *, T> || std::is_same_v<std::string_view, T> ||
-    std::is_same_v<std::string, T> || CStrConvertibleTo<T, const char *> ||
-    CStrConvertibleTo<T, const wchar_t *>;
 
 auto resolve(StringLike auto path) -> std::filesystem::path {
   return std::filesystem::absolute(path);

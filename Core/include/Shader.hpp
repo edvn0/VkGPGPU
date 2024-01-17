@@ -32,6 +32,9 @@ public:
   [[nodiscard]] auto get_descriptor_set_layouts() const -> const auto & {
     return descriptor_set_layouts;
   }
+  [[nodiscard]] auto get_push_constant_ranges() const -> const auto & {
+    return push_constant_ranges;
+  }
 
   [[nodiscard]] auto get_device() const -> const Device & { return device; }
   [[nodiscard]] auto get_name() const -> const std::string & { return name; }
@@ -45,7 +48,11 @@ private:
   VkShaderModule shader_module{};
   Reflection::ReflectionData reflection_data{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
+  std::vector<VkPushConstantRange> push_constant_ranges{};
   std::unordered_map<Type, std::string> parsed_spirv_per_stage{};
+
+  void create_descriptor_set_layouts();
+  void create_push_constant_ranges();
 };
 
 } // namespace Core

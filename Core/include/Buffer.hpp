@@ -17,7 +17,8 @@ class Buffer {
 public:
   enum class Type { Vertex, Index, Uniform, Storage, Invalid };
 
-  explicit Buffer(const Device &, u64 input_size, Type buffer_type);
+  explicit Buffer(const Device &, u64 input_size, Type buffer_type,
+                  u32 binding);
   ~Buffer();
   // Make non-copyable
   Buffer(const Buffer &) = delete;
@@ -36,7 +37,7 @@ public:
     }
   }
   [[nodiscard]] auto get_size() const noexcept -> u64 { return size; }
-
+  [[nodiscard]] auto get_binding() const noexcept -> u32 { return binding; }
   [[nodiscard]] auto get_buffer() const noexcept -> VkBuffer;
 
   [[nodiscard]] auto get_descriptor_info() const noexcept
@@ -57,10 +58,14 @@ public:
     std::memcpy(output.data(), raw_data.data(), data_size);
   }
 
+  static auto construct(const Device &, u64 input_size, Type buffer_type,
+                        u32 binding) -> Scope<Buffer>;
+
 private:
   const Device &device;
   Scope<BufferDataImpl> buffer_data{};
   u64 size{};
+  u32 binding{};
   Type type{Type::Invalid};
   VkDescriptorBufferInfo descriptor_info{};
 

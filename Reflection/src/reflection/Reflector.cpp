@@ -7,18 +7,26 @@
 
 #include <SPIRV-Cross/spirv_cross.hpp>
 #include <SPIRV-Cross/spirv_glsl.hpp>
-#include <array>
 #include <ranges>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
 #include "reflection/ReflectionData.hpp"
 
-#if !defined(__PRETTY_FUNCTION__) && !defined(__GNUC__)
-#define __PRETTY_FUNCTION__ __FUNCSIG__
-#endif
-
 namespace Reflection {
+
+static constexpr auto to_stage = [](auto execution_model) {
+  switch (execution_model) {
+  case spv::ExecutionModelVertex:
+    return VK_SHADER_STAGE_VERTEX_BIT;
+  case spv::ExecutionModelFragment:
+    return VK_SHADER_STAGE_FRAGMENT_BIT;
+  case spv::ExecutionModelGLCompute:
+    return VK_SHADER_STAGE_COMPUTE_BIT;
+  default:
+    throw std::runtime_error("Unknown execution model");
+  }
+};
 
 struct Reflector::CompilerImpl {
   Core::Scope<spirv_cross::Compiler> compiler;
@@ -42,8 +50,8 @@ Reflector::Reflector(Core::Shader &shader) : shader(shader) {
       Core::make_scope<spirv_cross::Compiler>(spirv_data, fixed_size);
   auto shader_resources = compiler->get_shader_resources();
 
-  impl = Core::make_scope<Reflector::CompilerImpl>(std::move(compiler),
-                                                   std::move(shader_resources));
+  impl = Core::make_scope<CompilerImpl>(std::move(compiler),
+                                        std::move(shader_resources));
 }
 
 Reflector::~Reflector() = default;
@@ -68,21 +76,114 @@ static constexpr auto check_for_gaps = [](const auto &unordered_map) {
 
 namespace Detail {
 
+auto spir_type_to_shader_uniform_type(const spirv_cross::SPIRType &type)
+    -> ShaderUniformType {
+  switch (type.basetype) {
+  case spirv_cross::SPIRType::Boolean:
+    return ShaderUniformType::Bool;
+  case spirv_cross::SPIRType::Int:
+    if (type.vecsize == 1) {
+      return ShaderUniformType::Int;
+    }
+    if (type.vecsize == 2) {
+      return ShaderUniformType::IVec2;
+    }
+    if (type.vecsize == 3) {
+      return ShaderUniformType::IVec3;
+    }
+    if (type.vecsize == 4) {
+      return ShaderUniformType::IVec4;
+    }
+
+  case spirv_cross::SPIRType::UInt:
+    return ShaderUniformType::UInt;
+  case spirv_cross::SPIRType::Float:
+    if (type.columns == 3) {
+      return ShaderUniformType::Mat3;
+    }
+    if (type.columns == 4) {
+      return ShaderUniformType::Mat4;
+    }
+
+    if (type.vecsize == 1) {
+      return ShaderUniformType::Float;
+    }
+    if (type.vecsize == 2) {
+      return ShaderUniformType::Vec2;
+    }
+    if (type.vecsize == 3) {
+      return ShaderUniformType::Vec3;
+    }
+    if (type.vecsize == 4) {
+      return ShaderUniformType::Vec4;
+    }
+    break;
+  default: {
+    Core::ensure(false, "Unknown type!");
+    return ShaderUniformType::None;
+  }
+  }
+  Core::ensure(false, "Unknown type!");
+  return ShaderUniformType::None;
+}
+
 std::unordered_map<std::uint32_t,
-                   std::unordered_map<std::uint32_t, Reflection::UniformBuffer>>
+                   std::unordered_map<std::uint32_t, UniformBuffer>>
     global_uniform_buffers{};
 std::unordered_map<std::uint32_t,
-                   std::unordered_map<std::uint32_t, Reflection::StorageBuffer>>
+                   std::unordered_map<std::uint32_t, StorageBuffer>>
     global_storage_buffers{};
 
-template <VkDescriptorType Type> struct DescriptorTypeReflector {
-  static auto
-  reflect(const spirv_cross::SmallVector<spirv_cross::Resource> &resources,
-          ReflectionData &reflection_data) -> void {
-    throw Core::BaseException(
-        fmt::format("Unknown descriptor type: {}", typeid(Type).name()));
-  }
+template <auto Type> struct DescriptorTypeReflector {
+  static auto reflect(const spirv_cross::Compiler &,
+                      const spirv_cross::SmallVector<spirv_cross::Resource> &,
+                      ReflectionData &) -> void = delete;
 };
+
+static auto reflect_push_constants(
+    const spirv_cross::Compiler &compiler,
+    const spirv_cross::SmallVector<spirv_cross::Resource> &resources,
+    ReflectionData &output) -> void {
+
+  for (const auto &resource : resources) {
+    const auto &buffer_name = resource.name;
+    if (output.constant_buffers.contains(buffer_name)) {
+      continue;
+    }
+
+    const auto &buffer_type = compiler.get_type(resource.base_type_id);
+    const auto buffer_size = static_cast<std::uint32_t>(
+        compiler.get_declared_struct_size(buffer_type));
+    const auto member_count =
+        static_cast<std::uint32_t>(buffer_type.member_types.size());
+    auto &push_constant_range = output.push_constant_ranges.emplace_back();
+
+    const auto &execution_model = compiler.get_execution_model();
+    push_constant_range.shader_stage = to_stage(execution_model);
+    push_constant_range.size = buffer_size;
+    push_constant_range.offset = 0;
+
+    if (buffer_name.empty()) {
+      continue;
+    }
+
+    auto &buffer = output.constant_buffers[buffer_name];
+    buffer.name = buffer_name;
+    buffer.size = buffer_size;
+
+    for (std::uint32_t i = 0; i < member_count; i++) {
+      const auto &type = compiler.get_type(buffer_type.member_types[i]);
+      const auto &member_name = compiler.get_member_name(buffer_type.self, i);
+      auto size = static_cast<uint32_t>(
+          compiler.get_declared_struct_member_size(buffer_type, i));
+      auto offset = compiler.type_struct_member_offset(buffer_type, i);
+
+      std::string uniform_name = fmt::format("{}.{}", buffer_name, member_name);
+      buffer.uniforms[uniform_name] = ShaderUniform(
+          uniform_name, spir_type_to_shader_uniform_type(type), size, offset);
+    }
+  }
+}
 
 template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER> {
   static auto
@@ -111,11 +212,11 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER> {
       auto &shader_descriptor_set =
           output.shader_descriptor_sets[descriptor_set];
       if (!global_uniform_buffers[descriptor_set].contains(binding)) {
-        Reflection::UniformBuffer uniform_buffer;
+        UniformBuffer uniform_buffer;
         uniform_buffer.binding_point = binding;
         uniform_buffer.size = size;
         uniform_buffer.name = name;
-        uniform_buffer.shader_stage = VK_SHADER_STAGE_ALL_GRAPHICS;
+        uniform_buffer.shader_stage = VK_SHADER_STAGE_ALL;
         global_uniform_buffers.at(descriptor_set)[binding] = uniform_buffer;
       } else {
         if (auto &uniform_buffer =
@@ -157,11 +258,11 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER> {
       auto &shader_descriptor_set =
           output.shader_descriptor_sets[descriptor_set];
       if (!global_storage_buffers[descriptor_set].contains(binding)) {
-        Reflection::StorageBuffer storage_buffer;
+        StorageBuffer storage_buffer;
         storage_buffer.binding_point = binding;
         storage_buffer.size = size;
         storage_buffer.name = name;
-        storage_buffer.shader_stage = VK_SHADER_STAGE_ALL_GRAPHICS;
+        storage_buffer.shader_stage = VK_SHADER_STAGE_ALL;
         global_storage_buffers.at(descriptor_set)[binding] = storage_buffer;
       } else {
         if (auto &storage_buffer =
@@ -203,11 +304,11 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE> {
       image_sampler.binding_point = binding;
       image_sampler.descriptor_set = descriptor_set;
       image_sampler.name = name;
-      image_sampler.shader_stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+      const auto &execution_model = compiler.get_execution_model();
+      image_sampler.shader_stage = to_stage(execution_model);
       image_sampler.array_size = array_size;
 
-      output.resources[name] =
-          Reflection::ShaderResourceDeclaration(name, binding, 1);
+      output.resources[name] = ShaderResourceDeclaration(name, binding, 1);
     }
   }
 };
@@ -239,12 +340,12 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_IMAGE> {
       image_sampler.descriptor_set = descriptor_set;
       image_sampler.name = name;
       image_sampler.array_size = array_size;
-      image_sampler.shader_stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+      const auto &execution_model = compiler.get_execution_model();
+      image_sampler.shader_stage = to_stage(execution_model);
 
-      output.resources[name] =
-          Reflection::ShaderResourceDeclaration(name, binding, 1);
+      output.resources[name] = ShaderResourceDeclaration(name, binding, 1);
     }
-  };
+  }
 };
 
 template <>
@@ -275,12 +376,12 @@ struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER> {
       image_sampler.descriptor_set = descriptor_set;
       image_sampler.name = name;
       image_sampler.array_size = array_size;
-      image_sampler.shader_stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+      const auto &execution_model = compiler.get_execution_model();
+      image_sampler.shader_stage = to_stage(execution_model);
 
-      output.resources[name] =
-          Reflection::ShaderResourceDeclaration(name, binding, 1);
+      output.resources[name] = ShaderResourceDeclaration(name, binding, 1);
     }
-  };
+  }
 };
 
 template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_SAMPLER> {
@@ -293,7 +394,7 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_SAMPLER> {
       const auto &type = compiler.get_type(resource.type_id);
       auto binding =
           compiler.get_decoration(resource.id, spv::DecorationBinding);
-      auto descriptor_set =
+      const auto descriptor_set =
           compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
       auto array_size = type.array[0];
       if (array_size == 0 || array_size > 16) {
@@ -310,12 +411,12 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_SAMPLER> {
       image_sampler.descriptor_set = descriptor_set;
       image_sampler.name = name;
       image_sampler.array_size = array_size;
-      image_sampler.shader_stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+      const auto &execution_model = compiler.get_execution_model();
+      image_sampler.shader_stage = to_stage(execution_model);
 
-      output.resources[name] =
-          Reflection::ShaderResourceDeclaration(name, binding, 1);
+      output.resources[name] = ShaderResourceDeclaration(name, binding, 1);
     }
-  };
+  }
 };
 
 } // namespace Detail
@@ -357,7 +458,7 @@ auto reflect_on_resource(
 }
 
 auto Reflector::reflect(std::vector<VkDescriptorSetLayout> &output,
-                        ReflectionData &reflection_data_output) -> void {
+                        ReflectionData &reflection_data_output) const -> void {
   // This may be crazy, but I'm going to clear the output vector
   output.clear();
 
@@ -373,10 +474,10 @@ auto Reflector::reflect(std::vector<VkDescriptorSetLayout> &output,
   auto count_max_pass =
       [&set_resources = resources_by_set](
           const auto &compiler,
-          std::pair<VkDescriptorType,
-                    const spirv_cross::SmallVector<spirv_cross::Resource> &>
-              resources) {
-        for (const auto &resource : resources.second) {
+          const std::pair<VkDescriptorType,
+                          const spirv_cross::SmallVector<spirv_cross::Resource>
+                              &> &input_resources) {
+        for (const auto &resource : input_resources.second) {
           const auto set = compiler.get_decoration(
               resource.id, spv::DecorationDescriptorSet);
 
@@ -412,24 +513,8 @@ auto Reflector::reflect(std::vector<VkDescriptorSetLayout> &output,
   for (const auto &[k, v] : all_resource_small_vectors) {
     reflect_on_resource(*impl->compiler, k, v, reflection_data_output);
   }
-
-  // Third pass, create the descriptor set layouts
-  for (const auto &bindings : set_bindings | std::views::values) {
-    VkDescriptorSetLayoutCreateInfo create_info{};
-    create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    create_info.bindingCount = static_cast<Core::u32>(bindings.size());
-    create_info.pBindings = bindings.data();
-
-    VkDescriptorSetLayout &layout = output.emplace_back();
-    Core::verify(vkCreateDescriptorSetLayout(shader.get_device().get_device(),
-                                             &create_info, nullptr, &layout),
-                 "vkCreateDescriptorSetLayout",
-                 "Failed to create descriptor set layout for shader: {}",
-                 shader.get_name());
-  }
-
-  info("Created {} descriptor set layouts for shader: {}", output.size(),
-       shader.get_name());
+  Detail::reflect_push_constants(
+      *impl->compiler, resources.push_constant_buffers, reflection_data_output);
 }
 
 } // namespace Reflection
