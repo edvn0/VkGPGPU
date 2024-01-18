@@ -5,26 +5,25 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "lldb",
+      "type": "cppvsdbg",
       "request": "launch",
       "name": "Debug",
-      "stopOnEntry": true,
-      "windows": {
-        "program": "${workspaceFolder}/build/App/App.exe",
-        "args": [
-          "--wd",
-          "${workspaceFolder}/App"
-        ]
-      },
-      "linux": {
-        "program": "${workspaceFolder}/build/App/App",
-        "args": []
-      },
-      "env": {
-        "LOG_LEVEL": "Debug",
-        "ENABLE_VALIDATION_LAYERS": "On",
-      },
-      "cwd": "${workspaceFolder}/App"
+      "program": "${workspaceRoot}/build/App/App.exe",
+      "cwd": "${workspaceRoot}/App",
+      "args": [
+        "--wd",
+        "${workspaceRoot}/App"
+      ],
+      "environment": [
+        {
+          "name": "LOG_LEVEL",
+          "value": "Debug"
+        },
+        {
+          "name": "ENABLE_VALIDATION_LAYERS",
+          "value": "ON"
+        }
+      ],
     }
   ]
 }

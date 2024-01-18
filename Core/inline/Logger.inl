@@ -38,6 +38,11 @@ void Logger::info(fmt::format_string<Args...> format, Args &&...args) noexcept {
 }
 
 template <typename... Args>
+void Logger::warn(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Warn);
+}
+
+template <typename... Args>
 void Logger::error(fmt::format_string<Args...> format,
                    Args &&...args) noexcept {
   log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Error);

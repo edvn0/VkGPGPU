@@ -1,11 +1,14 @@
 #pragma once
 
 #include "Config.hpp"
-#include "Device.hpp"
+#include "Types.hpp"
 
+#include <array>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
+
+#include "core/Forward.hpp"
 
 namespace Core {
 

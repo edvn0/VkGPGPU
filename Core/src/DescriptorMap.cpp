@@ -93,10 +93,8 @@ static constexpr auto create_second_set_layout = [](auto &device,
 
 namespace Core {
 
-DescriptorMap::DescriptorMap(const Device &dev,
-                             const DescriptorResource &resource,
-                             const Shader &shader)
-    : device(&dev), descriptor_resource(&resource) {
+DescriptorMap::DescriptorMap(const Device &dev, const Shader &shader)
+    : device(&dev) {
 
   static constexpr auto sets_per_frame = 2;
   for (const auto i : for_frame()) {
@@ -120,7 +118,8 @@ DescriptorMap::DescriptorMap(const Device &dev,
         static_cast<u32>(frame_descriptors.size());
 
     frame_descriptors =
-        descriptor_resource->allocate_many_descriptor_sets(allocation_info);
+        device->get_descriptor_resource()->allocate_many_descriptor_sets(
+            allocation_info);
   }
 }
 

@@ -61,6 +61,12 @@ Texture::Texture(const Device &dev, const FS::Path &path)
   info("Created Texture!, extent: {}", extent);
 }
 
+auto Texture::hash() const -> usize {
+  static constexpr std::hash<std::string> string_hash;
+  auto name_hash = string_hash(texture_filename);
+  return name_hash ^ data_buffer.hash();
+}
+
 auto Texture::valid() const noexcept -> bool {
   return data_buffer.valid() && image != nullptr;
 }

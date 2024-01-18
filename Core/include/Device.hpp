@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DescriptorResource.hpp"
 #include "ImageProperties.hpp"
 #include "Instance.hpp"
 #include "Types.hpp"
@@ -52,6 +53,10 @@ public:
     vkGetPhysicalDeviceProperties(physical_device, &properties);
     return properties;
   }
+  [[nodiscard]] auto get_descriptor_resource() const
+      -> const Scope<DescriptorResource> & {
+    return descriptor_resource;
+  }
 
   static auto construct(const Instance &) -> Scope<Device>;
 
@@ -59,6 +64,7 @@ private:
   const Instance &instance;
   VkDevice device{nullptr};
   VkPhysicalDevice physical_device{nullptr};
+  Scope<DescriptorResource> descriptor_resource;
 
   auto construct_vulkan_device() -> void;
 

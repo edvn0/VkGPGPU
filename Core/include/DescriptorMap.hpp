@@ -22,8 +22,7 @@ class DescriptorMap {
   using DescriptorSets = std::vector<VkDescriptorSet>;
 
 public:
-  explicit DescriptorMap(const Device &, const DescriptorResource &,
-                         const Shader &);
+  explicit DescriptorMap(const Device &, const Shader &);
   ~DescriptorMap();
 
   /***
@@ -70,7 +69,6 @@ public:
 
 private:
   const Device *device;
-  const DescriptorResource *descriptor_resource;
 
   std::map<u32, std::vector<VkDescriptorSet>> descriptor_sets{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};

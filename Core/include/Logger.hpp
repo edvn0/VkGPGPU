@@ -14,6 +14,7 @@ enum class LogLevel {
   Trace,
   Debug,
   Info,
+  Warn,
   Error,
   None // To disable logging
 };
@@ -45,6 +46,9 @@ public:
   void trace(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
   template <typename... Args>
+  void warn(fmt::format_string<Args...> format, Args &&...args) noexcept;
+
+  template <typename... Args>
   void error(fmt::format_string<Args...> format, Args &&...args) noexcept;
 
 private:
@@ -62,7 +66,7 @@ private:
   std::mutex queue_mutex;
   std::condition_variable cv;
   std::jthread worker;
-  std::atomic_bool exitFlag;
+  std::atomic_bool exit_flag;
 };
 
 } // namespace Core
@@ -80,6 +84,11 @@ void debug(fmt::format_string<Args...> format, Args &&...args) noexcept {
 template <typename... Args>
 void trace(fmt::format_string<Args...> format, Args &&...args) noexcept {
   Core::Logger::get_instance().trace(format, std::forward<Args>(args)...);
+}
+
+template <typename... Args>
+void warn(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  Core::Logger::get_instance().warn(format, std::forward<Args>(args)...);
 }
 
 template <typename... Args>

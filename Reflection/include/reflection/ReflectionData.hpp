@@ -143,7 +143,7 @@ struct ShaderDescriptorSet {
   std::unordered_map<Core::u32, ImageSampler> separate_textures{};
   std::unordered_map<Core::u32, ImageSampler> separate_samplers{};
 
-  std::unordered_map<std::string, VkWriteDescriptorSet> write_descriptor_sets{};
+  Detail::StringLikeMap<VkWriteDescriptorSet> write_descriptor_sets{};
 };
 
 class ShaderResourceDeclaration final {
@@ -182,6 +182,10 @@ struct ReflectionData {
   std::vector<PushConstantRange> push_constant_ranges{};
   Detail::StringLikeMap<ShaderBuffer> constant_buffers{};
   Detail::StringLikeMap<ShaderResourceDeclaration> resources{};
+};
+
+struct MaterialDescriptorSet {
+  std::vector<VkDescriptorSet> descriptor_sets{};
 };
 
 } // namespace Reflection

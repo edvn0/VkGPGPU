@@ -186,6 +186,10 @@ public:
   }
 
   [[nodiscard]] auto size() const noexcept -> usize { return buffer_size; }
+  [[nodiscard]] auto hash() const noexcept -> usize {
+    return std::hash<usize>{}(buffer_size) ^
+           std::hash<std::unique_ptr<u8[]>>{}(data);
+  }
   [[nodiscard]] auto valid() const noexcept -> bool {
     return data != nullptr && buffer_size > 0;
   }

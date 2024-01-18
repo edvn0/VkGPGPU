@@ -24,9 +24,16 @@ using floating = std::float_t;
 #endif
 
 template <class T> using Scope = std::unique_ptr<T>;
+template <class T> using Ref = std::shared_ptr<T>;
+template <class T> using Weak = std::weak_ptr<T>;
+
 template <class T, typename... Args>
 auto make_scope(Args &&...args) -> Scope<T> {
   return std::make_unique<T>(std::forward<Args>(args)...);
+}
+
+template <class T, typename... Args> auto make_ref(Args &&...args) -> Ref<T> {
+  return std::make_shared<T>(std::forward<Args>(args)...);
 }
 
 } // namespace Core

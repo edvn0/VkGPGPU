@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include "reflection/ReflectionData.hpp"
 
@@ -41,6 +42,15 @@ public:
   [[nodiscard]] auto get_reflection_data() const -> const auto & {
     return reflection_data;
   }
+
+  auto allocate_descriptor_set(u32 set) const
+      -> Reflection::MaterialDescriptorSet;
+  auto get_descriptor_set(std::string_view descriptor_name,
+                          std::uint32_t set) const
+      -> const VkWriteDescriptorSet *;
+
+  auto hash() const -> usize;
+  auto has_descriptor_set(u32 set) const -> bool;
 
 private:
   const Device &device;

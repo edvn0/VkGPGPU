@@ -5,12 +5,14 @@
 #include "Containers.hpp"
 #include "Device.hpp"
 #include "Exception.hpp"
+#include "Logger.hpp"
 #include "Verify.hpp"
 
 #include <bit>
 #include <fstream>
 #include <vulkan/vulkan.h>
 
+#include "reflection/ReflectionData.hpp"
 #include "reflection/Reflector.hpp"
 
 namespace Core {
@@ -66,6 +68,55 @@ Shader::~Shader() {
     vkDestroyDescriptorSetLayout(device.get_device(), descriptor_set_layout,
                                  nullptr);
   }
+}
+
+auto Shader::hash() const -> usize {
+  static constexpr std::hash<std::string> string_hasher;
+  return string_hasher(name) ^
+         string_hasher(parsed_spirv_per_stage.at(Type::Compute));
+}
+
+auto Shader::has_descriptor_set(u32 set) const -> bool {
+  return set < descriptor_set_layouts.size() &&
+         descriptor_set_layouts[set] != nullptr;
+}
+
+auto Shader::get_descriptor_set(std::string_view descriptor_name,
+                                std::uint32_t set) const
+    -> const VkWriteDescriptorSet * {
+  if (set >= reflection_data.shader_descriptor_sets.size()) {
+    return nullptr;
+  }
+
+  const auto &shader_descriptor_set =
+      reflection_data.shader_descriptor_sets[set];
+  if (shader_descriptor_set.write_descriptor_sets.contains(descriptor_name)) {
+    const auto as_string = std::string{descriptor_name};
+    return &shader_descriptor_set.write_descriptor_sets.at(as_string);
+  }
+
+  warn("Shader {0} does not contain requested descriptor set {1}", name,
+       descriptor_name);
+  return nullptr;
+}
+
+auto Shader::allocate_descriptor_set(u32 set) const
+    -> Reflection::MaterialDescriptorSet {
+
+  Reflection::MaterialDescriptorSet result;
+
+  if (reflection_data.shader_descriptor_sets.empty()) {
+    return result;
+  }
+
+  VkDescriptorSetAllocateInfo allocation_info = {};
+  allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocation_info.descriptorSetCount = 1;
+  allocation_info.pSetLayouts = &descriptor_set_layouts[set];
+  auto &allocated_set = result.descriptor_sets.emplace_back();
+  allocated_set = device.get_descriptor_resource()->allocate_descriptor_set(
+      allocation_info);
+  return result;
 }
 
 auto Shader::create_descriptor_set_layouts() -> void {

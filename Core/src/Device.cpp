@@ -3,6 +3,7 @@
 #include "Device.hpp"
 
 #include "Allocator.hpp"
+#include "DescriptorResource.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
@@ -22,6 +23,7 @@ public:
 
 Device::Device(const Instance &inst) : instance(inst) {
   construct_vulkan_device();
+  descriptor_resource = DescriptorResource::construct(*this);
 }
 
 Device::~Device() {

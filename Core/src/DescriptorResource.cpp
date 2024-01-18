@@ -1,8 +1,9 @@
-#include "DescriptorResource.hpp"
-
 #include "pch/vkgpgpu_pch.hpp"
 
+#include "DescriptorResource.hpp"
+
 #include "Config.hpp"
+#include "Device.hpp"
 #include "Verify.hpp"
 
 #include <vulkan/vulkan_core.h>
@@ -24,7 +25,7 @@ DescriptorResource::~DescriptorResource() {
 auto DescriptorResource::allocate_descriptor_set(
     const VkDescriptorSetAllocateInfo &alloc_info) const -> VkDescriptorSet {
   ensure(current_frame < Config::frame_count, "Frame out of range");
-  VkDescriptorSet descriptor_set;
+  VkDescriptorSet descriptor_set = nullptr;
 
   // Create a allocation info copy, where we insert current pool.
   auto alloc_info_copy = alloc_info;
@@ -32,7 +33,7 @@ auto DescriptorResource::allocate_descriptor_set(
   alloc_info_copy.descriptorSetCount = 1;
 
   if (const auto result = vkAllocateDescriptorSets(
-          device->get_device(), &alloc_info, &descriptor_set);
+          device->get_device(), &alloc_info_copy, &descriptor_set);
       result == VK_ERROR_FRAGMENTATION_EXT) {
     handle_fragmentation();
   } else if (result == VK_ERROR_OUT_OF_POOL_MEMORY) {
@@ -70,8 +71,8 @@ void DescriptorResource::begin_frame(u32 frame) {
 
   // TODO: This is obviously not what we want to do right now. We want to clear
   // the pool, but we are not there yet!
-  //  vkResetDescriptorPool(device->get_device(),
-  //  descriptor_pools[current_frame], 0);
+  vkResetDescriptorPool(device->get_device(), descriptor_pools[current_frame],
+                        0);
 }
 
 void DescriptorResource::end_frame() {

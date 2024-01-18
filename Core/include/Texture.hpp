@@ -23,6 +23,8 @@ public:
   [[nodiscard]] auto size_bytes() const -> usize { return data_buffer.size(); }
   [[nodiscard]] auto get_extent() const -> const auto & { return extent; }
 
+  [[nodiscard]] auto hash() const -> usize;
+
   static auto empty_with_size(const Device &, usize, const Extent<u32> &)
       -> Scope<Texture>;
 

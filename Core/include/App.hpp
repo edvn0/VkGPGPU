@@ -29,15 +29,10 @@ protected:
   [[nodiscard]] auto get_device() const -> const Scope<Device> & {
     return device;
   }
-  [[nodiscard]] auto get_descriptor_resource() const
-      -> const Scope<DescriptorResource> & {
-    return descriptor_resource;
-  }
 
 private:
   Scope<Instance> instance;
   Scope<Device> device;
-  Scope<DescriptorResource> descriptor_resource;
 
   ApplicationProperties properties{};
 

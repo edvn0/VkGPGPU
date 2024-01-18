@@ -34,7 +34,7 @@ using namespace Core;
 
 class ClientApp : public App {
 public:
-  explicit ClientApp(const ApplicationProperties &props) : App(props){};
+  explicit ClientApp(const ApplicationProperties &props);
   ~ClientApp() override = default;
 
   void on_update(floating ts) override;
@@ -46,11 +46,13 @@ private:
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
 
+  using UniformSet = BufferSet<Buffer::Type::Uniform>;
+  using StorageSet = BufferSet<Buffer::Type::Storage>;
+
+  UniformSet uniform_buffer_set;
+  StorageSet storage_buffer_set;
+
   Scope<CommandBuffer> command_buffer;
-  Scope<Buffer> input_buffer;
-  Scope<Buffer> other_input_buffer;
-  Scope<Buffer> output_buffer;
-  Scope<Buffer> simple_uniform;
   Scope<Material> material;
 
   Scope<Pipeline> pipeline;
@@ -69,4 +71,8 @@ private:
   auto graphics(floating ts) -> void;
 
   void perform();
+  auto update_material_for_rendering(FrameIndex frame_index, Material &material,
+                                     BufferSet<Buffer::Type::Uniform> *ubo_set,
+                                     BufferSet<Buffer::Type::Storage> *sbo_set)
+      -> void;
 };

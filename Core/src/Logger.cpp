@@ -26,10 +26,10 @@ Logger::~Logger() { stop_all(); }
 
 void Logger::stop_all() {
   // If the worker thread is already stopped, return
-  if (exitFlag)
+  if (exit_flag)
     return;
 
-  exitFlag = true;
+  exit_flag = true;
   cv.notify_one();
   worker.join();
 }
@@ -43,9 +43,9 @@ void Logger::log(std::string &&message, LogLevel level) {
 void Logger::process_queue(const std::stop_token &stop_token) {
   while (!stop_token.stop_requested()) {
     std::unique_lock lock(queue_mutex);
-    cv.wait(lock, [this] { return !log_queue.empty() || exitFlag; });
+    cv.wait(lock, [this] { return !log_queue.empty() || exit_flag; });
 
-    if (exitFlag && log_queue.empty())
+    if (exit_flag && log_queue.empty())
       break;
 
     while (!log_queue.empty()) {
@@ -63,6 +63,7 @@ static constexpr auto Red = "\033[31m"sv;    // Error
 static constexpr auto Green = "\033[32m"sv;  // Info
 static constexpr auto Yellow = "\033[33m"sv; // Debug
 static constexpr auto Blue = "\033[34m"sv;   // Trace
+static constexpr auto Magenta = "\033[95m"sv;   // Warn
 } // namespace AnsiColor
 
 void Logger::process_single(const BackgroundLogMessage &message) {
@@ -78,6 +79,10 @@ void Logger::process_single(const BackgroundLogMessage &message) {
     break;
   case Info:
     std::cout << AnsiColor::Green << "[INFO] " << message.message
+              << AnsiColor::Reset << std::endl;
+    break;
+  case Warn:
+     std::cout << AnsiColor::Magenta << "[WARN] " << message.message
               << AnsiColor::Reset << std::endl;
     break;
   case Error:
