@@ -5,10 +5,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "cppvsdbg",
+      "type": "cppdbg",
+      "miDebuggerPath": "/home/edwinc/Builds/bin/lldb",
       "request": "launch",
       "name": "Debug",
-      "program": "${workspaceRoot}/build/App/App.exe",
+      "program": "${workspaceRoot}/build/App/App",
       "cwd": "${workspaceRoot}/App",
       "args": [
         "--wd",

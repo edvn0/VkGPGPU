@@ -169,8 +169,8 @@ auto ClientApp::on_update(floating ts) -> void {
 
 void ClientApp::on_create() {
 
-  loader = DynamicLibraryLoader::construct(renderdoc_dll_name);
 #if !defined(GPGPU_PIPELINE)
+  loader = DynamicLibraryLoader::construct(renderdoc_dll_name);
   renderdoc = get_renderdoc_api(*get_device(), loader);
   if (renderdoc != nullptr) {
     renderdoc->SetCaptureTitle("Matrix Multiply");
@@ -317,8 +317,10 @@ void ClientApp::perform() {
   output_texture = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
 
+  info("Created textures");
   command_buffer =
       make_scope<CommandBuffer>(*get_device(), CommandBuffer::Type::Compute);
+  info("Created command buffer");
   randomize_span_of_matrices(matrices);
 
   static constexpr auto matrices_size =
@@ -327,12 +329,15 @@ void ClientApp::perform() {
   storage_buffer_set.create(matrices_size, SetBinding(0));
   storage_buffer_set.create(matrices_size, SetBinding(1));
   storage_buffer_set.create(matrices_size, SetBinding(2));
+  info("Created uniform buffer");
   uniform_buffer_set.create(4, SetBinding(3));
 
   shader = make_scope<Shader>(*get_device(),
                               FS::shader("LaplaceEdgeDetection.comp.spv"));
+  info("Created shader");
 
   material = Material::construct(*get_device(), *shader);
+  info("Created material");
   pipeline = make_scope<Pipeline>(*get_device(), PipelineConfiguration{
                                                      "LaplaceEdgeDetection",
                                                      PipelineStage::Compute,
@@ -340,6 +345,7 @@ void ClientApp::perform() {
                                                  });
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
+  info("Created dispatcher, material, shader and pipeline.");
 
   auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
   material->set("pc.kernelSize", kernel_size);

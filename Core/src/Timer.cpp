@@ -57,7 +57,8 @@ void Timer::write_to_file() {
 
   size_t index = last_write_index;
   while (index != current_index) {
-    auto formatted = fmt::format("Time Taken (µs), {}", buffer[index]);
+    auto formatted =
+        fmt::format("Time Taken (microseconds), {}", buffer[index]);
     messaging_client->send_message("Timer", formatted);
     last_write_time = std::chrono::high_resolution_clock::now();
     index = (index + 1) % buffer_size;

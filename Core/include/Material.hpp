@@ -8,6 +8,7 @@
 #include "Texture.hpp"
 
 #include <BufferSet.hpp>
+#include <optional>
 
 #include "reflection/ReflectionData.hpp"
 

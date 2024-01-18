@@ -5,6 +5,8 @@
 #include "Device.hpp"
 #include "Types.hpp"
 
+#include <ranges>
+
 namespace Core {
 
 using DescriptorSet = u32;
@@ -23,7 +25,10 @@ struct SetBinding {
 template <Buffer::Type Type> class BufferSet {
 public:
   explicit BufferSet(const Device &dev, u32 frames = Config::frame_count)
-      : device(&dev), frame_count(frames) {}
+      : device(&dev), frame_count(frames), frame_set_binding_buffers(frames) {
+    info("Created buffer set of type '{}' with {} frame count", Type,
+         frame_count);
+  }
 
   ~BufferSet() = default;
 

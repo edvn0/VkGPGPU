@@ -5,7 +5,6 @@
 namespace Core::Bus {
 
 class MessagingClient {
-  std::unique_ptr<IMessagingAPI> messagingAPI;
 
 public:
   explicit MessagingClient(std::unique_ptr<IMessagingAPI> api)
@@ -19,6 +18,9 @@ public:
   }
 
   auto get_api() const -> const IMessagingAPI & { return *messagingAPI; }
+
+private:
+  std::unique_ptr<IMessagingAPI> messagingAPI;
 };
 
 } // namespace Core::Bus
