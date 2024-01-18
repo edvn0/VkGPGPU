@@ -44,6 +44,11 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
 Texture::Texture(const Device &dev, const FS::Path &path)
     : device(&dev), data_buffer(load_databuffer_from_file(path, extent)),
       texture_filename(path.filename().string()) {
+  if (!FS::exists(path)) {
+    throw NotFoundException(
+        fmt::format("Texture file '{}' does not exist!", path.string()));
+  }
+
   image = std::make_unique<Image>(
       *device,
       ImageProperties{

@@ -21,4 +21,9 @@ private:
   std::string message;
 };
 
+class NotFoundException : public BaseException {
+public:
+  using BaseException::BaseException;
+};
+
 } // namespace Core

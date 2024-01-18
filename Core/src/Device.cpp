@@ -27,6 +27,8 @@ Device::Device(const Instance &inst) : instance(inst) {
 }
 
 Device::~Device() {
+  descriptor_resource.reset();
+
   vkDeviceWaitIdle(device);
 
   vkDestroyDevice(device, nullptr);
