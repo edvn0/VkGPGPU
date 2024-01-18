@@ -7,7 +7,6 @@
 #include "CommandBuffer.hpp"
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"
-#include "DescriptorMap.hpp"
 #include "DescriptorResource.hpp"
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
@@ -44,7 +43,6 @@ public:
   void on_destroy() override;
 
 private:
-  Scope<DescriptorMap> descriptor_map;
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
 
@@ -75,7 +73,8 @@ private:
   auto graphics(floating ts) -> void;
 
   void perform();
-  auto update_material_for_rendering(FrameIndex frame_index, Material &material,
+  auto update_material_for_rendering(FrameIndex frame_index,
+                                     Material &material_for_update,
                                      BufferSet<Buffer::Type::Uniform> *ubo_set,
                                      BufferSet<Buffer::Type::Storage> *sbo_set)
       -> void;

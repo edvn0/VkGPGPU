@@ -182,7 +182,6 @@ void ClientApp::on_create() {
 void ClientApp::on_destroy() {
   // Destroy all fields
   command_buffer.reset();
-  descriptor_map.reset();
 
   pipeline.reset();
   shader.reset();
@@ -199,17 +198,17 @@ void ClientApp::on_destroy() {
 auto ClientApp::graphics(floating ts) -> void {}
 
 void ClientApp::update_material_for_rendering(
-    FrameIndex frame_index, Material &material,
+    FrameIndex frame_index, Material &material_for_update,
     BufferSet<Buffer::Type::Uniform> *ubo_set,
     BufferSet<Buffer::Type::Storage> *sbo_set) {
   if (ubo_set != nullptr) {
     auto write_descriptors =
         create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-            Config::frame_count, ubo_set, material);
+            Config::frame_count, ubo_set, material_for_update);
     if (sbo_set != nullptr) {
       const auto &storage_buffer_write_sets =
           create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-              Config::frame_count, sbo_set, material);
+              Config::frame_count, sbo_set, material_for_update);
 
       for (u32 frame = 0; frame < Config::frame_count; frame++) {
         const auto &sbo_ws = storage_buffer_write_sets[frame];
@@ -220,9 +219,9 @@ void ClientApp::update_material_for_rendering(
                                         sbo_ws.begin(), sbo_ws.end());
       }
     }
-    material.update_for_rendering(frame_index, write_descriptors);
+    material_for_update.update_for_rendering(frame_index, write_descriptors);
   } else {
-    material.update_for_rendering(frame_index);
+    material_for_update.update_for_rendering(frame_index);
   }
 }
 

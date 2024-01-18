@@ -45,6 +45,7 @@ private:
 
   u32 current_frame{0};
   bool running{true};
+  u64 frame_counter{0};
 };
 
 auto extern make_application(const ApplicationProperties &) -> Scope<App>;

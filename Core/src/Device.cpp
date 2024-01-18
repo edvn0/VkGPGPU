@@ -57,12 +57,12 @@ auto Device::construct(const Instance &instance) -> Scope<Device> {
   return make_scope<Device>(instance);
 }
 
-auto Device::enumerate_physical_devices(VkInstance instance)
+auto Device::enumerate_physical_devices(VkInstance inst)
     -> std::vector<VkPhysicalDevice> {
   u32 device_count = 0;
-  vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+  vkEnumeratePhysicalDevices(inst, &device_count, nullptr);
   std::vector<VkPhysicalDevice> devices(device_count);
-  vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+  vkEnumeratePhysicalDevices(inst, &device_count, devices.data());
   return devices;
 }
 
@@ -148,12 +148,12 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
     bool is_transfer_queue = queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT;
 
     if (is_compute_queue && !is_graphics_queue) { // Dedicated compute queue
-      dedicated_compute_queue_index = i;
+      dedicated_compute_queue_index = static_cast<i32>(i);
     }
 
     if (is_transfer_queue && !is_graphics_queue &&
         !is_compute_queue) { // Dedicated transfer queue
-      dedicated_transfer_queue_index = i;
+      dedicated_transfer_queue_index = static_cast<i32>(i);
     }
   }
 

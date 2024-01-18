@@ -123,6 +123,14 @@ auto App::run() -> void {
       last_time = current_time;
 
       device->get_descriptor_resource()->end_frame();
+      frame_counter++;
+
+#ifdef GPGPU_DEBUG
+      // We want to make sure that all of the destruction logic is working :^)
+      if (frame_counter > 5'000) {
+        break;
+      }
+#endif
     }
 
     // Calculate and log the total runtime.

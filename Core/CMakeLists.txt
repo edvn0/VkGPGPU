@@ -10,7 +10,6 @@ set(SOURCES
     include/Config.hpp
     include/DataBuffer.hpp
     include/DebugMarker.hpp
-    include/DescriptorMap.hpp
     include/DescriptorResource.hpp
     include/Device.hpp
     include/DynamicLibraryLoader.hpp
@@ -37,7 +36,6 @@ set(SOURCES
     src/CommandBuffer.cpp
     src/DataBuffer.cpp
     src/DebugMarker.cpp
-    src/DescriptorMap.cpp
     src/DescriptorResource.cpp
     src/Device.cpp
     src/DynamicLibraryLoader.cpp
