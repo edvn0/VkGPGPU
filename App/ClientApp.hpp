@@ -26,6 +26,8 @@
 #include <numbers>
 #include <random>
 
+#include "bus/MessagingClient.hpp"
+
 #if !defined(GPGPU_PIPELINE)
 #include <renderdoc_app.h>
 #endif
@@ -51,6 +53,8 @@ private:
 
   UniformSet uniform_buffer_set;
   StorageSet storage_buffer_set;
+
+  Timer timer;
 
   Scope<CommandBuffer> command_buffer;
   Scope<Material> material;

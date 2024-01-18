@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <exception>
 
+#include "rabbitmq/RabbitMQMessagingAPI.hpp"
+
 template <std::size_t N = 10000> struct FPSAverage {
   std::array<Core::floating, N> frame_times{};
   Core::floating frame_time_sum = 0.0;
@@ -64,6 +66,11 @@ App::App(const ApplicationProperties &props) : properties(props) {
 
   // Initialize the device
   device = Device::construct(*instance);
+
+  const auto hostname = "localhost";
+  const auto port = 5672;
+  message_client = make_scope<Bus::MessagingClient>(
+      make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
 
   Allocator::construct(*device, *instance);
 }

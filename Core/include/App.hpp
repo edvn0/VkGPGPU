@@ -6,6 +6,8 @@
 #include "Instance.hpp"
 #include "Types.hpp"
 
+#include "bus/MessagingClient.hpp"
+
 namespace Core {
 
 struct ApplicationProperties {
@@ -29,10 +31,15 @@ protected:
   [[nodiscard]] auto get_device() const -> const Scope<Device> & {
     return device;
   }
+  [[nodiscard]] auto get_messaging_client() const
+      -> const Scope<Bus::MessagingClient> & {
+    return message_client;
+  }
 
 private:
   Scope<Instance> instance;
   Scope<Device> device;
+  Scope<Bus::MessagingClient> message_client;
 
   ApplicationProperties properties{};
 

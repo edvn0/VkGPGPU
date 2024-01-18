@@ -2,9 +2,9 @@
 
 namespace Platform::RabbitMQ {
 
-class RabbitMqClient : public Core::Bus::IMessagingAPI {
+class RabbitMQMessagingAPI : public Core::Bus::IMessagingAPI {
 public:
-  RabbitMqClient(const std::string &hostname, Core::i32 portid)
+  RabbitMQMessagingAPI(const std::string &hostname, Core::i32 portid)
       : host(hostname), port(portid) {}
 
   void connect() override;

@@ -160,7 +160,7 @@ consteval auto compute_kernel_size() -> std::tuple<u32, u32, u32> {
 
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), uniform_buffer_set(*get_device()),
-      storage_buffer_set(*get_device()){};
+      storage_buffer_set(*get_device()), timer(*get_messaging_client()){};
 
 auto ClientApp::on_update(floating ts) -> void {
   compute(ts);
@@ -243,9 +243,9 @@ auto ClientApp::compute(floating ts) -> void {
 #endif
   };
 
-  Timer timer;
-
   begin_renderdoc();
+
+  timer.begin();
 
   randomize_span_of_matrices(matrices);
   auto &input_buffer =
@@ -308,6 +308,8 @@ auto ClientApp::compute(floating ts) -> void {
   command_buffer->end_and_submit();
 
   end_renderdoc();
+
+  timer.end();
 }
 
 void ClientApp::perform() {

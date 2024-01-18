@@ -6,8 +6,8 @@
 
 // Write tests for IMessagingAPI::publish_message
 // Write tests for IMessagingAPI::connect
-// Write tests for MessageBusClient::send_message
-// Write tests for MessageBusClient::MessageBusClient
+// Write tests for MessagingClient::send_message
+// Write tests for MessagingClient::MessagingClient
 class MockClient : public Core::Bus::IMessagingAPI {
 public:
   MockClient(const std::string &hostname, int portid)
@@ -29,13 +29,13 @@ public:
   std::vector<std::string> published_messages;
 };
 
-TEST_CASE("Test MessageBusClient") {
+TEST_CASE("Test MessagingClient") {
   using namespace Core::Bus;
 
-  SECTION("Test MessageBusClient::send_message") {
+  SECTION("Test MessagingClient::send_message") {
     Core::Scope<IMessagingAPI> api =
         std::make_unique<MockClient>("localhost", 5672);
-    auto client = MessageBusClient(std::move(api));
+    auto client = MessagingClient(std::move(api));
     client.send_message("test_queue", "test_message");
 
     // Lets cast it to MockClient to access the published_messages
@@ -45,10 +45,10 @@ TEST_CASE("Test MessageBusClient") {
     REQUIRE(mock_client.published_messages[0] == "test_message");
   }
 
-  SECTION("Test MessageBusClient::MessageBusClient") {
+  SECTION("Test MessagingClient::MessagingClient") {
     Core::Scope<IMessagingAPI> api =
         std::make_unique<MockClient>("localhost", 5672);
-    auto client = MessageBusClient(std::move(api));
+    auto client = MessagingClient(std::move(api));
     const auto &mock_client =
         dynamic_cast<const MockClient &>(client.get_api());
 

@@ -4,14 +4,19 @@
 #include <mutex>
 #include <vector>
 
+#include "bus/MessagingClient.hpp"
+
 namespace Core {
 
 class Timer {
   using BufferSize = long long;
 
 public:
-  Timer();
+  Timer(const Bus::MessagingClient &);
   ~Timer();
+
+  void begin();
+  void end();
 
 private:
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -26,6 +31,8 @@ private:
   void add_duration(BufferSize duration);
   bool should_write_to_file();
   void write_to_file();
+
+  const Bus::MessagingClient *messaging_client;
 };
 
 } // namespace Core

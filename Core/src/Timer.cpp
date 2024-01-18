@@ -2,6 +2,7 @@
 
 #include "Timer.hpp"
 
+#include <fmt/format.h>
 #include <fstream>
 
 #ifndef GPGPU_RETAIN_SECONDS
@@ -19,20 +20,21 @@ std::mutex Timer::buffer_mutex;
 static constexpr auto loops_per_second = 20000;
 const size_t Timer::buffer_size = GPGPU_BUFFER_SECONDS * loops_per_second;
 
-Timer::Timer() { start_time = std::chrono::high_resolution_clock::now(); }
+Timer::Timer(const Bus::MessagingClient &client) : messaging_client(&client) {
+  start_time = std::chrono::high_resolution_clock::now();
+}
 
-Timer::~Timer() {
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start_time)
-          .count();
+Timer::~Timer() { write_to_file(); }
 
+void Timer::begin() { start_time = std::chrono::high_resolution_clock::now(); }
+
+void Timer::end() {
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                      end_time - start_time)
+                      .count();
   add_duration(duration);
-
   if (should_write_to_file()) {
-    write_to_file();
-    last_write_time =
-        std::chrono::high_resolution_clock::now(); // Update the last write time
   }
 }
 
@@ -52,11 +54,12 @@ bool Timer::should_write_to_file() {
 
 void Timer::write_to_file() {
   std::lock_guard lock(buffer_mutex);
-  std::ofstream file("timings.txt", std::ios::app);
 
   size_t index = last_write_index;
   while (index != current_index) {
-    file << buffer[index] << std::endl;
+    auto formatted = fmt::format("Time Taken (µs), {}", buffer[index]);
+    messaging_client->send_message("Timer", formatted);
+    last_write_time = std::chrono::high_resolution_clock::now();
     index = (index + 1) % buffer_size;
   }
 
