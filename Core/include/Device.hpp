@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DescriptorResource.hpp"
 #include "ImageProperties.hpp"
 #include "Instance.hpp"
 #include "Types.hpp"
@@ -52,6 +53,10 @@ public:
     vkGetPhysicalDeviceProperties(physical_device, &properties);
     return properties;
   }
+  [[nodiscard]] auto get_descriptor_resource() const
+      -> const Scope<DescriptorResource> & {
+    return descriptor_resource;
+  }
 
   static auto construct(const Instance &) -> Scope<Device>;
 
@@ -59,6 +64,7 @@ private:
   const Instance &instance;
   VkDevice device{nullptr};
   VkPhysicalDevice physical_device{nullptr};
+  Scope<DescriptorResource> descriptor_resource;
 
   auto construct_vulkan_device() -> void;
 
@@ -73,12 +79,13 @@ private:
   std::unordered_map<Queue::Type, IndexedQueue> queues{};
   std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support{};
 
-  auto enumerate_physical_devices(VkInstance) -> std::vector<VkPhysicalDevice>;
-  auto select_physical_device(const std::vector<VkPhysicalDevice> &)
+  static auto enumerate_physical_devices(VkInstance)
+      -> std::vector<VkPhysicalDevice>;
+  static auto select_physical_device(const std::vector<VkPhysicalDevice> &)
       -> VkPhysicalDevice;
   using IndexQueueTypePair =
       std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
-  auto find_all_possible_queue_infos(VkPhysicalDevice)
+  static auto find_all_possible_queue_infos(VkPhysicalDevice)
       -> std::vector<IndexQueueTypePair>;
   auto create_vulkan_device(VkPhysicalDevice, std::vector<IndexQueueTypePair> &)
       -> VkDevice;

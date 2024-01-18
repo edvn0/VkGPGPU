@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ReflectionData.hpp"
 #include "Types.hpp"
-#include "core/Forward.hpp"
 
 #include <vector>
 #include <vulkan/vulkan_core.h>
+
+#include "core/Forward.hpp"
 
 namespace Reflection {
 
@@ -14,7 +16,8 @@ class Reflector {
 public:
   explicit Reflector(Core::Shader &);
   ~Reflector();
-  auto reflect(std::vector<VkDescriptorSetLayout> &) -> void;
+  auto reflect(std::vector<VkDescriptorSetLayout> &,
+               ReflectionData &output) const -> void;
 
 private:
   Core::Shader &shader;

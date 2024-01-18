@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CommandBuffer.hpp"
+#include "Material.hpp"
+#include "Pipeline.hpp"
 
 namespace Core {
 
@@ -21,6 +23,19 @@ public:
   template <CommandBufferBindable T, typename... Args>
   void bind(T &object, Args &&...args) {
     object.bind(*command_buffer, std::forward<Args>(args)...);
+  }
+
+  auto push_constant(const Pipeline &pipeline, const Material &material) {
+    const auto &constant_buffer = material.get_constant_buffer();
+
+    if (!constant_buffer.valid())
+      return;
+
+    // TODO: Generalise for other stages
+    vkCmdPushConstants(command_buffer->get_command_buffer(),
+                       pipeline.get_pipeline_layout(),
+                       VK_SHADER_STAGE_COMPUTE_BIT, 0, constant_buffer.size(),
+                       constant_buffer.raw());
   }
 
   auto dispatch(const GroupSize &group_size) const -> void {

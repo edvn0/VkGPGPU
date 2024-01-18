@@ -10,7 +10,7 @@ set(SOURCES
     include/Config.hpp
     include/DataBuffer.hpp
     include/DebugMarker.hpp
-    include/DescriptorMap.hpp
+    include/DescriptorResource.hpp
     include/Device.hpp
     include/DynamicLibraryLoader.hpp
     include/Entry.hpp
@@ -21,6 +21,7 @@ set(SOURCES
     include/Image.hpp
     include/Instance.hpp
     include/Logger.hpp
+    include/Material.hpp
     include/Pipeline.hpp
     include/Shader.hpp
     include/Texture.hpp
@@ -35,13 +36,14 @@ set(SOURCES
     src/CommandBuffer.cpp
     src/DataBuffer.cpp
     src/DebugMarker.cpp
-    src/DescriptorMap.cpp
+    src/DescriptorResource.cpp
     src/Device.cpp
     src/DynamicLibraryLoader.cpp
     src/Formatters.cpp
     src/Image.cpp
     src/Instance.cpp
     src/Logger.cpp
+    src/Material.cpp
     src/Pipeline.cpp
     src/Shader.cpp
     src/Timer.cpp
@@ -51,7 +53,7 @@ set(SOURCES
 
 add_library(Core STATIC ${SOURCES})
 target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
-target_link_libraries(Core PUBLIC Platform fmt::fmt Reflection Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage)
+target_link_libraries(Core PUBLIC Platform fmt::fmt Reflection Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

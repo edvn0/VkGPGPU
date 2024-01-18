@@ -2,9 +2,9 @@
 
 namespace Platform::RabbitMQ {
 
-void RabbitMqClient::connect() {}
+void RabbitMQMessagingAPI::connect() {}
 
-void RabbitMqClient::publish_message(const std::string &queue_name,
-                                     const std::string &message) {}
+void RabbitMQMessagingAPI::publish_message(const std::string &queue_name,
+                                           const std::string &message) {}
 
 } // namespace Platform::RabbitMQ

@@ -11,6 +11,11 @@ template <std::integral T> struct Extent {
   T width{0};
   T height{0};
 
+  // Aspect ratio
+  [[nodiscard]] constexpr auto aspect_ratio() const noexcept -> floating {
+    return static_cast<floating>(width) / static_cast<floating>(height);
+  }
+
   // Cast to another type Other, not the same as T
   template <std::integral Other>
     requires(!std::is_same_v<Other, T>)

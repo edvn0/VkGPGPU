@@ -7,6 +7,7 @@
 #include <cstring>
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 namespace Core {
@@ -30,6 +31,8 @@ public:
     other.buffer_size = 0;
   }
 
+  [[nodiscard]] auto raw() const -> const void * { return data.get(); }
+
   [[nodiscard]] auto operator=(DataBuffer &&other) noexcept -> DataBuffer & {
     buffer_size = other.buffer_size;
     data = std::move(other.data);
@@ -49,6 +52,27 @@ public:
     }
     // Do i need to cast the input_data to u8*?
     std::memcpy(data.get(), input_data, input_size);
+  }
+
+  template <typename T>
+  auto write(const T *input_data, std::integral auto input_size,
+             std::integral auto offset) -> void {
+    static_assert(std::is_unsigned_v<decltype(offset)>);
+
+    // Check if input_size plus offset exceeds the buffer_size
+    if (offset + input_size > buffer_size) {
+      throw WriteRangeException{
+          "DataBuffer::write: (offset + input_size) > buffer_size"};
+    }
+
+    if (input_size > buffer_size) {
+      throw WriteRangeException{"DataBuffer::write: input_size > size"};
+    }
+    if (!data) {
+      allocate_storage(input_size);
+    }
+
+    std::memcpy(data.get() + offset, input_data, input_size);
   }
 
   template <typename T>
@@ -162,6 +186,10 @@ public:
   }
 
   [[nodiscard]] auto size() const noexcept -> usize { return buffer_size; }
+  [[nodiscard]] auto hash() const noexcept -> usize {
+    return std::hash<usize>{}(buffer_size) ^
+           std::hash<std::unique_ptr<u8[]>>{}(data);
+  }
   [[nodiscard]] auto valid() const noexcept -> bool {
     return data != nullptr && buffer_size > 0;
   }
@@ -175,15 +203,19 @@ public:
     return constructed;
   }
 
+  auto set_size_and_reallocate(usize new_size) -> void {
+    buffer_size = new_size;
+    allocate_storage(new_size);
+  }
+
 private:
   usize buffer_size{0};
   std::unique_ptr<u8[]> data{nullptr};
 
-  auto allocate_storage(usize new_size) -> void;
-
   auto allocate_storage(std::integral auto new_size) -> void {
     allocate_storage(static_cast<usize>(new_size));
   }
+  auto allocate_storage(usize new_size) -> void;
 
   auto fill_with(std::integral auto value) -> void {
     if (!data) {

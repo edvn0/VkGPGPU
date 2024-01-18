@@ -1,17 +1,21 @@
-#include "App.hpp"
-
 #include "pch/vkgpgpu_pch.hpp"
 
+#include "App.hpp"
+
+#include "Allocator.hpp"
 #include "Config.hpp"
+#include "DescriptorResource.hpp"
 #include "Formatters.hpp"
 #include "Logger.hpp"
 
 #include <cstddef>
 #include <exception>
 
+#include "rabbitmq/RabbitMQMessagingAPI.hpp"
+
 template <std::size_t N = 10000> struct FPSAverage {
-  std::array<double, N> frame_times{};
-  double frame_time_sum = 0.0;
+  std::array<Core::floating, N> frame_times{};
+  Core::floating frame_time_sum = 0.0;
   Core::i32 frame_time_index = 0;
   Core::i32 frame_counter = 0;
 
@@ -27,7 +31,7 @@ template <std::size_t N = 10000> struct FPSAverage {
 
     const auto current_time = std::chrono::high_resolution_clock::now();
     const auto delta_time_seconds =
-        std::chrono::duration<double>(current_time - last_time).count();
+        std::chrono::duration<Core::floating>(current_time - last_time).count();
     last_time = current_time;
 
     // Update moving average for frame time
@@ -56,7 +60,26 @@ template <std::size_t N = 10000> struct FPSAverage {
 
 namespace Core {
 
-App::App(const ApplicationProperties &props) : properties(props) {}
+App::App(const ApplicationProperties &props) : properties(props) {
+  // Initialize the instance
+  instance = Instance::construct();
+
+  // Initialize the device
+  device = Device::construct(*instance);
+
+  const auto hostname = "localhost";
+  const auto port = 5672;
+  message_client = make_scope<Bus::MessagingClient>(
+      make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
+
+  Allocator::construct(*device, *instance);
+}
+
+App::~App() {
+  Allocator::destroy();
+  device.reset();
+  instance.reset();
+}
 
 auto App::frame() const -> u32 { return current_frame; }
 
@@ -66,20 +89,21 @@ auto App::run() -> void {
   };
 
   try {
-    FPSAverage fps_average; // Object for tracking the frames per second.
-    on_create();            // Initialize your application.
+    FPSAverage<1000> fps_average; // Object for tracking the frames per second.
+    on_create();                  // Initialize your application.
 
     auto last_time = now();            // Record the starting time.
     const auto total_time = last_time; // Store the total time of the app.
 
     // Main loop
     while (running) {
+      device->get_descriptor_resource()->begin_frame(current_frame);
       const auto current_time =
           now(); // Get the current time at the start of the loop.
 
       // Calculate the time delta since the last frame.
       const auto delta_time_seconds =
-          std::chrono::duration<double>(current_time - last_time).count();
+          std::chrono::duration<floating>(current_time - last_time).count();
 
       // Update the fps average.
       fps_average.update();
@@ -97,15 +121,26 @@ auto App::run() -> void {
 
       // Update the last_time to the current time after the frame update.
       last_time = current_time;
+
+      device->get_descriptor_resource()->end_frame();
+      frame_counter++;
+
+#ifdef GPGPU_DEBUG
+      // We want to make sure that all of the destruction logic is working :^)
+      if (frame_counter > 5'000) {
+        break;
+      }
+#endif
     }
 
     // Calculate and log the total runtime.
     info("Total time: {} seconds.",
-         std::chrono::duration<double>(now() - total_time).count());
+         std::chrono::duration<floating>(now() - total_time).count());
     on_destroy(); // Clean up resources.
 
   } catch (const std::exception &exc) {
     error("Main loop exception: {}", exc);
+    throw;
   }
 }
 

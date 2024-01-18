@@ -1,7 +1,8 @@
 #include "pch/vkgpgpu_pch.hpp"
 
-#include "Environment.hpp"
 #include "Instance.hpp"
+
+#include "Environment.hpp"
 #include "Logger.hpp"
 #include "Types.hpp"
 #include "Verify.hpp"

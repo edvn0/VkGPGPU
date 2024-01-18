@@ -2,15 +2,15 @@
 
 #include "Buffer.hpp"
 
-#include <cassert>
-#include <cstring>
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan_core.h>
-
 #include "Allocator.hpp"
 #include "DebugMarker.hpp"
 #include "Device.hpp"
 #include "Verify.hpp"
+
+#include <cassert>
+#include <cstring>
+#include <vk_mem_alloc.h>
+#include <vulkan/vulkan_core.h>
 
 namespace Core {
 
@@ -36,11 +36,17 @@ struct BufferDataImpl {
   VmaAllocationInfo allocation_info{};
 };
 
-Buffer::Buffer(const Device &dev, u64 input_size, Type buffer_type)
+Buffer::Buffer(const Device &dev, u64 input_size, Type buffer_type,
+               u32 input_binding)
     : device(dev), buffer_data(make_scope<BufferDataImpl>()), size(input_size),
-      type(buffer_type) {
+      type(buffer_type), binding(input_binding) {
   initialise_vulkan_buffer();
   initialise_descriptor_info();
+}
+
+auto Buffer::construct(const Device &device, u64 input_size, Type buffer_type,
+                       u32 binding) -> Scope<Buffer> {
+  return make_scope<Buffer>(device, input_size, buffer_type, binding);
 }
 
 auto Buffer::initialise_descriptor_info() -> void {
@@ -69,7 +75,7 @@ void Buffer::initialise_vulkan_buffer() {
     break;
   }
 
-  DebugMarker::set_object_name(device.get_device(), buffer_data->buffer,
+  DebugMarker::set_object_name(device, buffer_data->buffer,
                                VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT,
                                fmt::format("Buffer-{}", type).data());
 }

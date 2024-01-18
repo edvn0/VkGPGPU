@@ -1,12 +1,13 @@
+#pragma once
+
 #include "bus/IMessagingAPI.hpp"
 
 namespace Core::Bus {
 
-class MessageBusClient {
-  std::unique_ptr<IMessagingAPI> messagingAPI;
+class MessagingClient {
 
 public:
-  explicit MessageBusClient(std::unique_ptr<IMessagingAPI> api)
+  explicit MessagingClient(std::unique_ptr<IMessagingAPI> api)
       : messagingAPI(std::move(api)) {
     messagingAPI->connect();
   }
@@ -17,6 +18,9 @@ public:
   }
 
   auto get_api() const -> const IMessagingAPI & { return *messagingAPI; }
+
+private:
+  std::unique_ptr<IMessagingAPI> messagingAPI;
 };
 
 } // namespace Core::Bus

@@ -19,18 +19,6 @@ void Logger::debug(fmt::format_string<Args...> format,
   log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Debug);
 }
 
-template <typename... Args>
-void Logger::info(fmt::format_string<Args...> format, Args &&...args) noexcept {
-  if (current_level > LogLevel::Info)
-    return;
-  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Info);
-}
-
-template <typename... Args>
-void Logger::error(fmt::format_string<Args...> format,
-                   Args &&...args) noexcept {
-  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Error);
-}
 #else
 template <typename... Args>
 void Logger::trace(fmt::format_string<Args...> format,
@@ -40,13 +28,24 @@ template <typename... Args>
 void Logger::debug(fmt::format_string<Args...> format,
                    Args &&...args) noexcept {}
 
+#endif
+
 template <typename... Args>
 void Logger::info(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  if (current_level > LogLevel::Info)
+    return;
+  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Info);
+}
+
+template <typename... Args>
+void Logger::warn(fmt::format_string<Args...> format, Args &&...args) noexcept {
+  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Warn);
 }
 
 template <typename... Args>
 void Logger::error(fmt::format_string<Args...> format,
-                   Args &&...args) noexcept {}
-#endif
+                   Args &&...args) noexcept {
+  log(fmt::format(format, std::forward<Args>(args)...), LogLevel::Error);
+}
 
 } // namespace Core

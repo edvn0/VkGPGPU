@@ -1,6 +1,6 @@
-#include "Pipeline.hpp"
-
 #include "pch/vkgpgpu_pch.hpp"
+
+#include "Pipeline.hpp"
 
 #include "Device.hpp"
 #include "Filesystem.hpp"
@@ -104,13 +104,17 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   const auto &layouts = shader.get_descriptor_set_layouts();
   pipeline_layout_create_info.setLayoutCount = static_cast<u32>(layouts.size());
   pipeline_layout_create_info.pSetLayouts = layouts.data();
+  const auto &pc_ranges = shader.get_push_constant_ranges();
+  pipeline_layout_create_info.pushConstantRangeCount =
+      static_cast<u32>(pc_ranges.size());
+  pipeline_layout_create_info.pPushConstantRanges = pc_ranges.data();
 
   verify(vkCreatePipelineLayout(device.get_device(),
                                 &pipeline_layout_create_info, nullptr,
                                 &pipeline_layout),
          "vkCreatePipelineLayout", "Failed to create pipeline layout");
 
-  auto maybe_empty_pipeline_cache_data = try_load_pipeline_cache(name);
+  const auto maybe_empty_pipeline_cache_data = try_load_pipeline_cache(name);
   VkPipelineCacheCreateInfo pipeline_cache_create_info{};
   pipeline_cache_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -131,7 +135,7 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   shader_stage_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stage_create_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-  shader_stage_create_info.module = configuration.shader.get_shader_module();
+  shader_stage_create_info.module = shader.get_shader_module();
   shader_stage_create_info.pName = "main";
 
   compute_pipeline_create_info.stage = shader_stage_create_info;

@@ -1,6 +1,7 @@
 #include "pch/vkgpgpu_pch.hpp"
 
 #include "DynamicLibraryLoader.hpp"
+
 #include <memory>
 
 #ifdef _WIN32

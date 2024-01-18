@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 project(Reflection)
 
 set(SOURCES
+    include/reflection/ReflectionData.hpp
     include/reflection/Reflector.hpp
     src/reflection/Reflector.cpp
 )

@@ -10,10 +10,10 @@ namespace Core {
 auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer;
 auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &)
     -> DataBuffer;
-auto load_databuffer_from_file(FS::StringLike auto path) -> DataBuffer {
+auto load_databuffer_from_file(StringLike auto path) -> DataBuffer {
   return load_databuffer_from_file(path);
 }
-auto load_databuffer_from_file(FS::StringLike auto path, Extent<u32> &extent)
+auto load_databuffer_from_file(StringLike auto path, Extent<u32> &extent)
     -> DataBuffer {
   return load_databuffer_from_file(path, extent);
 }
