@@ -3,6 +3,7 @@
 #include "CommandBuffer.hpp"
 
 #include "Device.hpp"
+#include "Swapchain.hpp"
 #include "Verify.hpp"
 
 #include <array>
@@ -21,27 +22,17 @@ static constexpr auto timeout = std::numeric_limits<u64>::max();
 
 auto create_immediate(const Device &device, Queue::Type type)
     -> ImmediateCommandBuffer {
-  return ImmediateCommandBuffer(device, type);
+  CommandBufferProperties props{};
+  props.queue_type = type;
+  props.count = 1;
+  props.is_primary = true;
+  props.owned_by_swapchain = false;
+  return ImmediateCommandBuffer(device, props);
 }
 
 ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device,
-                                               Queue::Type type) {
-
-  const auto appropriate_commandbuffer_type = [&]() {
-    switch (type) {
-    case Queue::Type::Compute:
-      return CommandBuffer::Type::Compute;
-    case Queue::Type::Graphics:
-      return CommandBuffer::Type::Graphics;
-    case Queue::Type::Transfer:
-      return CommandBuffer::Type::Transfer;
-    default:
-      throw NoQueueTypeException(
-          fmt::format("Unknown queue type. Chosen was: {}", type));
-    }
-  }();
-  command_buffer =
-      make_scope<CommandBuffer>(device, appropriate_commandbuffer_type);
+                                               CommandBufferProperties props) {
+  command_buffer = make_scope<CommandBuffer>(device, props);
   command_buffer->begin(0);
 }
 
@@ -57,29 +48,22 @@ auto ImmediateCommandBuffer::get_command_buffer() const -> VkCommandBuffer {
   return command_buffer->get_command_buffer();
 }
 
-CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
-                             u32 input_frame_count)
-    : device(dev), frame_count(input_frame_count) {
-  switch (type) {
-  case Type::Compute:
-    queue_type = Queue::Type::Compute;
-    break;
-  case Type::Graphics:
-    queue_type = Queue::Type::Graphics;
-    break;
-  case Type::Transfer:
-    queue_type = Queue::Type::Transfer;
-    break;
-  default:
+CommandBuffer::CommandBuffer(const Device &dev, CommandBufferProperties props)
+    : device(dev), properties(props) {
+  if (properties.queue_type == Queue::Type::Unknown) {
     throw NoQueueTypeException("Unknown queue type");
   }
 
   supports_device_query =
-      device.check_support(Feature::DeviceQuery, queue_type);
+      props.record_stats &&
+      device.check_support(Feature::DeviceQuery, properties.queue_type);
+
+  command_buffers.resize(properties.count);
+  query_pools.resize(properties.count);
 
   VkCommandPoolCreateInfo pool_info{};
   pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  pool_info.queueFamilyIndex = device.get_family_index(Queue::Type::Compute);
+  pool_info.queueFamilyIndex = *device.get_family_index(properties.queue_type);
   pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
   verify(vkCreateCommandPool(device.get_device(), &pool_info, nullptr,
@@ -89,7 +73,8 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
   VkCommandBufferAllocateInfo alloc_info{};
   alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   alloc_info.commandPool = command_pool;
-  alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  alloc_info.level = properties.is_primary ? VK_COMMAND_BUFFER_LEVEL_PRIMARY
+                                           : VK_COMMAND_BUFFER_LEVEL_SECONDARY;
   alloc_info.commandBufferCount = static_cast<u32>(command_buffers.size());
 
   for (auto &command_buffer : command_buffers) {
@@ -102,7 +87,7 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
   fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (auto i = 0U; i < frame_count; ++i) {
+  for (auto i = 0U; i < properties.count; ++i) {
     verify(vkCreateFence(device.get_device(), &fence_info, nullptr,
                          &command_buffers[i].fence),
            "vkCreateFence", "Failed to create fence");
@@ -112,7 +97,7 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
   VkSemaphoreCreateInfo semaphore_info{};
   semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-  for (auto i = 0U; i < frame_count; ++i) {
+  for (auto i = 0U; i < properties.count; ++i) {
     verify(vkCreateSemaphore(device.get_device(), &semaphore_info, nullptr,
                              &command_buffers[i].finished_semaphore),
            "vkCreateSemaphore", "Failed to create semaphore");
@@ -120,8 +105,6 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBuffer::Type type,
 
   if (supports_device_query) {
     create_query_objects();
-  } else {
-    query_pools.fill(VK_NULL_HANDLE);
   }
 }
 
@@ -144,22 +127,31 @@ CommandBuffer::~CommandBuffer() {
   }
 }
 
+auto CommandBuffer::get_command_buffer() const -> VkCommandBuffer {
+  return active_frame->command_buffer;
+}
+
 auto CommandBuffer::begin(u32 provided_frame) -> void {
-  active_frame = &command_buffers.at(provided_frame);
-  active_pool = &query_pools.at(provided_frame);
 
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  begin(provided_frame, begin_info);
+}
 
-  verify(vkBeginCommandBuffer(active_frame->command_buffer, &begin_info),
+auto CommandBuffer::begin(u32 current_frame,
+                          VkCommandBufferBeginInfo &begin_info) -> void {
+  active_pool = &query_pools.at(current_frame);
+  active_frame = &command_buffers.at(current_frame);
+
+  verify(vkBeginCommandBuffer(get_command_buffer(), &begin_info),
          "vkBeginCommandBuffer", "Failed to begin recording command buffer");
   verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
                          timeout),
          "vkWaitForFences", "Failed to wait for fence");
   if (supports_device_query) {
-    vkCmdResetQueryPool(active_frame->command_buffer, *active_pool, 0, 2);
-    vkCmdWriteTimestamp(active_frame->command_buffer,
+    vkCmdResetQueryPool(get_command_buffer(), *active_pool, 0, 2);
+    vkCmdWriteTimestamp(get_command_buffer(),
                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, *active_pool, 0);
   }
 }
@@ -175,7 +167,10 @@ auto CommandBuffer::submit() -> void {
   // submit_info.pSignalSemaphores = &active_frame->finished_semaphore;
 
   submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = &active_frame->command_buffer;
+  std::array<VkCommandBuffer, 1> relevant_buffers{get_command_buffer()};
+  submit_info.pCommandBuffers = relevant_buffers.data();
+
+  auto relevant_queue = get_preferred_queue();
 
   verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
                          timeout),
@@ -183,8 +178,7 @@ auto CommandBuffer::submit() -> void {
   verify(vkResetFences(device.get_device(), 1, &active_frame->fence),
          "vkResetFences", "Failed to reset fence");
 
-  verify(vkQueueSubmit(device.get_queue(Queue::Type::Compute), 1, &submit_info,
-                       active_frame->fence),
+  verify(vkQueueSubmit(relevant_queue, 1, &submit_info, active_frame->fence),
          "vkQueueSubmit", "Failed to submit queue");
   verify(vkWaitForFences(device.get_device(), 1, &active_frame->fence, VK_TRUE,
                          timeout),
@@ -203,7 +197,7 @@ auto CommandBuffer::submit() -> void {
     };
     floating time_taken_seconds = (convert_to_floating(timestamps[1]) -
                                    convert_to_floating(timestamps[0])) *
-                                  timestamp_period * 1e-9;
+                                  timestamp_period * 1.0e-9F;
     const auto times_in_ms = time_taken_seconds * 1000.0;
 
     // info("Time taken: {}ms", times_in_ms);
@@ -212,11 +206,11 @@ auto CommandBuffer::submit() -> void {
 
 auto CommandBuffer::end() -> void {
   if (supports_device_query) {
-    vkCmdWriteTimestamp(active_frame->command_buffer,
+    vkCmdWriteTimestamp(get_command_buffer(),
                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, *active_pool, 1);
   }
 
-  verify(vkEndCommandBuffer(active_frame->command_buffer), "vkEndCommandBuffer",
+  verify(vkEndCommandBuffer(get_command_buffer()), "vkEndCommandBuffer",
          "Failed to record command buffer");
 }
 
@@ -231,7 +225,7 @@ void CommandBuffer::create_query_objects() {
   query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
   query_pool_info.queryCount = 2;
 
-  for (auto i = 0U; i < frame_count; ++i) {
+  for (auto i = 0U; i < properties.count; ++i) {
     verify(vkCreateQueryPool(device.get_device(), &query_pool_info, nullptr,
                              &query_pools[i]),
            "vkCreateQueryPool", "Failed to create query pool");
@@ -239,9 +233,25 @@ void CommandBuffer::create_query_objects() {
 }
 
 void CommandBuffer::destroy_query_objects() {
-  for (auto i = 0U; i < frame_count; ++i) {
+  for (auto i = 0U; i < properties.count; ++i) {
     vkDestroyQueryPool(device.get_device(), query_pools[i], nullptr);
   }
+}
+
+auto CommandBuffer::get_preferred_queue() const -> VkQueue {
+  return device.get_queue(properties.queue_type);
+}
+auto CommandBuffer::construct(const Device &dev, CommandBufferProperties props)
+    -> Scope<CommandBuffer> {
+  return make_scope<CommandBuffer>(dev, props);
+}
+
+SwapchainCommandBuffer::SwapchainCommandBuffer(const Swapchain &swapchain,
+                                               CommandBufferProperties props)
+    : CommandBuffer{swapchain.get_device(), props}, swapchain{&swapchain} {}
+
+auto SwapchainCommandBuffer::get_command_buffer() const -> VkCommandBuffer {
+  return swapchain->get_drawbuffer();
 }
 
 } // namespace Core

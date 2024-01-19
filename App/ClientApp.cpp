@@ -5,6 +5,7 @@
 #include "Material.hpp"
 
 #include <array>
+#include <imgui.h>
 #include <vulkan/vulkan_core.h>
 
 template <Core::Buffer::Type T>
@@ -163,8 +164,30 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       storage_buffer_set(*get_device()), timer(*get_messaging_client()){};
 
 auto ClientApp::on_update(floating ts) -> void {
+  static auto begin_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->StartFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
+  static auto end_renderdoc = [&]() {
+#if !defined(GPGPU_PIPELINE)
+    if (renderdoc != nullptr) {
+      renderdoc->EndFrameCapture(nullptr, nullptr);
+    }
+#endif
+  };
+
+  timer.begin();
+  begin_renderdoc();
+
   compute(ts);
   graphics(ts);
+
+  end_renderdoc();
+  timer.end();
 }
 
 void ClientApp::on_create() {
@@ -195,57 +218,38 @@ void ClientApp::on_destroy() {
 #endif
 }
 
-auto ClientApp::graphics(floating ts) -> void {}
+auto ClientApp::graphics(floating ts) -> void {
+  command_buffer->begin(frame());
+  dispatcher->set_command_buffer(command_buffer.get());
+  dispatcher->bind(*second_pipeline);
 
-void ClientApp::update_material_for_rendering(
-    FrameIndex frame_index, Material &material_for_update,
-    BufferSet<Buffer::Type::Uniform> *ubo_set,
-    BufferSet<Buffer::Type::Storage> *sbo_set) {
-  if (ubo_set != nullptr) {
-    auto write_descriptors =
-        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-            Config::frame_count, ubo_set, material_for_update);
-    if (sbo_set != nullptr) {
-      const auto &storage_buffer_write_sets =
-          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-              Config::frame_count, sbo_set, material_for_update);
+  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+  second_material->set("pc.kernelSize", kernel_size);
+  second_material->set("pc.halfSize", half_size);
+  second_material->set("pc.precomputedCenterValue", center_value);
+  second_material->set("input_image", *output_texture);
+  second_material->set("output_image", *texture);
+  update_material_for_rendering(FrameIndex{frame()}, *second_material,
+                                &uniform_buffer_set, &storage_buffer_set);
 
-      for (u32 frame = 0; frame < Config::frame_count; frame++) {
-        const auto &sbo_ws = storage_buffer_write_sets[frame];
-        const auto reserved_size =
-            write_descriptors[frame].size() + sbo_ws.size();
-        write_descriptors[frame].reserve(reserved_size);
-        write_descriptors[frame].insert(write_descriptors[frame].end(),
-                                        sbo_ws.begin(), sbo_ws.end());
-      }
-    }
-    material_for_update.update_for_rendering(frame_index, write_descriptors);
-  } else {
-    material_for_update.update_for_rendering(frame_index);
-  }
+  second_material->bind(*command_buffer, *second_pipeline, frame());
+
+  constexpr auto wg_size = 16UL;
+
+  // Number of groups in each dimension
+  constexpr auto dispatchX = 1024 / wg_size;
+  constexpr auto dispatchY = 1024 / wg_size;
+  dispatcher->push_constant(*second_pipeline, *second_material);
+  dispatcher->dispatch({
+      .group_count_x = dispatchX,
+      .group_count_y = dispatchY,
+      .group_count_z = 1,
+  });
+
+  command_buffer->end();
 }
 
 auto ClientApp::compute(floating ts) -> void {
-  static auto begin_renderdoc = [&]() {
-#if !defined(GPGPU_PIPELINE)
-    if (renderdoc != nullptr) {
-      renderdoc->StartFrameCapture(nullptr, nullptr);
-    }
-#endif
-  };
-
-  static auto end_renderdoc = [&]() {
-#if !defined(GPGPU_PIPELINE)
-    if (renderdoc != nullptr) {
-      renderdoc->EndFrameCapture(nullptr, nullptr);
-    }
-#endif
-  };
-
-  begin_renderdoc();
-
-  timer.begin();
-
   randomize_span_of_matrices(matrices);
   auto &input_buffer =
       storage_buffer_set.get(DescriptorBinding(0), frame(), DescriptorSet(0));
@@ -284,12 +288,8 @@ auto ClientApp::compute(floating ts) -> void {
                                 0.0F,
                                 0.0F,
                             });
-  dispatcher->bind(*pipeline);
+  pipeline->bind(*command_buffer);
   material->bind(*command_buffer, *pipeline, frame());
-  // Bind descriptor sets
-  // descriptor_map->bind(*command_buffer, frame(),
-  //                     pipeline->get_pipeline_layout());
-  // Dispatch
 
   constexpr auto wg_size = 16UL;
 
@@ -305,10 +305,6 @@ auto ClientApp::compute(floating ts) -> void {
   // End command buffer
   DebugMarker::end_region(command_buffer->get_command_buffer());
   command_buffer->end_and_submit();
-
-  end_renderdoc();
-
-  timer.end();
 }
 
 void ClientApp::perform() {
@@ -316,10 +312,9 @@ void ClientApp::perform() {
   output_texture = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
 
-  info("Created textures");
-  command_buffer =
-      make_scope<CommandBuffer>(*get_device(), CommandBuffer::Type::Compute);
-  info("Created command buffer");
+  command_buffer = CommandBuffer::construct(
+      *get_device(),
+      CommandBufferProperties{.queue_type = Queue::Type::Compute});
   randomize_span_of_matrices(matrices);
 
   static constexpr auto matrices_size =
@@ -328,26 +323,69 @@ void ClientApp::perform() {
   storage_buffer_set.create(matrices_size, SetBinding(0));
   storage_buffer_set.create(matrices_size, SetBinding(1));
   storage_buffer_set.create(matrices_size, SetBinding(2));
-  info("Created uniform buffer");
   uniform_buffer_set.create(4, SetBinding(3));
 
-  shader = make_scope<Shader>(*get_device(),
-                              FS::shader("LaplaceEdgeDetection.comp.spv"));
-  info("Created shader");
+  {
+    shader = Shader::construct(*get_device(),
+                               FS::shader("LaplaceEdgeDetection.comp.spv"));
 
-  material = Material::construct(*get_device(), *shader);
-  info("Created material");
-  pipeline = make_scope<Pipeline>(*get_device(), PipelineConfiguration{
-                                                     "LaplaceEdgeDetection",
-                                                     PipelineStage::Compute,
-                                                     *shader,
-                                                 });
+    material = Material::construct(*get_device(), *shader);
+    pipeline = make_scope<Pipeline>(*get_device(), PipelineConfiguration{
+                                                       "LaplaceEdgeDetection",
+                                                       PipelineStage::Compute,
+                                                       *shader,
+                                                   });
+    auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+    material->set("pc.kernelSize", kernel_size);
+    material->set("pc.halfSize", half_size);
+    material->set("pc.precomputedCenterValue", center_value);
+  }
+  {
+    second_shader = Shader::construct(
+        *get_device(), FS::shader("LaplaceEdgeDetection_Second.comp.spv"));
+
+    second_material = Material::construct(*get_device(), *second_shader);
+    second_pipeline =
+        make_scope<Pipeline>(*get_device(), PipelineConfiguration{
+                                                "LaplaceEdgeDetection_Second",
+                                                PipelineStage::Compute,
+                                                *second_shader,
+                                            });
+    auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+    second_material->set("pc.kernelSize", kernel_size);
+    second_material->set("pc.halfSize", half_size);
+    second_material->set("pc.precomputedCenterValue", center_value);
+  }
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
-  info("Created dispatcher, material, shader and pipeline.");
-
-  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
-  material->set("pc.kernelSize", kernel_size);
-  material->set("pc.halfSize", half_size);
-  material->set("pc.precomputedCenterValue", center_value);
 }
+
+void ClientApp::update_material_for_rendering(
+    FrameIndex frame_index, Material &material_for_update,
+    BufferSet<Buffer::Type::Uniform> *ubo_set,
+    BufferSet<Buffer::Type::Storage> *sbo_set) {
+  if (ubo_set != nullptr) {
+    auto write_descriptors =
+        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
+            Config::frame_count, ubo_set, material_for_update);
+    if (sbo_set != nullptr) {
+      const auto &storage_buffer_write_sets =
+          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
+              Config::frame_count, sbo_set, material_for_update);
+
+      for (u32 frame = 0; frame < Config::frame_count; frame++) {
+        const auto &sbo_ws = storage_buffer_write_sets[frame];
+        const auto reserved_size =
+            write_descriptors[frame].size() + sbo_ws.size();
+        write_descriptors[frame].reserve(reserved_size);
+        write_descriptors[frame].insert(write_descriptors[frame].end(),
+                                        sbo_ws.begin(), sbo_ws.end());
+      }
+    }
+    material_for_update.update_for_rendering(frame_index, write_descriptors);
+  } else {
+    material_for_update.update_for_rendering(frame_index);
+  }
+}
+
+void ClientApp::on_interface(InterfaceSystem &) { ImGui::ShowDemoWindow(); }

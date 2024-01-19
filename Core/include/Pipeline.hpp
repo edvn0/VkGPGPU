@@ -41,7 +41,7 @@ public:
     return pipeline_cache;
   }
 
-  auto bind(CommandBuffer &) -> void;
+  auto bind(const CommandBuffer &) -> void;
 
 private:
   auto construct_pipeline(const PipelineConfiguration &configuration) -> void;

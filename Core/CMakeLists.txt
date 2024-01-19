@@ -24,10 +24,13 @@ set(SOURCES
     include/Material.hpp
     include/Pipeline.hpp
     include/Shader.hpp
+    include/Swapchain.hpp
+    include/InterfaceSystem.hpp
     include/Texture.hpp
     include/Timer.hpp
     include/Types.hpp
     include/Verify.hpp
+    include/Window.hpp
     include/pch/vkgpgpu_pch.hpp
     inline/Logger.inl
     src/Allocator.cpp
@@ -45,15 +48,18 @@ set(SOURCES
     src/Logger.cpp
     src/Material.cpp
     src/Pipeline.cpp
+    src/InterfaceSystem.cpp
     src/Shader.cpp
+    src/Swapchain.cpp
     src/Timer.cpp
     src/Texture.cpp
     src/Verify.cpp
+    src/Window.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
 target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
-target_link_libraries(Core PUBLIC Platform fmt::fmt Reflection Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
+target_link_libraries(Core PUBLIC Platform Reflection imgui glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

@@ -7,22 +7,82 @@
 #include "Types.hpp"
 #include "Verify.hpp"
 
+#include <GLFW/glfw3.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <vector>
 
 namespace Core {
 
-Instance::Instance() { construct_vulkan_instance(); }
+VkResult create_debug_utils_messenger_ext(
+    VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDebugUtilsMessengerEXT *pDebugMessenger) {
+  auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+      instance, "vkCreateDebugUtilsMessengerEXT");
+  if (func != nullptr) {
+    return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+  } else {
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
+  }
+}
+
+void destroy_debug_utils_messenger_ext(
+    VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+    const VkAllocationCallbacks *pAllocator) {
+  auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+      instance, "vkDestroyDebugUtilsMessengerEXT");
+  if (func != nullptr) {
+    func(instance, debugMessenger, pAllocator);
+  }
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *) {
+  if (message_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+    error("Validation layer: {}", callback_data->pMessage);
+  } else if (message_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+    info("Validation layer: {}", callback_data->pMessage);
+  } else if (message_severity >=
+             VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+    debug("Validation layer: {}", callback_data->pMessage);
+  }
+
+  return VK_FALSE;
+}
+
+void populateDebugMessengerCreateInfo(
+    VkDebugUtilsMessengerCreateInfoEXT &createInfo) {
+  createInfo = {};
+  createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+  createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  createInfo.pfnUserCallback = debug_callback;
+}
+
+Instance::Instance(bool headless) { construct_vulkan_instance(headless); }
 
 Instance::~Instance() {
+  if (enable_validation_layers) {
+    destroy_debug_utils_messenger_ext(instance, debug_messenger, nullptr);
+    info("Destroyed Debug Messenger!");
+  }
+
   vkDestroyInstance(instance, nullptr);
   info("Destroyed Instance!");
 }
 
-auto Instance::construct() -> Scope<Instance> { return make_scope<Instance>(); }
+auto Instance::construct(bool headless) -> Scope<Instance> {
+  return Scope<Instance>{new Instance{headless}};
+}
 
-auto Instance::construct_vulkan_instance() -> void {
+auto Instance::construct_vulkan_instance(bool headless) -> void {
   VkApplicationInfo application_info{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pNext = nullptr,
@@ -35,12 +95,28 @@ auto Instance::construct_vulkan_instance() -> void {
 
   // Add layers and extensions as needed
   std::vector<const char *> enabled_layers = {};
-  if (Environment::get("ENABLE_VALIDATION_LAYERS")) {
+  enable_validation_layers =
+      Environment::get("ENABLE_VALIDATION_LAYERS").has_value();
+  if (enable_validation_layers) {
     enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
   }
 
-  std::vector<const char *> enabled_extensions = {};
+  std::vector<const char *> enabled_extensions = {
+      VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+  if (!headless) {
+    if (!glfwInit()) {
+      error("Failed to initialize GLFW");
+      throw std::runtime_error("Failed to initialize GLFW");
+    }
 
+    u32 count;
+    glfwGetRequiredInstanceExtensions(&count);
+    const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&count);
+
+    for (u32 i = 0; i < count; ++i) {
+      enabled_extensions.push_back(glfw_extensions[i]);
+    }
+  }
   VkInstanceCreateInfo create_info{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
@@ -51,6 +127,12 @@ auto Instance::construct_vulkan_instance() -> void {
           static_cast<std::uint32_t>(enabled_extensions.size()),
       .ppEnabledExtensionNames = enabled_extensions.data(),
   };
+  VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
+  if (enable_validation_layers) {
+    populateDebugMessengerCreateInfo(debug_create_info);
+    create_info.pNext =
+        (VkDebugUtilsMessengerCreateInfoEXT *)&debug_create_info;
+  }
 
   verify(vkCreateInstance(&create_info, nullptr, &instance), "vkCreateInstance",
          "Failed to create Vulkan instance");
@@ -60,6 +142,21 @@ auto Instance::construct_vulkan_instance() -> void {
        "[{}]",
        enabled_layers.size(), fmt::join(enabled_layers, ", "),
        enabled_extensions.size(), fmt::join(enabled_extensions, ", "));
+
+  setup_debug_messenger();
+}
+
+auto Instance::setup_debug_messenger() -> void {
+  if (!enable_validation_layers)
+    return;
+
+  VkDebugUtilsMessengerCreateInfoEXT createInfo;
+  populateDebugMessengerCreateInfo(createInfo);
+
+  verify(create_debug_utils_messenger_ext(instance, &createInfo, nullptr,
+                                          &debug_messenger),
+         "create_debug_utils_messenger_ext",
+         "Failed to set up debug messenger!");
 }
 
 } // namespace Core

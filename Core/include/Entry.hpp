@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
   Environment::initialize(keys);
 
   ApplicationProperties props{
-      .headless = true,
+      .headless = false,
   };
 
   {

@@ -42,10 +42,11 @@ auto read_file(const std::filesystem::path &path) -> std::string {
   return buffer.str();
 }
 
-Shader::Shader(const Device &dev, const std::filesystem::path &path)
-    : device(dev), name(path.stem().string()) {
-  parsed_spirv_per_stage[Type::Compute] = read_file(path);
-  const auto &shader_code = parsed_spirv_per_stage.at(Type::Compute);
+Shader::Shader(const Device &dev, const std::filesystem::path &path,
+               Type chosen)
+    : device(dev), name(path.stem().string()), type(chosen) {
+  parsed_spirv_per_stage[type] = read_file(path);
+  const auto &shader_code = parsed_spirv_per_stage.at(type);
   VkShaderModuleCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   create_info.codeSize = shader_code.size();
@@ -72,8 +73,7 @@ Shader::~Shader() {
 
 auto Shader::hash() const -> usize {
   static constexpr std::hash<std::string> string_hasher;
-  return string_hasher(name) ^
-         string_hasher(parsed_spirv_per_stage.at(Type::Compute));
+  return string_hasher(name) ^ string_hasher(parsed_spirv_per_stage.at(type));
 }
 
 auto Shader::has_descriptor_set(u32 set) const -> bool {
@@ -319,6 +319,36 @@ void Shader::create_push_constant_ranges() {
     push_constant_range.size = size;
     push_constant_ranges.push_back(push_constant_range);
   }
+}
+auto Shader::construct(const Device &device, const std::filesystem::path &path)
+    -> Scope<Shader> {
+  Shader::Type from_extension;
+  // Path can end in .spv, since it is compiled. The naming scheme is
+  // filename.vert.spv, filename.frag.spv or filename.comp.spv
+  if (path.extension() != ".spv") {
+    error("Shader file {} does not have the .spv extension!", path.string());
+    throw FileCouldNotBeOpened("Shader file " + path.string() +
+                               " does not have the .spv extension!");
+  }
+
+  auto remove_extension = path;
+  remove_extension.replace_extension();
+
+  if (remove_extension.extension() == ".vert") {
+    from_extension = Shader::Type::Vertex;
+  } else if (remove_extension.extension() == ".frag") {
+    from_extension = Shader::Type::Fragment;
+  } else if (remove_extension.extension() == ".comp") {
+    from_extension = Shader::Type::Compute;
+  } else {
+    error("Shader file {} does not have the .vert, .frag or .comp extension!",
+          path.string());
+    throw FileCouldNotBeOpened(
+        "Shader file " + path.string() +
+        " does not have the .vert, .frag or .comp extension!");
+  }
+
+  return Scope<Shader>{new Shader{device, path, from_extension}};
 }
 
 } // namespace Core

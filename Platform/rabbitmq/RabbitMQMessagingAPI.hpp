@@ -1,11 +1,13 @@
+#include <utility>
+
 #include "bus/IMessagingAPI.hpp"
 
 namespace Platform::RabbitMQ {
 
 class RabbitMQMessagingAPI : public Core::Bus::IMessagingAPI {
 public:
-  RabbitMQMessagingAPI(const std::string &hostname, Core::i32 portid)
-      : host(hostname), port(portid) {}
+  RabbitMQMessagingAPI(std::string hostname, Core::i32 portid)
+      : host(std::move(hostname)), port(portid) {}
 
   void connect() override;
   void publish_message(const std::string &queue_name,

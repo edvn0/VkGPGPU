@@ -10,5 +10,6 @@ else()
 endif()
 
 add_library(Platform STATIC ${SOURCES})
+target_link_libraries(Platform PUBLIC fmt::fmt PRIVATE Core)
 
 target_include_directories(Platform PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include)

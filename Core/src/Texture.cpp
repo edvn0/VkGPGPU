@@ -1,3 +1,5 @@
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "Texture.hpp"
 
 #include "DataBuffer.hpp"
@@ -38,7 +40,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created Texture!, extent: {}", extent);
+  info("Created texture {} extent: {}", this->texture_filename, extent);
 }
 
 Texture::Texture(const Device &dev, const FS::Path &path)
@@ -63,7 +65,7 @@ Texture::Texture(const Device &dev, const FS::Path &path)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created Texture!, extent: {}", extent);
+  info("Created texture {} extent: {}", this->texture_filename, extent);
 }
 
 auto Texture::hash() const -> usize {

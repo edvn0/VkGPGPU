@@ -7,6 +7,8 @@
 #include <array>
 #include <vulkan/vulkan.h>
 
+#include "core/Forward.hpp"
+
 namespace Core {
 
 class CommandBuffer;
@@ -18,9 +20,18 @@ concept CommandBufferBindable =
       object.bind(command_buffer);
     };
 
+struct CommandBufferProperties {
+  Queue::Type queue_type{Queue::Type::Graphics};
+  u32 count{Config::frame_count};
+  bool is_primary{true};
+  bool owned_by_swapchain{false};
+  bool record_stats{false};
+};
+
 class ImmediateCommandBuffer {
 public:
-  explicit ImmediateCommandBuffer(const Device &device, Queue::Type);
+  explicit ImmediateCommandBuffer(const Device &device,
+                                  CommandBufferProperties);
   ~ImmediateCommandBuffer();
 
   [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer;
@@ -32,30 +43,34 @@ private:
   auto submit_and_end() -> void;
 };
 
-auto create_immediate(const Device &device, Queue::Type = Queue::Type::Graphics)
+auto create_immediate(const Device &device, Queue::Type queue_type)
     -> ImmediateCommandBuffer;
 
 class CommandBuffer {
 public:
   enum class Type : u8 { Compute, Graphics, Transfer };
 
-  explicit CommandBuffer(const Device &, Type type, u32 = Config::frame_count);
+  explicit CommandBuffer(const Device &, CommandBufferProperties props);
   ~CommandBuffer();
 
   auto begin(u32 current_frame) -> void;
+  auto begin(u32 current_frame, VkCommandBufferBeginInfo &) -> void;
+
   auto end() -> void;
   auto end_and_submit() -> void;
 
-  [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer {
-    return active_frame->command_buffer;
-  }
+  [[nodiscard]] virtual auto get_command_buffer() const -> VkCommandBuffer;
+  [[nodiscard]] auto get_preferred_queue() const -> VkQueue;
 
   template <class T> void bind(T &object) { object.bind(*this); }
+
+  static auto construct(const Device &, CommandBufferProperties)
+      -> Scope<CommandBuffer>;
 
 private:
   auto submit() -> void;
   const Device &device;
-  u32 frame_count{Config::frame_count};
+  CommandBufferProperties properties{};
   bool supports_device_query{false};
 
   struct FrameCommandBuffer {
@@ -65,15 +80,24 @@ private:
   };
   FrameCommandBuffer *active_frame{nullptr};
   VkQueryPool *active_pool{nullptr};
-  std::array<FrameCommandBuffer, Config::frame_count> command_buffers{};
+  std::vector<FrameCommandBuffer> command_buffers{};
 
-  Queue::Type queue_type{Queue::Type::Unknown};
   VkCommandPool command_pool{};
 
-  std::array<VkQueryPool, Config::frame_count> query_pools{};
+  std::vector<VkQueryPool> query_pools{};
 
   void create_query_objects();
   void destroy_query_objects();
+};
+
+class SwapchainCommandBuffer : public CommandBuffer {
+public:
+  SwapchainCommandBuffer(const Swapchain &swapchain, CommandBufferProperties);
+
+  [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer override;
+
+private:
+  const Swapchain *swapchain{nullptr};
 };
 
 } // namespace Core

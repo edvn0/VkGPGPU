@@ -19,15 +19,14 @@ public:
     Fragment,
   };
 
-  explicit Shader(const Device &device, const std::filesystem::path &path);
   ~Shader();
 
   [[nodiscard]] auto get_shader_module() const -> VkShaderModule {
     return shader_module;
   }
 
-  [[nodiscard]] auto get_code(Type type = Type::Compute) const -> const auto & {
-    return parsed_spirv_per_stage.at(type);
+  [[nodiscard]] auto get_code(Type t = Type::Compute) const -> const auto & {
+    return parsed_spirv_per_stage.at(t);
   }
 
   [[nodiscard]] auto get_descriptor_set_layouts() const -> const auto & {
@@ -43,18 +42,25 @@ public:
     return reflection_data;
   }
 
-  auto allocate_descriptor_set(u32 set) const
+  [[nodiscard]] auto allocate_descriptor_set(u32 set) const
       -> Reflection::MaterialDescriptorSet;
-  auto get_descriptor_set(std::string_view descriptor_name,
-                          std::uint32_t set) const
+  [[nodiscard]] auto get_descriptor_set(std::string_view descriptor_name,
+                                        std::uint32_t set) const
       -> const VkWriteDescriptorSet *;
 
-  auto hash() const -> usize;
-  auto has_descriptor_set(u32 set) const -> bool;
+  [[nodiscard]] auto hash() const -> usize;
+  [[nodiscard]] auto has_descriptor_set(u32 set) const -> bool;
+
+  static auto construct(const Device &device, const std::filesystem::path &path)
+      -> Scope<Shader>;
 
 private:
+  explicit Shader(const Device &device, const std::filesystem::path &path,
+                  Type);
+
   const Device &device;
   std::string name{};
+  Type type;
   VkShaderModule shader_module{};
   Reflection::ReflectionData reflection_data{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};

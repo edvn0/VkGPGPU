@@ -87,7 +87,7 @@ auto Pipeline::try_load_pipeline_cache(const std::string &pipeline_name)
   return {};
 }
 
-auto Pipeline::bind(CommandBuffer &command_buffer) -> void {
+auto Pipeline::bind(const CommandBuffer &command_buffer) -> void {
   vkCmdBindPipeline(command_buffer.get_command_buffer(),
                     static_cast<VkPipelineBindPoint>(PipelineStage::Compute),
                     pipeline);

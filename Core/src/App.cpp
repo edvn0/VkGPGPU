@@ -6,6 +6,7 @@
 #include "Config.hpp"
 #include "DescriptorResource.hpp"
 #include "Formatters.hpp"
+#include "InterfaceSystem.hpp"
 #include "Logger.hpp"
 
 #include <cstddef>
@@ -62,81 +63,103 @@ namespace Core {
 
 App::App(const ApplicationProperties &props) : properties(props) {
   // Initialize the instance
-  instance = Instance::construct();
-
-  // Initialize the device
-  device = Device::construct(*instance);
+  instance = Instance::construct(props.headless);
 
   const auto hostname = "localhost";
   const auto port = 5672;
   message_client = make_scope<Bus::MessagingClient>(
       make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
 
+  Extent<u32> extent{1280, 720};
+
+  window = Window::construct(*instance, {
+                                            .extent = extent,
+                                            .fullscreen = false,
+                                            .vsync = false,
+                                            .headless = properties.headless,
+                                        });
+  // Initialize the device
+  device = Device::construct(*instance, *window);
+
+  swapchain = Swapchain::construct(*device, *window,
+                                   {
+                                       .extent = extent,
+                                       .headless = properties.headless,
+                                   });
   Allocator::construct(*device, *instance);
 }
 
 App::~App() {
   Allocator::destroy();
+  swapchain.reset();
+  window.reset();
   device.reset();
   instance.reset();
 }
 
-auto App::frame() const -> u32 { return current_frame; }
+auto App::frame() const -> u32 { return swapchain->current_frame(); }
 
 auto App::run() -> void {
   static constexpr auto now = [] {
     return std::chrono::high_resolution_clock::now();
   };
 
+  Scope<InterfaceSystem> interface_system =
+      make_scope<InterfaceSystem>(*device, *window, *swapchain);
+
   try {
-    FPSAverage<1000> fps_average; // Object for tracking the frames per second.
-    on_create();                  // Initialize your application.
+    FPSAverage<1000> fps_average;
+    on_create();
 
-    auto last_time = now();            // Record the starting time.
-    const auto total_time = last_time; // Store the total time of the app.
+    auto last_time = now();
+    const auto total_time = last_time;
 
-    // Main loop
-    while (running) {
-      device->get_descriptor_resource()->begin_frame(current_frame);
-      const auto current_time =
-          now(); // Get the current time at the start of the loop.
+    while (!window->should_close()) {
+      device->get_descriptor_resource()->begin_frame(
+          swapchain->current_frame());
+      const auto current_time = now();
 
-      // Calculate the time delta since the last frame.
       const auto delta_time_seconds =
           std::chrono::duration<floating>(current_time - last_time).count();
 
-      // Update the fps average.
       fps_average.update();
 
-      // Print the fps if needed.
       if (fps_average.should_print()) {
         fps_average.print();
       }
+      swapchain->begin_frame();
+      { on_update(delta_time_seconds); }
 
-      // Call the update function with the time delta.
-      on_update(delta_time_seconds);
+      {
+        interface_system->begin_frame();
+        on_interface(*interface_system);
+        interface_system->end_frame();
+      }
 
-      // Update the frame count.
-      current_frame = (current_frame + 1) % Config::frame_count;
+      swapchain->end_frame();
+      swapchain->present();
 
-      // Update the last_time to the current time after the frame update.
       last_time = current_time;
 
-      device->get_descriptor_resource()->end_frame();
       frame_counter++;
 
-#ifdef GPGPU_DEBUG
-      // We want to make sure that all of the destruction logic is working :^)
-      if (frame_counter > 5'000) {
+      window->update();
+      device->get_descriptor_resource()->end_frame();
+
+#ifndef GPGPU_RELEASE
+      // We want to make sure that all the destruction logic is working :^)
+      if (frame_counter > 2'000) {
         break;
       }
 #endif
     }
 
-    // Calculate and log the total runtime.
+    vkDeviceWaitIdle(device->get_device());
+
     info("Total time: {} seconds.",
          std::chrono::duration<floating>(now() - total_time).count());
-    on_destroy(); // Clean up resources.
+
+    on_destroy();
 
   } catch (const std::exception &exc) {
     error("Main loop exception: {}", exc);

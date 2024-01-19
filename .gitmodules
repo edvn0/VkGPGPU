@@ -13,3 +13,9 @@
 [submodule "ThirdParty/entt"]
 	path = ThirdParty/entt
 	url = git@github.com:skypjack/entt.git
+[submodule "ThirdParty/glfw"]
+	path = ThirdParty/glfw
+	url = git@github.com:glfw/glfw.git
+[submodule "ThirdParty/imgui"]
+	path = ThirdParty/imgui
+	url = git@github.com:ocornut/imgui.git
