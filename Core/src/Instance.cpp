@@ -90,7 +90,7 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
       .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
       .pEngineName = "No Engine",
       .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-      .apiVersion = VK_API_VERSION_1_0,
+      .apiVersion = VK_API_VERSION_1_3,
   };
 
   // Add layers and extensions as needed

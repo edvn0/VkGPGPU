@@ -5,8 +5,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "cppdbg",
-      "miDebuggerPath": "/home/edwinc/Builds/bin/lldb",
+      "type": "cppvsdbg",
       "request": "launch",
       "name": "Debug",
       "program": "${workspaceRoot}/build/App/App",

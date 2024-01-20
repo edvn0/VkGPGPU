@@ -16,6 +16,10 @@ template <std::integral T> struct Extent {
     return static_cast<floating>(width) / static_cast<floating>(height);
   }
 
+  [[nodiscard]] auto valid() const noexcept -> bool {
+    return width > 0 && height > 0;
+  }
+
   // Cast to another type Other, not the same as T
   template <std::integral Other>
     requires(!std::is_same_v<Other, T>)

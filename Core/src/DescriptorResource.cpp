@@ -69,8 +69,6 @@ void DescriptorResource::begin_frame(u32 frame) {
   current_frame = frame;
   // Cleanup or reset operations for the beginning of the frame
 
-  // TODO: This is obviously not what we want to do right now. We want to clear
-  // the pool, but we are not there yet!
   vkResetDescriptorPool(device->get_device(), descriptor_pools[current_frame],
                         0);
 }

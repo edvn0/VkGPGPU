@@ -22,9 +22,11 @@ class Swapchain {
 public:
   ~Swapchain();
 
-  auto begin_frame() -> void;
+  [[nodiscard]] auto begin_frame() -> bool;
   auto end_frame() -> void;
   auto present() -> void;
+
+  auto recreate(const Extent<u32> &, bool should_clean = false) -> void;
 
   [[nodiscard]] auto current_frame() const -> u32;
   [[nodiscard]] auto current_image() const -> u32;
@@ -77,6 +79,8 @@ private:
 
   u32 frame_index{0};
   u32 current_image_index{0};
+
+  auto destroy(bool) -> void;
 };
 
 } // namespace Core

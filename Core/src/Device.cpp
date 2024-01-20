@@ -56,7 +56,7 @@ auto Device::check_support(const Feature feature, Queue::Type queue) const
 
 auto Device::construct(const Instance &instance, const Window &window)
     -> Scope<Device> {
-  return make_scope<Device>(instance, window);
+  return Scope<Device>{new Device(instance, window)};
 }
 
 auto Device::enumerate_physical_devices(VkInstance inst)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Config.hpp"
+#include "Containers.hpp"
 #include "Device.hpp"
 #include "Types.hpp"
 
@@ -62,6 +63,10 @@ public:
   [[nodiscard]] virtual auto get_command_buffer() const -> VkCommandBuffer;
   [[nodiscard]] auto get_preferred_queue() const -> VkQueue;
 
+  [[nodiscard]] auto get_statistics() const -> std::tuple<floating> {
+    return compute_times.peek();
+  }
+
   template <class T> void bind(T &object) { object.bind(*this); }
 
   static auto construct(const Device &, CommandBufferProperties)
@@ -85,6 +90,8 @@ private:
   VkCommandPool command_pool{};
 
   std::vector<VkQueryPool> query_pools{};
+
+  Container::CircularBuffer<floating> compute_times;
 
   void create_query_objects();
   void destroy_query_objects();

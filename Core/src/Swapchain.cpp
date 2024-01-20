@@ -2,18 +2,22 @@
 
 #include "Swapchain.hpp"
 
-#include <Logger.hpp>
+#include "Logger.hpp"
 
 namespace Core {
 
 static constexpr auto min_image_count =
-    [](VkSurfaceCapabilitiesKHR &capabilities,
+    [](const VkSurfaceCapabilitiesKHR &capabilities,
        const SwapchainProperties &props) {
       if (capabilities.maxImageCount == 0) {
-        return std::max(props.image_count, capabilities.minImageCount);
+        const auto found_max =
+            std::max(props.image_count, capabilities.minImageCount);
+        return std::min(found_max, Config::frame_count);
       } else {
-        return std::clamp(props.image_count + 1, capabilities.minImageCount,
-                          capabilities.maxImageCount);
+        const auto found_max =
+            std::clamp(props.image_count + 1, capabilities.minImageCount,
+                       capabilities.maxImageCount);
+        return std::min(found_max, Config::frame_count);
       }
     };
 
@@ -21,7 +25,7 @@ static constexpr auto supported_and_preferred_format =
     [](const Device &device, VkSurfaceKHR surface) {
       const auto formats = device.get_physical_device_surface_formats(surface);
       for (const auto &format : formats) {
-        if (format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+        if (format.format == VK_FORMAT_B8G8R8A8_UNORM &&
             format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
           return format;
         }
@@ -44,7 +48,22 @@ static constexpr auto supported_and_preferred_present_mode =
 Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
                      const SwapchainProperties &props)
     : device(&dev), window(&win), properties(props) {
-  auto capabilities = [&] {
+  // Initialize Vulkan objects
+  recreate(window->get_extent(), false);
+}
+
+Swapchain::~Swapchain() { destroy(true); }
+
+auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
+  vkDeviceWaitIdle(device->get_device());
+
+  properties.extent = extent;
+
+  if (should_clean) {
+    destroy(false);
+  }
+
+  const auto capabilities = [&] {
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         device->get_physical_device(), window->get_surface(), &capabilities);
@@ -54,11 +73,11 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
   VkSwapchainCreateInfoKHR create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   create_info.surface = window->get_surface();
-  properties.image_count = min_image_count(capabilities, props);
+  const auto count = min_image_count(capabilities, properties);
   create_info.minImageCount = properties.image_count;
-  if (properties.image_count != props.image_count) {
+  if (properties.image_count != count) {
     warn("Requested image count of {} is not supported, using {} instead",
-         props.image_count, properties.image_count);
+         count, properties.image_count);
   }
 
   auto format_and_color_space =
@@ -66,7 +85,10 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
   surface_format = format_and_color_space;
   create_info.imageFormat = surface_format.format;
   create_info.imageColorSpace = surface_format.colorSpace;
-  create_info.imageExtent = {props.extent.width, props.extent.height};
+  create_info.imageExtent = {
+      extent.width,
+      extent.height,
+  };
   create_info.imageArrayLayers = 1;
   create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
   create_info.preTransform = capabilities.currentTransform;
@@ -74,7 +96,7 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
   create_info.presentMode =
       supported_and_preferred_present_mode(*device, window->get_surface());
   create_info.clipped = VK_TRUE;
-  create_info.oldSwapchain = VK_NULL_HANDLE;
+  create_info.oldSwapchain = swapchain == VK_NULL_HANDLE ? nullptr : swapchain;
   create_info.pQueueFamilyIndices = nullptr;
   create_info.queueFamilyIndexCount = 0;
   create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -84,15 +106,18 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
       device->get_family_index(Queue::Type::Present).value(),
   };
 
-#if 0
   if (queue_family_indices[0] != queue_family_indices[1]) {
     create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
     create_info.queueFamilyIndexCount =
         static_cast<u32>(queue_family_indices.size());
     create_info.pQueueFamilyIndices = queue_family_indices.data();
   }
-#endif
   vkCreateSwapchainKHR(device->get_device(), &create_info, nullptr, &swapchain);
+
+  if (create_info.oldSwapchain != VK_NULL_HANDLE) {
+    vkDestroySwapchainKHR(device->get_device(), create_info.oldSwapchain,
+                          nullptr);
+  }
 
   images = [&] {
     u32 count = 0;
@@ -173,7 +198,7 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
   // Render Pass
   VkAttachmentDescription colour_attachment_description = {};
   // Color attachment
-  colour_attachment_description.format = VK_FORMAT_B8G8R8A8_SRGB;
+  colour_attachment_description.format = format_and_color_space.format;
   colour_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
   colour_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   colour_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -225,16 +250,20 @@ Swapchain::Swapchain(const Core::Device &dev, const Core::Window &win,
     framebuffer_create_info.renderPass = renderpass;
     framebuffer_create_info.attachmentCount = 1;
     framebuffer_create_info.pAttachments = &image_views[i];
-    framebuffer_create_info.width = properties.extent.width;
-    framebuffer_create_info.height = properties.extent.height;
+    framebuffer_create_info.width = extent.width;
+    framebuffer_create_info.height = extent.height;
     framebuffer_create_info.layers = 1;
     vkCreateFramebuffer(device->get_device(), &framebuffer_create_info, nullptr,
                         &framebuffers[i]);
   }
+
+  vkDeviceWaitIdle(device->get_device());
 }
 
-Swapchain::~Swapchain() {
-  vkDestroySwapchainKHR(device->get_device(), swapchain, nullptr);
+auto Swapchain::destroy(bool destroy_swapchain) -> void {
+  if (destroy_swapchain) {
+    vkDestroySwapchainKHR(device->get_device(), swapchain, nullptr);
+  }
 
   for (const auto &image_view : image_views) {
     vkDestroyImageView(device->get_device(), image_view, nullptr);
@@ -259,30 +288,46 @@ Swapchain::~Swapchain() {
                        nullptr);
   }
 
+  for (const auto &framebuffer : framebuffers) {
+    vkDestroyFramebuffer(device->get_device(), framebuffer, nullptr);
+  }
+
+  vkDestroyRenderPass(device->get_device(), renderpass, nullptr);
+
   info("Destroyed Swapchain!");
 }
 
-auto Swapchain::begin_frame() -> void {
+auto Swapchain::begin_frame() -> bool {
   verify(vkWaitForFences(device->get_device(), 1,
                          &render_finished_fences[current_frame()], VK_TRUE,
                          std::numeric_limits<u64>::max()),
-         "vkWaitForFences", "Failed to wait for fences"),
-      verify(vkResetFences(device->get_device(), 1,
-                           &render_finished_fences[current_frame()]),
-             "vkResetFences", "Failed to reset fences");
+         "vkWaitForFences", "Failed to wait for fences");
 
   u32 image_index;
   auto result =
-      vkAcquireNextImageKHR(device->get_device(), swapchain, 1'000'000,
+      vkAcquireNextImageKHR(device->get_device(), swapchain, UINT64_MAX,
                             image_available_semaphores[current_frame()],
                             VK_NULL_HANDLE, &image_index);
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    recreate(window->get_framebuffer_size(), true);
+    info("Recreation called from acquire");
+    return false;
+  } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    info("Result: {}", result);
+    throw std::runtime_error("failed to acquire swap chain image!");
+  }
+
+  verify(vkResetFences(device->get_device(), 1,
+                       &render_finished_fences[current_frame()]),
+         "vkResetFences", "Failed to reset fences");
+
   current_image_index = image_index;
-  info("Acquired image index {}. Actual frame is: {}", image_index,
-       current_frame());
 
   verify(vkResetCommandPool(device->get_device(),
                             command_buffers[current_frame()].command_pool, 0),
          "vkResetCommandPool", "Failed to reset command pool");
+  return true;
 }
 
 auto Swapchain::end_frame() -> void {
@@ -318,13 +363,19 @@ auto Swapchain::present() -> void {
   present_info.pSwapchains = &swapchain;
   present_info.pImageIndices = &current_image_index;
   present_info.pResults = nullptr;
-  const auto &present_queue = device->get_queue(Queue::Type::Present);
+  const auto &present_queue = device->get_queue(Queue::Type::Graphics);
   verify(vkWaitForFences(device->get_device(), 1,
                          &render_finished_fences[current_frame()], VK_TRUE,
                          UINT64_MAX),
          "vkWaitForFences", "Failed to wait for fences");
   auto result = vkQueuePresentKHR(present_queue, &present_info);
-  verify(result, "vkQueuePresentKHR", "Failed to present image");
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    recreate(window->get_framebuffer_size(), true);
+    info("Recreation called from present");
+  } else if (result != VK_SUCCESS) {
+    throw std::runtime_error("failed to present swap chain image!");
+  }
 
   frame_index = (frame_index + 1) % properties.image_count;
   verify(vkWaitForFences(device->get_device(), 1,
@@ -346,12 +397,17 @@ auto Swapchain::get_drawbuffer() const -> VkCommandBuffer {
 auto Swapchain::frame_count() const -> u32 { return properties.image_count; }
 
 auto Swapchain::get_device() const -> const Device & { return *device; }
+
 auto Swapchain::current_frame() const -> u32 { return frame_index; }
+
 auto Swapchain::current_image() const -> u32 { return current_image_index; }
+
 auto Swapchain::get_swapchain() const -> VkSwapchainKHR { return swapchain; }
+
 auto Swapchain::get_image_format() const -> VkSurfaceFormatKHR {
   return surface_format;
 }
+
 auto Swapchain::get_renderpass() const -> VkRenderPass { return renderpass; }
 
 } // namespace Core

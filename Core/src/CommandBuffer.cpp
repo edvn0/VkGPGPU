@@ -49,7 +49,7 @@ auto ImmediateCommandBuffer::get_command_buffer() const -> VkCommandBuffer {
 }
 
 CommandBuffer::CommandBuffer(const Device &dev, CommandBufferProperties props)
-    : device(dev), properties(props) {
+    : device(dev), properties(props), compute_times(200) {
   if (properties.queue_type == Queue::Type::Unknown) {
     throw NoQueueTypeException("Unknown queue type");
   }
@@ -200,7 +200,7 @@ auto CommandBuffer::submit() -> void {
                                   timestamp_period * 1.0e-9F;
     const auto times_in_ms = time_taken_seconds * 1000.0;
 
-    // info("Time taken: {}ms", times_in_ms);
+    compute_times.push(times_in_ms);
   }
 }
 
@@ -241,6 +241,7 @@ void CommandBuffer::destroy_query_objects() {
 auto CommandBuffer::get_preferred_queue() const -> VkQueue {
   return device.get_queue(properties.queue_type);
 }
+
 auto CommandBuffer::construct(const Device &dev, CommandBufferProperties props)
     -> Scope<CommandBuffer> {
   return make_scope<CommandBuffer>(dev, props);

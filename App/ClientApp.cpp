@@ -91,35 +91,6 @@ auto create_or_get_write_descriptor_for(std::uint32_t frames_in_flight,
                                    buffer_set, shader_hash);
 }
 
-#ifdef _WIN32
-static constexpr std::string_view renderdoc_dll_name = "renderdoc.dll";
-#else
-static constexpr std::string_view renderdoc_dll_name = "librenderdoc.so";
-#endif
-
-#if !defined(GPGPU_PIPELINE)
-auto get_renderdoc_api(auto &device, auto &loader) -> RENDERDOC_API_1_6_0 * {
-  DebugMarker::setup(device, device.get_physical_device());
-
-  if (!loader->is_valid()) {
-    info("Dynamic loader could not be constructed.");
-    return nullptr;
-  }
-
-  auto RENDERDOC_GetAPI =
-      std::bit_cast<pRENDERDOC_GetAPI>(loader->get_symbol("RENDERDOC_GetAPI"));
-  RENDERDOC_API_1_1_2 *rdoc_api = nullptr;
-
-  if (RENDERDOC_GetAPI &&
-      RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&rdoc_api) == 1) {
-    return rdoc_api;
-  }
-
-  info("Could not load symbols.");
-  return nullptr;
-}
-#endif
-
 auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
   static constexpr auto xy_to_index = [](Math::Mat4 &matrix, u64 x,
                                          u64 y) -> float & {
@@ -164,43 +135,15 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       storage_buffer_set(*get_device()), timer(*get_messaging_client()){};
 
 auto ClientApp::on_update(floating ts) -> void {
-  static auto begin_renderdoc = [&]() {
-#if !defined(GPGPU_PIPELINE)
-    if (renderdoc != nullptr) {
-      renderdoc->StartFrameCapture(nullptr, nullptr);
-    }
-#endif
-  };
-
-  static auto end_renderdoc = [&]() {
-#if !defined(GPGPU_PIPELINE)
-    if (renderdoc != nullptr) {
-      renderdoc->EndFrameCapture(nullptr, nullptr);
-    }
-#endif
-  };
-
   timer.begin();
-  begin_renderdoc();
 
   compute(ts);
   graphics(ts);
 
-  end_renderdoc();
   timer.end();
 }
 
-void ClientApp::on_create() {
-
-#if !defined(GPGPU_PIPELINE)
-  loader = DynamicLibraryLoader::construct(renderdoc_dll_name);
-  renderdoc = get_renderdoc_api(*get_device(), loader);
-  if (renderdoc != nullptr) {
-    renderdoc->SetCaptureTitle("Matrix Multiply");
-  }
-  perform();
-#endif
-}
+void ClientApp::on_create() { perform(); }
 
 void ClientApp::on_destroy() {
   // Destroy all fields
@@ -210,12 +153,6 @@ void ClientApp::on_destroy() {
   shader.reset();
   texture.reset();
   output_texture.reset();
-
-#if !defined(GPGPU_PIPELINE)
-  if (renderdoc != nullptr) {
-    renderdoc->RemoveHooks();
-  }
-#endif
 }
 
 auto ClientApp::graphics(floating ts) -> void {
@@ -246,7 +183,7 @@ auto ClientApp::graphics(floating ts) -> void {
       .group_count_z = 1,
   });
 
-  command_buffer->end();
+  command_buffer->end_and_submit();
 }
 
 auto ClientApp::compute(floating ts) -> void {
@@ -313,8 +250,10 @@ void ClientApp::perform() {
       *get_device(), texture->size_bytes(), texture->get_extent());
 
   command_buffer = CommandBuffer::construct(
-      *get_device(),
-      CommandBufferProperties{.queue_type = Queue::Type::Compute});
+      *get_device(), CommandBufferProperties{
+                         .queue_type = Queue::Type::Compute,
+                         .record_stats = true,
+                     });
   randomize_span_of_matrices(matrices);
 
   static constexpr auto matrices_size =
@@ -351,7 +290,7 @@ void ClientApp::perform() {
                                                 PipelineStage::Compute,
                                                 *second_shader,
                                             });
-    auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
+    auto &&[kernel_size, half_size, center_value] = compute_kernel_size<127>();
     second_material->set("pc.kernelSize", kernel_size);
     second_material->set("pc.halfSize", half_size);
     second_material->set("pc.precomputedCenterValue", center_value);
@@ -388,4 +327,84 @@ void ClientApp::update_material_for_rendering(
   }
 }
 
-void ClientApp::on_interface(InterfaceSystem &) { ImGui::ShowDemoWindow(); }
+void ClientApp::on_interface(InterfaceSystem &) {
+  /*
+    // Create a fullscreen window for the dockspace
+    ImGuiWindowFlags window_flags =
+        ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->Pos);
+    ImGui::SetNextWindowSize(viewport->Size);
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+    window_flags &= ~ImGuiWindowFlags_MenuBar;
+
+    // Create the window that will contain the dockspace
+    ImGui::Begin("DockSpace Demo", nullptr, window_flags);
+    ImGui::PopStyleVar(3);
+
+    // DockSpace
+    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+  */
+  // Here you can add your own windows, for example:
+  ImGui::Begin("FPS / Frametime");
+
+  static constexpr auto draw_stats =
+      [](const auto &average,
+         const auto &command_buffer_with_compute_stats_available) {
+        // Retrieve statistics from the timer and command buffer
+        auto &&[frametime, fps] = average.get_statistics();
+        auto &&[compute_times] =
+            command_buffer_with_compute_stats_available.get_statistics();
+
+        // Start a new ImGui table
+        if (ImGui::BeginTable("StatsTable", 2)) {
+          // Set up column headers
+          ImGui::TableSetupColumn("Statistic");
+          ImGui::TableSetupColumn("Value");
+          ImGui::TableHeadersRow();
+
+          // Row for frametime
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          ImGui::Text("Frametime");
+          ImGui::TableSetColumnIndex(1);
+          ImGui::Text("%f ms", frametime);
+
+          // Row for FPS
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          ImGui::Text("FPS");
+          ImGui::TableSetColumnIndex(1);
+          ImGui::Text("%f", fps);
+
+          // Row for Compute Time
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          ImGui::Text("Compute Time");
+          ImGui::TableSetColumnIndex(1);
+          ImGui::Text("%f ms", compute_times);
+
+          // End the table
+          ImGui::EndTable();
+        }
+      };
+
+  draw_stats(get_timer(), *command_buffer);
+
+  ImGui::End();
+  /*
+    // Show the demo window (you can remove this once you're familiar with Dear
+    // ImGui)
+    ImGui::ShowDemoWindow();
+
+    // End the dockspace window
+    ImGui::End();
+    */
+}

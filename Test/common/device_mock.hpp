@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Device.hpp"
+#include "Instance.hpp"
+#include "Window.hpp"
 
 class MockDevice : public Core::Device {
 public:
-  using Core::Device::Device;
+  MockDevice(const Core::Instance &instance, const Core::Window &window)
+      : Core::Device(instance, window) {}
   ~MockDevice() override = default;
 };

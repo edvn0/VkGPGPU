@@ -14,8 +14,10 @@ public:
 
   static auto construct(bool) -> Scope<Instance>;
 
-private:
+protected:
   explicit Instance(bool);
+
+private:
   VkInstance instance{nullptr};
   VkDebugUtilsMessengerEXT debug_messenger{nullptr};
 

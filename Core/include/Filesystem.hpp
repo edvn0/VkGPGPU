@@ -24,6 +24,16 @@ auto resolve(StringLike auto path) -> std::filesystem::path {
   return std::filesystem::absolute(path);
 }
 
+inline auto font_directory() { return std::filesystem::path("fonts"); }
+auto font(StringLike auto path, bool resolve = true) {
+  const auto output = font_directory() / path;
+  if (resolve) {
+    return std::filesystem::absolute(output);
+  } else {
+    return output;
+  }
+}
+
 auto shader(StringLike auto path, bool resolve = true)
     -> std::filesystem::path {
   const auto output = std::filesystem::path("shaders") / path;

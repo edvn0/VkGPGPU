@@ -14,7 +14,7 @@ public:
   VulkanResultException(VkResult result, const std::string &message)
       : BaseException(message), vulkan_result(result) {}
 
-  VkResult getResult() const { return vulkan_result; }
+  [[nodiscard]] auto get_result() const { return vulkan_result; }
 
 private:
   VkResult vulkan_result;

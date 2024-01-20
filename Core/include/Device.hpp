@@ -31,7 +31,6 @@ enum class Feature : u8 {
 
 class Device {
 public:
-  explicit Device(const Instance &, const Window &);
   virtual ~Device();
 
   auto get_device() const -> VkDevice { return device; }
@@ -72,6 +71,9 @@ public:
 
   static auto construct(const Instance &, const Window &) -> Scope<Device>;
 
+protected:
+  explicit Device(const Instance &, const Window &);
+
 private:
   const Instance &instance;
   VkDevice device{nullptr};
@@ -108,5 +110,10 @@ private:
 
 template <> struct fmt::formatter<Core::Queue::Type> : formatter<const char *> {
   auto format(const Core::Queue::Type &type, format_context &ctx) const
+      -> decltype(ctx.out());
+};
+
+template <> struct fmt::formatter<VkResult> : formatter<const char *> {
+  auto format(const VkResult &type, format_context &ctx) const
       -> decltype(ctx.out());
 };

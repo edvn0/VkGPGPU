@@ -27,10 +27,6 @@
 
 #include "bus/MessagingClient.hpp"
 
-#if !defined(GPGPU_PIPELINE)
-#include <renderdoc_app.h>
-#endif
-
 using namespace Core;
 
 class ClientApp : public App {
@@ -67,10 +63,6 @@ private:
   Scope<Texture> output_texture;
 
   std::array<Math::Mat4, 10> matrices{};
-
-#if !defined(GPGPU_PIPELINE)
-  RENDERDOC_API_1_6_0 *renderdoc{nullptr};
-#endif
 
   auto compute(floating ts) -> void;
   auto graphics(floating ts) -> void;

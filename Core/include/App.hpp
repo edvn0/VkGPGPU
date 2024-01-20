@@ -12,6 +12,57 @@
 
 namespace Core {
 
+template <Core::usize N = 10000> struct FPSAverage {
+  std::array<Core::floating, N> frame_times{};
+  Core::floating frame_time_sum = 0.0;
+  Core::usize frame_time_index = 0;
+  Core::usize frame_counter = 0;
+
+  std::chrono::high_resolution_clock::time_point last_time;
+  bool initialized = false;
+
+  auto update() -> void {
+    if (!initialized) {
+      last_time = std::chrono::high_resolution_clock::now();
+      initialized = true;
+      return;
+    }
+
+    const auto current_time = std::chrono::high_resolution_clock::now();
+    const auto delta_time_seconds =
+        std::chrono::duration<Core::floating>(current_time - last_time).count();
+    last_time = current_time;
+
+    // Update moving average for frame time
+    frame_time_sum -= frame_times[frame_time_index];
+    frame_times[frame_time_index] = delta_time_seconds;
+    frame_time_sum += delta_time_seconds;
+    frame_time_index = (frame_time_index + 1) % N;
+
+    // Increment frame counter
+    frame_counter++;
+  }
+
+  [[nodiscard]] auto should_print() const -> bool {
+    return (frame_counter + 1) % N == 0;
+  }
+
+  auto print() const -> void {
+    const auto avg_frame_time = frame_time_sum / N;
+    const auto fps = 1.0 / avg_frame_time;
+
+    // Log average frame time and FPS
+    info("Average Frame Time: {:.6f} ms, FPS: {:.0f}", avg_frame_time * 1000.0,
+         fps);
+  }
+
+  auto get_statistics() const {
+    const auto avg_frame_time = frame_time_sum;
+    const auto fps = 1.0 / avg_frame_time;
+    return std::tuple{avg_frame_time, fps};
+  }
+};
+
 class InterfaceSystem;
 
 struct ApplicationProperties {
@@ -53,6 +104,8 @@ protected:
 
   [[nodiscard]] auto get_frame_counter() const -> u64 { return frame_counter; }
 
+  [[nodiscard]] auto get_timer() const -> const auto & { return fps_average; };
+
 private:
   Scope<Instance> instance;
   Scope<Device> device;
@@ -60,10 +113,12 @@ private:
   Scope<Window> window;
   Scope<Swapchain> swapchain;
 
+  Extent<u32> extent{1280, 720};
+  FPSAverage<144> fps_average{};
+
   ApplicationProperties properties{};
 
   u64 frame_counter{0};
-  void interface_pass();
 };
 
 auto extern make_application(const ApplicationProperties &) -> Scope<App>;

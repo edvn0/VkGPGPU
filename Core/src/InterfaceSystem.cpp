@@ -53,18 +53,13 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
   ImGui::CreateContext();
 
   ImGuiIO &io = ImGui::GetIO();
-  (void)io;
   io.ConfigFlags |=
-      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-  // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad
-  // Controls
-  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
+      ImGuiConfigFlags_NavEnableKeyboard;           // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
   io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport /
                                                       // Platform Windows
-  // io.ConfigViewportsNoDecoration = false;
-  // io.ConfigViewportsNoAutoMerge = true;
-  // io.ConfigViewportsNoTaskBarIcon = true;
-
+  io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;
+  io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports;
   ImGui::StyleColorsDark();
 
   ImGuiStyle &style = ImGui::GetStyle();
@@ -93,10 +88,9 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 
   {
     FS::for_each_in_directory(
-        std::filesystem::path{"Assets/Fonts"},
+        FS::font_directory(),
         [&fonts = io.Fonts](const auto &entry) {
-          static constexpr auto font_sizes =
-              std::array{16.F, 15.F, 14.F, 13.F, 12.F, 11.F, 10.F, 9.F};
+          static constexpr auto font_sizes = std::array{12.F, 11.F};
           for (const auto &size : font_sizes) {
             fonts->AddFontFromFileTTF(entry.path().string().c_str(), size);
           }
@@ -117,10 +111,10 @@ auto InterfaceSystem::end_frame() -> void {
   ImGui::Render();
   static constexpr VkClearColorValue clear_colour{
       {
-          0.0F,
-          0.0F,
-          0.0F,
-          0.0F,
+          0.2F,
+          0.2F,
+          0.2F,
+          0.2F,
       },
   };
   static constexpr VkClearDepthStencilValue depth_stencil_clear{
@@ -176,12 +170,12 @@ auto InterfaceSystem::end_frame() -> void {
 
     const auto &command_buffer = command_executor->get_command_buffer();
     VkViewport viewport{};
-    viewport.x = 0.0F;
-    viewport.y = 0.0F;
-    viewport.height = static_cast<float>(height);
+    viewport.x = 0.0f;
+    viewport.y = static_cast<float>(height);
+    viewport.height = -static_cast<float>(height);
     viewport.width = static_cast<float>(width);
-    viewport.minDepth = 0.0F;
-    viewport.maxDepth = 1.0F;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
@@ -190,6 +184,10 @@ auto InterfaceSystem::end_frame() -> void {
     scissor.offset.x = 0;
     scissor.offset.y = 0;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+
+    ImDrawData *main_draw_data = ImGui::GetDrawData();
+    ImGui_ImplVulkan_RenderDrawData(main_draw_data,
+                                    command_executor->get_command_buffer());
 
     command_executor->end();
   }
@@ -200,10 +198,13 @@ auto InterfaceSystem::end_frame() -> void {
   DebugMarker::end_region(draw_command_buffer);
   vkCmdEndRenderPass(draw_command_buffer);
 
-  while (!frame_end_callbacks.empty()) {
-    auto front = frame_end_callbacks.front();
-    frame_end_callbacks.pop();
-    front(*command_executor);
+  {
+    std::unique_lock lock{callbacks_mutex};
+    while (!frame_end_callbacks.empty()) {
+      auto front = frame_end_callbacks.front();
+      frame_end_callbacks.pop();
+      front(*command_executor);
+    }
   }
 
   verify(vkEndCommandBuffer(draw_command_buffer), "vkEndCommandBuffer",
@@ -219,6 +220,8 @@ InterfaceSystem::~InterfaceSystem() {
   ImGui_ImplVulkan_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
+
+  vkDestroyDescriptorPool(device->get_device(), pool, nullptr);
 }
 
 } // namespace Core

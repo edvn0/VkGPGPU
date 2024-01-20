@@ -4,6 +4,7 @@
 #include "Types.hpp"
 
 #include <functional>
+#include <mutex>
 #include <queue>
 #include <vulkan/vulkan.h>
 
@@ -24,6 +25,7 @@ public:
       { f.operator()(exec) } -> std::same_as<void>;
     }
   static void on_frame_end(Func &&func) {
+    std::unique_lock lock{callbacks_mutex};
     frame_end_callbacks.push(std::forward<Func>(func));
   }
 
@@ -38,6 +40,7 @@ private:
 
   using FrameEndCallback = std::function<void(const CommandBuffer &)>;
   static inline std::queue<FrameEndCallback> frame_end_callbacks{};
+  static inline std::mutex callbacks_mutex;
 };
 
 } // namespace Core
