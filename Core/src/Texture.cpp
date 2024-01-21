@@ -17,6 +17,12 @@ auto Texture::empty_with_size(const Device &device, usize size,
   return texture;
 }
 
+auto Texture::construct(const Device &device, const FS::Path &path)
+    -> Scope<Texture> {
+  auto texture = make_scope<Texture>(device, path);
+  return texture;
+}
+
 Texture::~Texture() {
   info("Destroyed Texture '{}', size: {}", texture_filename,
        data_buffer.size());
@@ -40,7 +46,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created texture {} extent: {}", this->texture_filename, extent);
+  info("Created texture '{}', {}", this->texture_filename, extent);
 }
 
 Texture::Texture(const Device &dev, const FS::Path &path)
@@ -65,7 +71,7 @@ Texture::Texture(const Device &dev, const FS::Path &path)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created texture {} extent: {}", this->texture_filename, extent);
+  info("Created texture '{}', {}", this->texture_filename, extent);
 }
 
 auto Texture::hash() const -> usize {

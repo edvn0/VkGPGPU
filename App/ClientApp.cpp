@@ -2,6 +2,7 @@
 
 #include "BufferSet.hpp"
 #include "Config.hpp"
+#include "FilesystemWidget.hpp"
 #include "Material.hpp"
 #include "UI.hpp"
 
@@ -131,12 +132,28 @@ consteval auto compute_kernel_size() -> std::tuple<u32, u32, u32> {
   return {kernel_size, half_size, center_value};
 }
 
+auto compute_kernel_size(std::integral auto N) -> std::tuple<u32, u32, u32> {
+  const auto half_size = N / 2;
+  const auto kernel_size = N * N;
+  const auto center_value = N * N - 1;
+  return {kernel_size, half_size, center_value};
+}
+
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), uniform_buffer_set(*get_device()),
-      storage_buffer_set(*get_device()), timer(*get_messaging_client()){};
+      storage_buffer_set(*get_device()), timer(*get_messaging_client()) {
+  auto &&[kernel, half, center] = compute_kernel_size<3>();
+  pc.kernel_size = kernel;
+  pc.half_size = half;
+  pc.center_value = center;
+  widgets.emplace_back(make_scope<FilesystemWidget>(*get_device(), "."));
+};
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
+
+  for (auto &widget : widgets)
+    widget->on_update(ts);
 
   compute(ts);
   graphics(ts);
@@ -144,9 +161,15 @@ auto ClientApp::on_update(floating ts) -> void {
   timer.end();
 }
 
-void ClientApp::on_create() { perform(); }
+void ClientApp::on_create() {
+  for (auto &widget : widgets)
+    widget->on_create();
+  perform();
+}
 
 void ClientApp::on_destroy() {
+  for (auto &widget : widgets)
+    widget->on_destroy();
   // Destroy all fields
   command_buffer.reset();
 
@@ -161,10 +184,9 @@ auto ClientApp::graphics(floating ts) -> void {
   dispatcher->set_command_buffer(command_buffer.get());
   dispatcher->bind(*second_pipeline);
 
-  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
-  second_material->set("pc.kernelSize", kernel_size);
-  second_material->set("pc.halfSize", half_size);
-  second_material->set("pc.precomputedCenterValue", center_value);
+  second_material->set("pc.kernelSize", pc.kernel_size);
+  second_material->set("pc.halfSize", pc.half_size);
+  second_material->set("pc.precomputedCenterValue", pc.center_value);
   second_material->set("input_image", *output_texture);
   second_material->set("output_image", *output_texture_second);
   update_material_for_rendering(FrameIndex{frame()}, *second_material,
@@ -330,7 +352,7 @@ void ClientApp::update_material_for_rendering(
   }
 }
 
-void ClientApp::on_interface(InterfaceSystem &) {
+void ClientApp::on_interface(InterfaceSystem &system) {
 
   // Create a fullscreen window for the dockspace
   ImGuiWindowFlags window_flags =
@@ -402,13 +424,41 @@ void ClientApp::on_interface(InterfaceSystem &) {
 
   ImGui::End();
 
-  ImGui::Begin("Image");
-  const auto &descriptor_info = texture->get_image_info();
-  auto identifier =
-      UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
-                    descriptor_info.imageLayout);
-  ImGui::Image(identifier, ImVec2(512, 512));
-  ImGui::End();
+  UI::widget("Image", [&]() {
+    const auto &descriptor_info = output_texture_second->get_image_info();
+    auto identifier =
+        UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
+                      descriptor_info.imageLayout);
+    UI::image_drop_button(output_texture_second);
+  });
+
+  UI::widget("Push constant", [&]() {
+    ImGui::Text("Edit PCForMaterial Properties");
+    ImGui::Separator();
+
+    // Assuming the kernel size is between 3 and some upper limit, with a step
+    // of 2 (to ensure odd values)
+    int kernelInput = std::sqrt(
+        pc.kernel_size); // Convert current kernel size to N for display
+    if (ImGui::SliderInt("Kernel N", &kernelInput, 3, 9, "%d",
+                         ImGuiSliderFlags_AlwaysClamp)) {
+      if (kernelInput % 2 == 0) {
+        kernelInput++; // Ensure it's always an odd number
+      }
+      auto [kernel, half, center] =
+          compute_kernel_size(kernelInput); // Compile error here, see below
+      pc.kernel_size = kernel;
+      pc.half_size = half;
+      pc.center_value = center;
+    }
+
+    UI::text("Kernel Size: {}", pc.kernel_size);
+    UI::text("Half Size: {}", pc.half_size);
+    UI::text("Center Value: {}", pc.center_value);
+  });
+  // for (auto &widget : widgets)
+  //  widget->on_interface(system);
+
   // Show the demo window (you can remove this once you're familiar with Dear
   // ImGui)
   ImGui::ShowDemoWindow();

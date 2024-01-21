@@ -55,10 +55,8 @@ void main() {
   output_buffer_a.outputMatrix[invocation].matrix = ubo.angle * matrixC;
 
   float edge = 0.0;
-  int halfSize = pc.kernelSize / 2;
-
-  for (int y = -halfSize; y <= halfSize; ++y) {
-    for (int x = -halfSize; x <= halfSize; ++x) {
+  for (int y = -pc.halfSize; y <= pc.halfSize; ++y) {
+    for (int x = -pc.halfSize; x <= pc.halfSize; ++x) {
       vec4 texColor = imageLoad(input_image, pos + ivec2(x, y));
       float intensity = (texColor.r + texColor.g + texColor.b) / 3.0;
 

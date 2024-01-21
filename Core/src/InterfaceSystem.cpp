@@ -50,6 +50,11 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
   verify(
       vkCreateDescriptorPool(device->get_device(), &pool_info, nullptr, &pool),
       "vkCreateDescriptorPool", "Failed to create descriptor pool");
+
+  verify(vkCreateDescriptorPool(device->get_device(), &pool_info, nullptr,
+                                &image_pool),
+         "vkCreateDescriptorPool", "Failed to create descriptor pool");
+
   ImGui::CreateContext();
 
   ImGuiIO &io = ImGui::GetIO();
@@ -102,7 +107,7 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 }
 
 auto InterfaceSystem::begin_frame() -> void {
-  vkResetDescriptorPool(device->get_device(), pool, 0);
+  vkResetDescriptorPool(device->get_device(), image_pool, 0);
 
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -218,12 +223,14 @@ auto InterfaceSystem::end_frame() -> void {
     ImGui::RenderPlatformWindowsDefault();
   }
 }
+
 InterfaceSystem::~InterfaceSystem() {
   ImGui_ImplVulkan_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 
   vkDestroyDescriptorPool(device->get_device(), pool, nullptr);
+  vkDestroyDescriptorPool(device->get_device(), image_pool, nullptr);
 }
 
 } // namespace Core

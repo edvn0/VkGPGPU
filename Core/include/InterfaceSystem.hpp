@@ -29,6 +29,8 @@ public:
     frame_end_callbacks.push(std::forward<Func>(func));
   }
 
+  static auto get_image_pool() { return image_pool; }
+
 private:
   const Device *device{nullptr};
   const Window *window{nullptr};
@@ -41,6 +43,7 @@ private:
   using FrameEndCallback = std::function<void(const CommandBuffer &)>;
   static inline std::queue<FrameEndCallback> frame_end_callbacks{};
   static inline std::mutex callbacks_mutex;
+  static inline VkDescriptorPool image_pool{};
 };
 
 } // namespace Core

@@ -27,6 +27,7 @@ public:
 
   static auto empty_with_size(const Device &, usize, const Extent<u32> &)
       -> Scope<Texture>;
+  static auto construct(const Device &, const FS::Path &) -> Scope<Texture>;
 
 private:
   const Device *device{nullptr};

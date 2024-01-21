@@ -26,6 +26,7 @@
 #include <random>
 
 #include "bus/MessagingClient.hpp"
+#include "widgets/Widget.hpp"
 
 using namespace Core;
 
@@ -42,6 +43,8 @@ public:
 private:
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
+
+  std::vector<Scope<Widget>> widgets{};
 
   using UniformSet = BufferSet<Buffer::Type::Uniform>;
   UniformSet uniform_buffer_set;
@@ -62,6 +65,13 @@ private:
   Scope<Texture> texture;
   Scope<Texture> output_texture;
   Scope<Texture> output_texture_second;
+
+  struct PCForMaterial {
+    i32 kernel_size{};
+    i32 half_size{};
+    i32 center_value{};
+  };
+  PCForMaterial pc{};
 
   std::array<Math::Mat4, 10> matrices{};
 

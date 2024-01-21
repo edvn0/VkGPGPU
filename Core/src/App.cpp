@@ -8,6 +8,7 @@
 #include "Formatters.hpp"
 #include "InterfaceSystem.hpp"
 #include "Logger.hpp"
+#include "UI.hpp"
 
 #include <cstddef>
 #include <exception>
@@ -38,6 +39,7 @@ App::App(const ApplicationProperties &props) : properties(props) {
                                         });
   // Initialize the device
   device = Device::construct(*instance, *window);
+  UI::initialise(*device);
 
   swapchain = Swapchain::construct(*device, *window,
                                    {
