@@ -52,7 +52,7 @@ public:
   enum class Type : u8 { Compute, Graphics, Transfer };
 
   explicit CommandBuffer(const Device &, CommandBufferProperties props);
-  ~CommandBuffer();
+  virtual ~CommandBuffer();
 
   auto begin(u32 current_frame) -> void;
   auto begin(u32 current_frame, VkCommandBufferBeginInfo &) -> void;
@@ -100,6 +100,7 @@ private:
 class SwapchainCommandBuffer : public CommandBuffer {
 public:
   SwapchainCommandBuffer(const Swapchain &swapchain, CommandBufferProperties);
+  ~SwapchainCommandBuffer() override = default;
 
   [[nodiscard]] auto get_command_buffer() const -> VkCommandBuffer override;
 

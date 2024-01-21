@@ -16,6 +16,11 @@
 
 namespace Core {
 
+auto AppDeleter::operator()(App *app) const noexcept -> void {
+  delete app;
+  info("Everything is cleaned up. Goodbye!");
+}
+
 App::App(const ApplicationProperties &props) : properties(props) {
   // Initialize the instance
   instance = Instance::construct(properties.headless);
@@ -67,8 +72,6 @@ auto App::run() -> void {
     const auto total_time = last_time;
 
     while (!window->should_close()) {
-      window->update();
-
       if (!swapchain->begin_frame())
         continue;
 
@@ -89,7 +92,7 @@ auto App::run() -> void {
 
       {
         interface_system->begin_frame();
-        //        on_interface(*interface_system);
+        on_interface(*interface_system);
         interface_system->end_frame();
       }
 

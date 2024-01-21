@@ -1,5 +1,5 @@
 {
-  "sonarlint.pathToCompileCommands": "${workspaceFolder}\\compile_commands.json",
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}\\build\\compile_commands.json",
   "C_Cpp.default.compileCommands": "${workspaceFolder}\\compile_commands.json",
   "C_Cpp.codeAnalysis.clangTidy.useBuildPath": true,
   "cSpell.words": [
@@ -109,6 +109,8 @@
     "xmemory": "cpp",
     "xtr1common": "cpp",
     "xtree": "cpp",
-    "xutility": "cpp"
+    "xutility": "cpp",
+    "coroutine": "cpp",
+    "resumable": "cpp"
   }
 }

@@ -198,7 +198,7 @@ auto CommandBuffer::submit() -> void {
     floating time_taken_seconds = (convert_to_floating(timestamps[1]) -
                                    convert_to_floating(timestamps[0])) *
                                   timestamp_period * 1.0e-9F;
-    const auto times_in_ms = time_taken_seconds * 1000.0;
+    const auto times_in_ms = time_taken_seconds * 1000.0F;
 
     compute_times.push(times_in_ms);
   }

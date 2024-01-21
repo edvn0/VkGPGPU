@@ -57,13 +57,17 @@ template <Core::usize N = 10000> struct FPSAverage {
   }
 
   auto get_statistics() const {
-    const auto avg_frame_time = frame_time_sum;
+    const auto avg_frame_time = frame_time_sum / N;
     const auto fps = 1.0 / avg_frame_time;
-    return std::tuple{avg_frame_time, fps};
+    return std::tuple{1000.0F * avg_frame_time, fps};
   }
 };
 
 class InterfaceSystem;
+class App;
+struct AppDeleter {
+  auto operator()(App *app) const noexcept -> void;
+};
 
 struct ApplicationProperties {
   bool headless{true};
@@ -121,6 +125,7 @@ private:
   u64 frame_counter{0};
 };
 
-auto extern make_application(const ApplicationProperties &) -> Scope<App>;
+auto extern make_application(const ApplicationProperties &)
+    -> Scope<App, AppDeleter>;
 
 } // namespace Core

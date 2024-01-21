@@ -102,6 +102,8 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 }
 
 auto InterfaceSystem::begin_frame() -> void {
+  vkResetDescriptorPool(device->get_device(), pool, 0);
+
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();

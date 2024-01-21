@@ -61,6 +61,7 @@ private:
 
   Scope<Texture> texture;
   Scope<Texture> output_texture;
+  Scope<Texture> output_texture_second;
 
   std::array<Math::Mat4, 10> matrices{};
 

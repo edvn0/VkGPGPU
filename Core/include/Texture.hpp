@@ -34,7 +34,7 @@ private:
   DataBuffer data_buffer;
 
   std::string texture_filename{};
-  std::unique_ptr<Image> image{nullptr};
+  Scope<Image> image{nullptr};
 };
 
 } // namespace Core

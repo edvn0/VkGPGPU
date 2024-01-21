@@ -26,7 +26,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
     : device(&dev), data_buffer(size),
       texture_filename(fmt::format("Empty-Size{}", size)) {
   data_buffer.fill_zero();
-  image = std::make_unique<Image>(
+  image = make_scope<Image>(
       *device,
       ImageProperties{
           .extent = extent,
@@ -51,7 +51,7 @@ Texture::Texture(const Device &dev, const FS::Path &path)
         fmt::format("Texture file '{}' does not exist!", path.string()));
   }
 
-  image = std::make_unique<Image>(
+  image = make_scope<Image>(
       *device,
       ImageProperties{
           .extent = extent,

@@ -42,7 +42,6 @@ Window::Window(const Instance &inst, const WindowProperties &props)
             static_cast<u32>(h),
         };
         self.user_data.was_resized = true;
-        info("Window framebuffer resized to {}x{}", w, h);
       });
   glfwSetWindowSizeCallback(
       window, +[](GLFWwindow *win, i32 w, i32 h) {
@@ -52,7 +51,6 @@ Window::Window(const Instance &inst, const WindowProperties &props)
             static_cast<u32>(h),
         };
         self.user_data.was_resized = true;
-        info("Window resized to {}x{}", w, h);
       });
   glfwSetKeyCallback(
       window,
@@ -62,18 +60,6 @@ Window::Window(const Instance &inst, const WindowProperties &props)
           info("Escape key pressed, closing window");
           glfwSetWindowShouldClose(win, GLFW_TRUE);
         }
-      });
-  glfwSetMouseButtonCallback(
-      window, +[](GLFWwindow *win, i32 button, i32 action, i32 mods) {
-        auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
-        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-          info("Left mouse button pressed");
-        }
-      });
-  glfwSetCursorPosCallback(
-      window, +[](GLFWwindow *win, double x, double y) {
-        auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
-        info("Mouse moved to {}, {}", x, y);
       });
 }
 

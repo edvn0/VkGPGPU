@@ -4,6 +4,7 @@ project(Core)
 set(SOURCES
     include/Allocator.hpp
     include/App.hpp
+    include/UI.hpp
     include/Buffer.hpp
     include/CommandBuffer.hpp
     include/CommandDispatcher.hpp
@@ -36,6 +37,7 @@ set(SOURCES
     src/Allocator.cpp
     src/App.cpp
     src/Buffer.cpp
+    src/UI.cpp
     src/CommandBuffer.cpp
     src/DataBuffer.cpp
     src/DebugMarker.cpp

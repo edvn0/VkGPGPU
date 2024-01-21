@@ -101,17 +101,6 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
   create_info.queueFamilyIndexCount = 0;
   create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-  std::array queue_family_indices = {
-      device->get_family_index(Queue::Type::Graphics).value(),
-      device->get_family_index(Queue::Type::Present).value(),
-  };
-
-  if (queue_family_indices[0] != queue_family_indices[1]) {
-    create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-    create_info.queueFamilyIndexCount =
-        static_cast<u32>(queue_family_indices.size());
-    create_info.pQueueFamilyIndices = queue_family_indices.data();
-  }
   vkCreateSwapchainKHR(device->get_device(), &create_info, nullptr, &swapchain);
 
   if (create_info.oldSwapchain != VK_NULL_HANDLE) {

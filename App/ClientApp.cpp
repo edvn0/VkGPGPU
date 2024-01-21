@@ -3,6 +3,7 @@
 #include "BufferSet.hpp"
 #include "Config.hpp"
 #include "Material.hpp"
+#include "UI.hpp"
 
 #include <array>
 #include <imgui.h>
@@ -165,7 +166,7 @@ auto ClientApp::graphics(floating ts) -> void {
   second_material->set("pc.halfSize", half_size);
   second_material->set("pc.precomputedCenterValue", center_value);
   second_material->set("input_image", *output_texture);
-  second_material->set("output_image", *texture);
+  second_material->set("output_image", *output_texture_second);
   update_material_for_rendering(FrameIndex{frame()}, *second_material,
                                 &uniform_buffer_set, &storage_buffer_set);
 
@@ -188,11 +189,11 @@ auto ClientApp::graphics(floating ts) -> void {
 
 auto ClientApp::compute(floating ts) -> void {
   randomize_span_of_matrices(matrices);
-  auto &input_buffer =
+  const auto &input_buffer =
       storage_buffer_set.get(DescriptorBinding(0), frame(), DescriptorSet(0));
   input_buffer->write(matrices.data(), matrices.size() * sizeof(Math::Mat4));
   randomize_span_of_matrices(matrices);
-  auto &other_input_buffer =
+  const auto &other_input_buffer =
       storage_buffer_set.get(DescriptorBinding(1), frame(), DescriptorSet(0));
   other_input_buffer->write(matrices.data(),
                             matrices.size() * sizeof(Math::Mat4));
@@ -202,7 +203,7 @@ auto ClientApp::compute(floating ts) -> void {
 
   // Map angle to 0 to 2pi
   const auto angle_in_radians = std::sin(angle);
-  auto &simple_uniform =
+  const auto &simple_uniform =
       uniform_buffer_set.get(DescriptorBinding(3), frame(), DescriptorSet(0));
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
 
@@ -247,6 +248,8 @@ auto ClientApp::compute(floating ts) -> void {
 void ClientApp::perform() {
   texture = make_scope<Texture>(*get_device(), FS::texture("viking_room.png"));
   output_texture = Texture::empty_with_size(
+      *get_device(), texture->size_bytes(), texture->get_extent());
+  output_texture_second = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
 
   command_buffer = CommandBuffer::construct(
@@ -328,30 +331,29 @@ void ClientApp::update_material_for_rendering(
 }
 
 void ClientApp::on_interface(InterfaceSystem &) {
-  /*
-    // Create a fullscreen window for the dockspace
-    ImGuiWindowFlags window_flags =
-        ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->Pos);
-    ImGui::SetNextWindowSize(viewport->Size);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
-    window_flags &= ~ImGuiWindowFlags_MenuBar;
+  // Create a fullscreen window for the dockspace
+  ImGuiWindowFlags window_flags =
+      ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+  ImGuiViewport *viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(viewport->Pos);
+  ImGui::SetNextWindowSize(viewport->Size);
+  ImGui::SetNextWindowViewport(viewport->ID);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+  window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
-    // Create the window that will contain the dockspace
-    ImGui::Begin("DockSpace Demo", nullptr, window_flags);
-    ImGui::PopStyleVar(3);
+  window_flags &= ~ImGuiWindowFlags_MenuBar;
 
-    // DockSpace
-    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-  */
+  // Create the window that will contain the dockspace
+  ImGui::Begin("DockSpace Demo", nullptr, window_flags);
+  ImGui::PopStyleVar(3);
+
+  // DockSpace
+  ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+  ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
   // Here you can add your own windows, for example:
   ImGui::Begin("FPS / Frametime");
 
@@ -399,12 +401,18 @@ void ClientApp::on_interface(InterfaceSystem &) {
   draw_stats(get_timer(), *command_buffer);
 
   ImGui::End();
-  /*
-    // Show the demo window (you can remove this once you're familiar with Dear
-    // ImGui)
-    ImGui::ShowDemoWindow();
 
-    // End the dockspace window
-    ImGui::End();
-    */
+  ImGui::Begin("Image");
+  const auto &descriptor_info = texture->get_image_info();
+  auto identifier =
+      UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
+                    descriptor_info.imageLayout);
+  ImGui::Image(identifier, ImVec2(512, 512));
+  ImGui::End();
+  // Show the demo window (you can remove this once you're familiar with Dear
+  // ImGui)
+  ImGui::ShowDemoWindow();
+
+  // End the dockspace window
+  ImGui::End();
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Types.hpp"
+
 #include "bus/IMessagingAPI.hpp"
 
 namespace Core::Bus {
@@ -7,7 +9,7 @@ namespace Core::Bus {
 class MessagingClient {
 
 public:
-  explicit MessagingClient(std::unique_ptr<IMessagingAPI> api)
+  explicit MessagingClient(Scope<IMessagingAPI> api)
       : messagingAPI(std::move(api)) {
     messagingAPI->connect();
   }
@@ -20,7 +22,7 @@ public:
   auto get_api() const -> const IMessagingAPI & { return *messagingAPI; }
 
 private:
-  std::unique_ptr<IMessagingAPI> messagingAPI;
+  Scope<IMessagingAPI> messagingAPI;
 };
 
 } // namespace Core::Bus
