@@ -17,25 +17,40 @@ auto Texture::empty_with_size(const Device &device, usize size,
   return texture;
 }
 
+auto Texture::construct(const Device &device, TextureProperties properties)
+    -> Scope<Texture> {
+  auto texture = make_scope<Texture>(device, properties);
+  return texture;
+}
+
+auto Texture::construct(const Device &device,
+                        const TextureProperties &properties) -> Scope<Texture> {
+  auto texture = make_scope<Texture>(device, properties);
+  return texture;
+}
+
 auto Texture::construct(const Device &device, const FS::Path &path)
     -> Scope<Texture> {
-  auto texture = make_scope<Texture>(device, path);
+  TextureProperties properties;
+  properties.path = path;
+  auto texture = Texture::construct(device, properties);
   return texture;
 }
 
 Texture::~Texture() {
-  info("Destroyed Texture '{}', size: {}", texture_filename,
+  info("Destroyed Texture '{}', size: {}", properties.identifier,
        data_buffer.size());
 }
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
-    : device(&dev), data_buffer(size),
-      texture_filename(fmt::format("Empty-Size{}", size)) {
+    : device(&dev), data_buffer(size) {
+  properties.extent = extent;
+  properties.identifier = fmt::format("Empty-Size{}", size);
   data_buffer.fill_zero();
   image = make_scope<Image>(
       *device,
       ImageProperties{
-          .extent = extent,
+          .extent = properties.extent,
           .format = ImageFormat::R8G8B8A8Unorm,
           .tiling = ImageTiling::Linear,
           .usage = ImageUsage::Sampled | ImageUsage::Storage,
@@ -46,21 +61,24 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created texture '{}', {}", this->texture_filename, extent);
+  info("Created texture '{}', {}", properties.identifier, properties.extent);
 }
 
-Texture::Texture(const Device &dev, const FS::Path &path)
-    : device(&dev), data_buffer(load_databuffer_from_file(path, extent)),
-      texture_filename(path.filename().string()) {
-  if (!FS::exists(path)) {
-    throw NotFoundException(
-        fmt::format("Texture file '{}' does not exist!", path.string()));
+Texture::Texture(const Device &dev, const TextureProperties &props)
+    : device(&dev), properties(props),
+      data_buffer(
+          load_databuffer_from_file(properties.path, properties.extent)) {
+  if (!FS::exists(properties.path)) {
+    throw NotFoundException(fmt::format("Texture file '{}' does not exist!",
+                                        properties.path.string()));
   }
+
+  properties.identifier = properties.path.filename().string();
 
   image = make_scope<Image>(
       *device,
       ImageProperties{
-          .extent = extent,
+          .extent = properties.extent,
           .format = ImageFormat::R8G8B8A8Unorm,
           .tiling = ImageTiling::Linear,
           .usage = ImageUsage::Sampled | ImageUsage::Storage,
@@ -71,12 +89,12 @@ Texture::Texture(const Device &dev, const FS::Path &path)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created texture '{}', {}", this->texture_filename, extent);
+  info("Created texture '{}', {}", properties.identifier, properties.extent);
 }
 
 auto Texture::hash() const -> usize {
   static constexpr std::hash<std::string> string_hash;
-  auto name_hash = string_hash(texture_filename);
+  auto name_hash = string_hash(properties.identifier);
   return name_hash ^ data_buffer.hash();
 }
 

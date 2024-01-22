@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Filesystem.hpp"
 #include "Texture.hpp"
 #include "Types.hpp"
 
@@ -18,8 +19,11 @@ static constexpr std::string_view texture_identifier =
 }
 
 namespace Detail {
-auto text_impl(const std::string &data) -> void;
-}
+auto text_impl(std::string_view) -> void;
+auto text_wrapped_impl(std::string_view) -> void;
+auto set_drag_drop_payload_impl(std::string_view, std::string_view data)
+    -> bool;
+} // namespace Detail
 
 auto add_image(VkSampler sampler, VkImageView image_view, VkImageLayout layout)
     -> VkDescriptorSet;
@@ -34,13 +38,29 @@ auto widget(const std::string_view name, auto &&func) {
   }
 }
 
-auto image(const Texture &) -> void;
-auto image_button(const Texture &) -> bool;
-auto image_drop_button(Scope<Core::Texture> &texture) -> void;
+struct ImageProperties {
+  Extent<u32> extent{64, 64};
+};
+
+auto image(const Texture &, ImageProperties = {}) -> void;
+auto image_button(const Texture &, ImageProperties = {}) -> bool;
+auto image_drop_button(Scope<Core::Texture> &, ImageProperties = {}) -> void;
+auto accept_drag_drop_payload(std::string_view) -> std::string;
+auto set_drag_drop_payload(std::string_view payload_type,
+                           const StringLike auto &data) -> bool {
+  return Detail::set_drag_drop_payload_impl(payload_type, data);
+}
+auto set_drag_drop_payload(std::string_view, const FS::Path &) -> bool;
 
 template <typename... Args>
 auto text(fmt::format_string<Args...> format, Args &&...args) -> void {
   return Detail::text_impl(fmt::format(format, std::forward<Args>(args)...));
+}
+
+template <typename... Args>
+auto text_wrapped(fmt::format_string<Args...> format, Args &&...args) -> void {
+  return Detail::text_wrapped_impl(
+      fmt::format(format, std::forward<Args>(args)...));
 }
 
 } // namespace Core::UI

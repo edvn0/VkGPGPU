@@ -268,7 +268,7 @@ auto ClientApp::compute(floating ts) -> void {
 }
 
 void ClientApp::perform() {
-  texture = make_scope<Texture>(*get_device(), FS::texture("viking_room.png"));
+  texture = Texture::construct(*get_device(), FS::texture("viking_room.png"));
   output_texture = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
   output_texture_second = Texture::empty_with_size(
@@ -426,7 +426,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
       auto identifier =
           UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
                         descriptor_info.imageLayout);
-      UI::image_drop_button(output_texture_second);
+      UI::image_drop_button(output_texture_second, {512, 512});
     });
 
     UI::widget("Push constant", [&]() {

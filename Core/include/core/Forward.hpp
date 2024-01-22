@@ -1,6 +1,6 @@
 #pragma once
 
-#include <concepts>
+#include "Concepts.hpp"
 
 namespace Core {
 
@@ -27,11 +27,10 @@ class VulkanResultException;
 struct AllocationProperties;
 struct BufferDataImpl;
 struct Colour;
-struct Image;
 struct ImageProperties;
 struct ImageStorageImpl;
 struct PipelineConfiguration;
 
-template <std::integral T> struct Extent;
+template <IsNumber T> struct Extent;
 
 } // namespace Core

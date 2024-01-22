@@ -1,13 +1,26 @@
 #pragma once
 
+#include "Containers.hpp"
 #include "Filesystem.hpp"
+#include "GenericCache.hpp"
 #include "Texture.hpp"
 #include "Widget.hpp"
 
+#include <stack>
 #include <string>
 #include <vector>
 
 using namespace Core;
+
+struct MockDefault {
+  static auto construct(const Core::Device &device,
+                        const Core::TextureProperties &properties)
+      -> Core::Scope<Core::Texture> {
+    return Core::Texture::construct(device, properties);
+  }
+};
+
+using TextureCache = GenericCache<Texture, TextureProperties, MockDefault>;
 
 class FilesystemWidget : public Widget {
 public:
@@ -25,7 +38,10 @@ private:
   const FS::Path home_path;
   floating column_width{100.0F};
   std::vector<FS::Path> history;
-  int history_index = 0;
+  i32 history_index = 0;
+
+  std::stack<FS::Path> back_stack;
+  std::stack<FS::Path> forward_stack;
 
   Scope<Texture> back_icon;
   Scope<Texture> forward_icon;
@@ -33,7 +49,8 @@ private:
   Scope<Texture> file_icon;
   Scope<Texture> directory_icon;
 
-  std::unordered_map<std::string, std::vector<Core::FS::DirectoryEntry>>
+  TextureCache texture_cache;
+  Container::StringLikeMap<std::vector<Core::FS::DirectoryEntry>>
       directory_cache;
 
   auto update_directory_cache(const Core::FS::Path &path) -> void;

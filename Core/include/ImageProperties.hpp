@@ -7,7 +7,7 @@
 
 namespace Core {
 
-template <std::integral T> struct Extent {
+template <IsNumber T> struct Extent {
   T width{0};
   T height{0};
 
@@ -21,8 +21,9 @@ template <std::integral T> struct Extent {
   }
 
   // Cast to another type Other, not the same as T
-  template <std::integral Other>
-    requires(!std::is_same_v<Other, T>)
+  template <typename Other>
+    requires(!std::is_same_v<Other, T> &&
+             (std::is_integral_v<Other> || std::is_floating_point_v<Other>))
   auto as() const {
     return Extent<Other>{
         .width = static_cast<Other>(width),

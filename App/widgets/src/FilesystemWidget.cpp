@@ -7,7 +7,8 @@
 
 FilesystemWidget::FilesystemWidget(const Device &dev,
                                    const Core::FS::Path &start_path)
-    : device(&dev), current_path(start_path), home_path(start_path) {
+    : device(&dev), current_path(start_path), home_path(start_path),
+      texture_cache(dev, Texture::construct(dev, FS::icon("loading.png"))) {
   history.push_back(current_path);
 }
 
@@ -47,22 +48,30 @@ void FilesystemWidget::on_destroy() {
 }
 
 void FilesystemWidget::change_directory(const Core::FS::Path &new_path) {
+  if (!current_path.empty()) {
+    back_stack.push(current_path);
+  }
   current_path = new_path;
-  history.push_back(current_path);
-  history_index++;
+  while (!forward_stack.empty()) {
+    forward_stack.pop();
+  }
 }
 
 void FilesystemWidget::render_navigation_buttons() {
   // Back Button
-  if (back_icon && Core::UI::image_button(*back_icon) && history_index > 0) {
-    current_path = history[--history_index];
+  if (back_icon && Core::UI::image_button(*back_icon) && !back_stack.empty()) {
+    forward_stack.push(current_path);
+    current_path = back_stack.top();
+    back_stack.pop();
   }
   ImGui::SameLine();
 
   // Forward Button
   if (forward_icon && Core::UI::image_button(*forward_icon) &&
-      history_index < history.size() - 1) {
-    current_path = history[++history_index];
+      !forward_stack.empty()) {
+    back_stack.push(current_path);
+    current_path = forward_stack.top();
+    forward_stack.pop();
   }
   ImGui::SameLine();
 
@@ -81,38 +90,76 @@ void FilesystemWidget::render_navigation_buttons() {
 }
 
 void FilesystemWidget::render_directory_contents() {
-  const int columns = 10; // Number of columns in the grid
-
-  auto render_file_or_directory = [&](const auto &entry) {
+  auto render_file_or_directory = [&](const auto &entry, const auto size) {
+    Extent<u32> extent{
+        static_cast<u32>(size),
+        static_cast<u32>(size),
+    };
     if (entry.is_directory()) {
-      if (UI::image_button(*directory_icon)) {
-        change_directory(entry.path());
+      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+                                    entry.path()) &&
+          UI::image_button(*directory_icon, {extent})) {
+        change_directory(entry);
       }
-      ImGui::NewLine();
-      ImGui::Text("%s", entry.path().filename().string().c_str());
     } else {
-      UI::image(*file_icon);
-      ImGui::NewLine();
-      ImGui::Text("%s", entry.path().filename().string().c_str());
+      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+                                    entry.path())) {
+        UI::image(*file_icon, {extent});
+      }
     }
   };
 
-  if (ImGui::BeginTable("##fileSystemTable", columns)) {
-    ImGui::TableHeadersRow();
+  static constexpr auto is_image = [](const auto &path) {
+    const auto extension = path.extension().string();
+    return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+           extension == ".bmp" || extension == ".tga" || extension == ".gif" ||
+           extension == ".psd" || extension == ".hdr" || extension == ".pic";
+  };
 
-    int current_column = 0;
+  static constexpr float padding = 16.0F;
+  static constexpr float thumbnail_size = 64.0F;
+  static constexpr auto cell_size = thumbnail_size + padding;
+  static constexpr Extent<u32> extent{
+      static_cast<u32>(thumbnail_size),
+      static_cast<u32>(thumbnail_size),
+  };
 
-    for (const auto &entries = get_cached_directory_contents(current_path);
-         const auto &entry : entries) {
-      if (current_column >= columns) {
-        ImGui::TableNextRow();
-        current_column = 0;
+  float panel_width = ImGui::GetContentRegionAvail().x;
+  auto column_count = static_cast<int>(panel_width / cell_size);
+  if (column_count < 1) {
+    column_count = 1;
+  }
+
+  if (ImGui::BeginTable("##DirectoryContent", column_count)) {
+    for (const auto &entries =
+             this->get_cached_directory_contents(this->current_path);
+         const auto &directory_entry : entries) {
+
+      const auto &path = directory_entry.path();
+      const auto filename = path.filename();
+      std::string filename_string = filename.string();
+      ImGui::PushID(path.c_str());
+
+      if (is_image(path)) {
+        const auto &texture = texture_cache.put_or_get(TextureProperties{
+            .identifier = filename_string,
+            .path = path,
+        });
+
+        UI::image_button(*texture, {extent});
+      } else {
+        render_file_or_directory(directory_entry, thumbnail_size);
       }
-      ImGui::TableSetColumnIndex(current_column);
-      render_file_or_directory(entry);
-      current_column++;
-    }
 
+      [[maybe_unused]] auto could =
+          UI::set_drag_drop_payload(UI::Identifiers::texture_identifier, path);
+
+      UI::text_wrapped("{}", filename_string);
+
+      ImGui::TableNextColumn();
+
+      ImGui::PopID();
+    }
     ImGui::EndTable();
   }
 }

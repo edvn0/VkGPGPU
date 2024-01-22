@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -25,5 +26,8 @@ concept StringLike =
     std::is_same_v<const char *, T> || std::is_same_v<std::string_view, T> ||
     std::is_same_v<std::string, T> || CStrConvertibleTo<T, const char *> ||
     CStrConvertibleTo<T, const wchar_t *>;
+
+template <class T>
+concept IsNumber = std::is_arithmetic_v<T>;
 
 } // namespace Core

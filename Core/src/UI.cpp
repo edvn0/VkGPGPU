@@ -14,6 +14,13 @@ template <typename... Args> auto make_id(Args &&...data) {
 
 namespace Core::UI {
 
+template <std::integral N>
+  requires(!std::is_same_v<N, f32>)
+auto to_imvec2(const Extent<N> &extent) -> ImVec2 {
+  auto casted = extent.as<f32>();
+  return ImVec2(casted.width, casted.height);
+}
+
 struct StaticDevice {
   const Device *device{nullptr};
   std::mutex device_access_mutex;
@@ -41,28 +48,30 @@ auto begin(const std::string_view name) -> bool {
 
 auto end() -> void { return ImGui::End(); }
 
-auto image(const Texture &texture) -> void {
+auto image(const Texture &texture, ImageProperties properties) -> void {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
   ImGui::PushID(made.c_str());
-  ImGui::Image(set, ImVec2(64, 64));
+  ImGui::Image(set, to_imvec2(properties.extent));
   ImGui::PopID();
 }
 
-auto image_button(const Texture &texture) -> bool {
+auto image_button(const Texture &texture, ImageProperties properties) -> bool {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
-  return ImGui::ImageButton(made.c_str(), set, ImVec2(64, 64));
+  return ImGui::ImageButton(made.c_str(), set, to_imvec2(properties.extent));
 }
 
-auto image_drop_button(Scope<Core::Texture> &texture) -> void {
+auto image_drop_button(Scope<Core::Texture> &texture,
+                       ImageProperties properties) -> void {
 
   if (texture) {
     const auto &[sampler, view, layout] = texture->get_image_info();
     auto set = add_image(sampler, view, layout);
-    if (ImGui::ImageButton("ImageDropButtonTexture", set, ImVec2(512, 512))) {
+    if (ImGui::ImageButton("ImageDropButtonTexture", set,
+                           to_imvec2(properties.extent))) {
       device.perform(
           [&](auto &device) { info("Texture: {}", fmt::ptr(texture.get())); });
     }
@@ -81,11 +90,30 @@ auto image_drop_button(Scope<Core::Texture> &texture) -> void {
   }
 }
 
+auto accept_drag_drop_payload(std::string_view) -> std::string {
+  return Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
+}
+
+auto set_drag_drop_payload(const std::string_view payload_identifier,
+                           const FS::Path &path) -> bool {
+  return Platform::set_drag_drop_payload(payload_identifier, path);
+}
+
 } // namespace Core::UI
 
 namespace Core::UI::Detail {
 
-auto text_impl(const std::string &data) -> void {
+auto text_impl(const std::string_view data) -> void {
   return ImGui::Text(data.data());
 }
+
+auto text_wrapped_impl(const std::string_view data) -> void {
+  return ImGui::TextWrapped(data.data());
+}
+
+auto set_drag_drop_payload_impl(const std::string_view payload_identifier,
+                                const std::string_view data) -> bool {
+  return Platform::set_drag_drop_payload(payload_identifier, data);
+}
+
 } // namespace Core::UI::Detail
