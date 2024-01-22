@@ -42,6 +42,7 @@ private:
   Scope<Texture> directory_icon;
 
   TextureCache texture_cache;
+  std::jthread pop_one_from_texture_cache_thread;
   Container::StringLikeMap<std::vector<Core::FS::DirectoryEntry>>
       directory_cache;
 
