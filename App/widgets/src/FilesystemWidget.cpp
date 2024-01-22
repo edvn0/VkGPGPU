@@ -142,6 +142,8 @@ void FilesystemWidget::render_directory_contents() {
             .identifier = filename_string,
             .path = path,
             .extent = extent,
+            .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+                     ImageUsage::TransferSrc | ImageUsage::TransferDst,
         });
 
         UI::image_button(*texture, {extent});

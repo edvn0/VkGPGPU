@@ -72,6 +72,9 @@ public:
       const auto &future_it = future_cache.find(props.identifier);
       if (future_it->second.wait_for(std::chrono::seconds(0)) ==
           std::future_status::ready) {
+
+        static std::mutex map_write_mutex;
+        std::scoped_lock static_lock(map_write_mutex);
         type_cache[props.identifier] = future_it->second.get();
         future_cache.erase(future_it);
         return type_cache[props.identifier];

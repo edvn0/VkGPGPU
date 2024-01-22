@@ -5,6 +5,7 @@
 #include "DebugMarker.hpp"
 #include "Device.hpp"
 #include "Filesystem.hpp"
+#include "PlatformConfig.hpp"
 #include "Swapchain.hpp"
 #include "Verify.hpp"
 #include "Window.hpp"
@@ -18,6 +19,8 @@ namespace Core {
 InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
                                  const Swapchain &swap)
     : device(&dev), window(&win), swapchain(&swap) {
+
+  system_name = fmt::format("imgui_{}.ini", Platform::get_system_name());
 
   command_executor =
       CommandBuffer::construct(*device, {
@@ -65,6 +68,8 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
                                                       // Platform Windows
   io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;
   io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports;
+
+  ImGui::GetIO().IniFilename = system_name.c_str();
   ImGui::StyleColorsDark();
 
   ImGuiStyle &style = ImGui::GetStyle();

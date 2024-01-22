@@ -40,6 +40,8 @@ private:
 
   Scope<CommandBuffer> command_executor;
 
+  std::string system_name;
+
   using FrameEndCallback = std::function<void(const CommandBuffer &)>;
   static inline std::queue<FrameEndCallback> frame_end_callbacks{};
   static inline std::mutex callbacks_mutex;
