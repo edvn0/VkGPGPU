@@ -55,9 +55,20 @@ constexpr auto operator|(ImageUsage lhs, ImageUsage rhs) {
   return static_cast<ImageUsage>(static_cast<std::byte>(lhs) |
                                  static_cast<std::byte>(rhs));
 }
+// Operator |=
+constexpr auto operator|=(ImageUsage &lhs, ImageUsage rhs) {
+  lhs = static_cast<ImageUsage>(static_cast<std::byte>(lhs) |
+                                static_cast<std::byte>(rhs));
+  return lhs;
+}
 constexpr auto operator&(ImageUsage lhs, ImageUsage rhs) {
   return static_cast<ImageUsage>(static_cast<std::byte>(lhs) &
                                  static_cast<std::byte>(rhs));
+}
+constexpr auto operator&=(ImageUsage &lhs, ImageUsage rhs) {
+  lhs = static_cast<ImageUsage>(static_cast<std::byte>(lhs) &
+                                static_cast<std::byte>(rhs));
+  return lhs;
 }
 
 enum class ImageLayout : std::uint16_t {

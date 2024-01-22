@@ -152,7 +152,7 @@ ClientApp::ClientApp(const ApplicationProperties &props)
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
 
-  for (auto &widget : widgets)
+  for (const auto &widget : widgets)
     widget->on_update(ts);
 
   compute(ts);
@@ -162,13 +162,13 @@ auto ClientApp::on_update(floating ts) -> void {
 }
 
 void ClientApp::on_create() {
-  for (auto &widget : widgets)
+  for (const auto &widget : widgets)
     widget->on_create();
   perform();
 }
 
 void ClientApp::on_destroy() {
-  for (auto &widget : widgets)
+  for (const auto &widget : widgets)
     widget->on_destroy();
   // Destroy all fields
   command_buffer.reset();
@@ -268,7 +268,15 @@ auto ClientApp::compute(floating ts) -> void {
 }
 
 void ClientApp::perform() {
-  texture = Texture::construct(*get_device(), FS::texture("viking_room.png"));
+  texture = Texture::construct_storage(
+      *get_device(),
+      {
+          .format = ImageFormat::R8G8B8A8Unorm,
+          .path = FS::texture("viking_room.png"),
+          .usage = ImageUsage::Sampled | ImageUsage::Storage |
+                   ImageUsage::TransferDst | ImageUsage::TransferSrc,
+          .layout = ImageLayout::General,
+      });
   output_texture = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
   output_texture_second = Texture::empty_with_size(
@@ -442,8 +450,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         if (kernelInput % 2 == 0) {
           kernelInput++; // Ensure it's always an odd number
         }
-        auto [kernel, half, center] =
-            compute_kernel_size(kernelInput); // Compile error here, see below
+        auto [kernel, half, center] = compute_kernel_size(kernelInput);
         pc.kernel_size = kernel;
         pc.half_size = half;
         pc.center_value = center;
@@ -454,11 +461,6 @@ void ClientApp::on_interface(InterfaceSystem &system) {
       UI::text("Center Value: {}", pc.center_value);
     });
 
-    // Show the demo window (you can remove this once you're familiar with
-    // Dear ImGui)
-    ImGui::ShowDemoWindow();
-
-    // End the dockspace window
     ImGui::End();
   }
 

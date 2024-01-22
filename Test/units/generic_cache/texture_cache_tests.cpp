@@ -42,7 +42,10 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props{"texture1", "path/to/texture1"};
+    Core::TextureProperties props{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
     auto &texture = cache.put_or_get(props);
 
     // How would I correctly (but unsafely get this loading pointer?)
@@ -53,7 +56,10 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props{"texture1", "path/to/texture1"};
+    Core::TextureProperties props{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
     cache.put_or_get(props); // Initial call to put in cache
 
     auto &texture = cache.put_or_get(props); // Subsequent call
@@ -64,7 +70,10 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props{"texture1", "path/to/texture1"};
+    Core::TextureProperties props{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
     cache.put_or_get(props);
 
     // Simulate waiting for async operation to complete
@@ -78,8 +87,14 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props1{"texture1", "path/to/texture1"};
-    Core::TextureProperties props2{"texture2", "path/to/texture2"};
+    Core::TextureProperties props1{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
+    Core::TextureProperties props2{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
 
     auto &texture1 = cache.put_or_get(props1);
     auto &texture2 = cache.put_or_get(props2);
@@ -97,9 +112,14 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props1{"texture1", "path/to/texture1"};
+    Core::TextureProperties props1{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
     Core::TextureProperties props2{
-        "texture2", "path/to/texture1"}; // Different identifier, same path
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
 
     cache.put_or_get(props1);
     auto &texture2 = cache.put_or_get(props2);
@@ -111,7 +131,10 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
           "[GenericCache]") {
     TextureCache cache(device, loading_texture());
 
-    Core::TextureProperties props{"texture", "path/to/texture"};
+    Core::TextureProperties props{
+        .identifier = "texture",
+        .path = "path/to/texture",
+    };
 
     auto asyncCall1 = std::async(std::launch::async,
                                  [&]() { return &cache.put_or_get(props); });

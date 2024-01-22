@@ -254,7 +254,6 @@ auto Shader::create_descriptor_set_layouts() -> void {
       static constexpr auto max_set = std::numeric_limits<Core::u32>::max();
 
       Core::u32 binding = bindingAndSet & max_set;
-      // uint32_t descriptorSet = (bindingAndSet >> 32);
       layout_binding.binding = binding;
 
       ensure(!shader_descriptor_set.uniform_buffers.contains(binding),

@@ -9,15 +9,21 @@
 namespace Core {
 
 struct TextureProperties {
+  ImageFormat format;
   std::string identifier{};
   FS::Path path{};
   Extent<u32> extent{};
+  ImageTiling tiling{ImageTiling::Optimal};
+  ImageUsage usage{ImageUsage::Sampled};
+  ImageLayout layout{ImageLayout::ShaderReadOnlyOptimal};
+  SamplerFilter min_filter{SamplerFilter::Nearest};
+  SamplerFilter max_filter{SamplerFilter::Nearest};
+  SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
+  SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
 };
 
 class Texture {
 public:
-  Texture(const Device &, const TextureProperties &);
-  Texture(const Device &, usize, const Extent<u32> &);
   ~Texture();
 
   [[nodiscard]] auto get_image_info() const noexcept
@@ -37,9 +43,16 @@ public:
       -> Scope<Texture>;
   static auto construct(const Device &, const TextureProperties &)
       -> Scope<Texture>;
+  static auto construct_storage(const Device &, const TextureProperties &)
+      -> Scope<Texture>;
+  static auto construct_shader(const Device &, const TextureProperties &)
+      -> Scope<Texture>;
   static auto construct(const Device &, const FS::Path &) -> Scope<Texture>;
 
 private:
+  Texture(const Device &, const TextureProperties &);
+  Texture(const Device &, usize, const Extent<u32> &);
+
   const Device *device{nullptr};
   TextureProperties properties;
   DataBuffer data_buffer;

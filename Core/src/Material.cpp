@@ -192,18 +192,18 @@ auto Material::update_for_rendering(
 
   auto descriptor_set_0 = shader->allocate_descriptor_set(0);
   auto descriptor_set_1 = shader->allocate_descriptor_set(1);
-  std::for_each(split_by_type.at(0).begin(), split_by_type.at(0).end(),
-                [&set = descriptor_set_0](VkWriteDescriptorSet &value) {
-                  value.dstSet = set.descriptor_sets.at(0);
-                });
+  std::ranges::for_each(split_by_type.at(0).begin(), split_by_type.at(0).end(),
+                        [&set = descriptor_set_0](VkWriteDescriptorSet &value) {
+                          value.dstSet = set.descriptor_sets.at(0);
+                        });
   vkUpdateDescriptorSets(device->get_device(),
                          static_cast<u32>(split_by_type.at(0).size()),
                          split_by_type.at(0).data(), 0, nullptr);
 
-  std::for_each(split_by_type.at(1).begin(), split_by_type.at(1).end(),
-                [&set = descriptor_set_1](VkWriteDescriptorSet &value) {
-                  value.dstSet = set.descriptor_sets.at(0);
-                });
+  std::ranges::for_each(split_by_type.at(1).begin(), split_by_type.at(1).end(),
+                        [&set = descriptor_set_1](VkWriteDescriptorSet &value) {
+                          value.dstSet = set.descriptor_sets.at(0);
+                        });
   vkUpdateDescriptorSets(device->get_device(),
                          static_cast<u32>(split_by_type.at(1).size()),
                          split_by_type.at(1).data(), 0, nullptr);
