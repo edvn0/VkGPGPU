@@ -17,12 +17,6 @@ auto Texture::empty_with_size(const Device &device, usize size,
   return texture;
 }
 
-auto Texture::construct(const Device &device, TextureProperties properties)
-    -> Scope<Texture> {
-  auto texture = make_scope<Texture>(device, properties);
-  return texture;
-}
-
 auto Texture::construct(const Device &device,
                         const TextureProperties &properties) -> Scope<Texture> {
   auto texture = make_scope<Texture>(device, properties);

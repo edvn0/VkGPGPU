@@ -17,7 +17,7 @@ namespace Core::UI {
 template <std::integral N>
   requires(!std::is_same_v<N, f32>)
 auto to_imvec2(const Extent<N> &extent) -> ImVec2 {
-  auto casted = extent.as<f32>();
+  auto casted = extent.template as<f32>();
   return ImVec2(casted.width, casted.height);
 }
 

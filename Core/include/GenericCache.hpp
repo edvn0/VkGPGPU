@@ -51,7 +51,7 @@ public:
       }
     } else {
       auto future_texture = std::async(std::launch::async, [this, props]() {
-        return C::construct<T, P>(*device, props);
+        return C::construct(*device, props);
       });
       future_cache[props.identifier] = std::move(future_texture);
       return loading;
