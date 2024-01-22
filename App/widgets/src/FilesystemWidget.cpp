@@ -35,8 +35,8 @@ void FilesystemWidget::update_directory_cache(const Core::FS::Path &path) {
   }
 }
 
-const std::vector<Core::FS::DirectoryEntry> &
-FilesystemWidget::get_cached_directory_contents(const Core::FS::Path &path) {
+auto FilesystemWidget::get_cached_directory_contents(const Core::FS::Path &path)
+    -> const std::vector<Core::FS::DirectoryEntry> & {
   if (!directory_cache.contains(path.string())) {
     update_directory_cache(path);
   }
@@ -58,7 +58,6 @@ void FilesystemWidget::change_directory(const Core::FS::Path &new_path) {
 }
 
 void FilesystemWidget::render_navigation_buttons() {
-  // Back Button
   if (back_icon && Core::UI::image_button(*back_icon) && !back_stack.empty()) {
     forward_stack.push(current_path);
     current_path = back_stack.top();
@@ -66,7 +65,6 @@ void FilesystemWidget::render_navigation_buttons() {
   }
   ImGui::SameLine();
 
-  // Forward Button
   if (forward_icon && Core::UI::image_button(*forward_icon) &&
       !forward_stack.empty()) {
     back_stack.push(current_path);
@@ -75,18 +73,9 @@ void FilesystemWidget::render_navigation_buttons() {
   }
   ImGui::SameLine();
 
-  // Home Button
   if (home_icon && Core::UI::image_button(*home_icon)) {
-    change_directory(home_path); // Assuming 'home_path' is defined
+    change_directory(home_path);
   }
-
-  // Slider for adjusting column width, placed in the top right
-  ImGui::SameLine(ImGui::GetWindowWidth() -
-                  200.0f);      // Adjust for slider width and padding
-  ImGui::PushItemWidth(150.0f); // Width of the slider
-  ImGui::SliderFloat("##ColumnWidth", &column_width, 50.0f, 300.0f,
-                     "Column Width: %.0f");
-  ImGui::PopItemWidth();
 }
 
 void FilesystemWidget::render_directory_contents() {

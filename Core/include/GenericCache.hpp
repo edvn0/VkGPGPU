@@ -11,9 +11,12 @@
 
 namespace Core {
 
-template <class T, class P>
-concept ConstructorLike = requires(const Device &device, const P &properties) {
-  { T::construct(device, properties) } -> std::same_as<Scope<T>>;
+template <class Constructor>
+concept ConstructorLike = requires(
+    const Device &device, const typename Constructor::Properties &properties) {
+  {
+    Constructor::construct(device, properties)
+  } -> std::same_as<Scope<typename Constructor::Type>>;
 };
 
 template <class T, class P>
@@ -21,26 +24,52 @@ concept Cacheable = requires(const Device &device, const P &properties) {
   { properties.identifier } -> std::convertible_to<std::string>;
 };
 
-struct DefaultConstructor {
-  template <class T, class P>
+template <class T, class P> struct DefaultConstructor {
+  using Type = T;
+  using Properties = P;
+
   static auto construct(const Device &device, const P &properties) -> Scope<T> {
     return T::construct(device, properties);
   }
 };
 
-template <class T, class P, typename C = DefaultConstructor>
+/**
+ * @brief A cache for objects of type T, with asynchronous loading capabilities.
+ *
+ * @tparam T The type of objects to cache.
+ * @tparam P The properties type used for object identification and
+ * construction.
+ * @tparam C A constructor-like class for creating objects of type T. Must
+ * satisfy ConstructorLike concept.
+ */
+template <class T, class P, ConstructorLike C = DefaultConstructor<T, P>>
   requires(Cacheable<T, P>)
 class GenericCache {
 public:
+  /**
+   * @brief Construct a new Generic Cache object.
+   *
+   * @param dev Reference to the device used for object construction.
+   * @param loading_texture The texture to return while objects are loading.
+   */
   explicit GenericCache(const Device &dev, Scope<T> loading_texture)
       : device(&dev), loading(std::move(loading_texture)) {}
 
+  /**
+   * @brief Get or load an object of type T, identified by properties of type P.
+   *
+   * If the object is not in the cache, it will be loaded asynchronously.
+   *
+   * @param props The properties identifying the object.
+   * @return const Scope<T>& A reference to the requested object, or a loading
+   * texture if loading.
+   */
   auto put_or_get(const P &props) -> const Scope<T> & {
     std::scoped_lock lock(access);
     if (auto it = type_cache.find(props.identifier); it != type_cache.end()) {
       return it->second;
-    } else if (auto future_it = future_cache.find(props.identifier);
-               future_it != future_cache.end()) {
+    } else if (future_cache.contains(props.identifier)) {
+      const auto &future_it = future_cache.find(props.identifier);
       if (future_it->second.wait_for(std::chrono::seconds(0)) ==
           std::future_status::ready) {
         type_cache[props.identifier] = future_it->second.get();

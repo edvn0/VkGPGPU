@@ -12,15 +12,7 @@
 
 using namespace Core;
 
-struct MockDefault {
-  static auto construct(const Core::Device &device,
-                        const Core::TextureProperties &properties)
-      -> Core::Scope<Core::Texture> {
-    return Core::Texture::construct(device, properties);
-  }
-};
-
-using TextureCache = GenericCache<Texture, TextureProperties, MockDefault>;
+using TextureCache = GenericCache<Texture, TextureProperties>;
 
 class FilesystemWidget : public Widget {
 public:
@@ -38,7 +30,7 @@ private:
   const FS::Path home_path;
   floating column_width{100.0F};
   std::vector<FS::Path> history;
-  i32 history_index = 0;
+  i32 history_index{0};
 
   std::stack<FS::Path> back_stack;
   std::stack<FS::Path> forward_stack;
