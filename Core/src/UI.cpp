@@ -44,13 +44,16 @@ auto end() -> void { return ImGui::End(); }
 auto image(const Texture &texture) -> void {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
-  return ImGui::Image(set, ImVec2(64, 64));
+  auto made = make_id(set, sampler, view, layout, texture.hash());
+  ImGui::PushID(made.c_str());
+  ImGui::Image(set, ImVec2(64, 64));
+  ImGui::PopID();
 }
 
 auto image_button(const Texture &texture) -> bool {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
-  auto made = make_id(sampler, view, layout);
+  auto made = make_id(set, sampler, view, layout, texture.hash());
   return ImGui::ImageButton(made.c_str(), set, ImVec2(64, 64));
 }
 

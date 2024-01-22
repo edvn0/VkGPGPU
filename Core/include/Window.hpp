@@ -21,6 +21,7 @@ public:
   virtual ~Window();
   auto update() -> void;
   [[nodiscard]] auto get_native() const -> const GLFWwindow *;
+  [[nodiscard]] auto get_native() -> GLFWwindow *;
   [[nodiscard]] auto get_surface() const -> VkSurfaceKHR;
   [[nodiscard]] auto should_close() const -> bool;
 

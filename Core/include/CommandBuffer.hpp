@@ -91,7 +91,7 @@ private:
 
   std::vector<VkQueryPool> query_pools{};
 
-  Container::CircularBuffer<floating> compute_times;
+  Container::CircularBuffer<floating> compute_times{usize{200}};
 
   void create_query_objects();
   void destroy_query_objects();

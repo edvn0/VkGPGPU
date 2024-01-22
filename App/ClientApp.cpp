@@ -370,99 +370,98 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   window_flags &= ~ImGuiWindowFlags_MenuBar;
 
   // Create the window that will contain the dockspace
-  ImGui::Begin("DockSpace Demo", nullptr, window_flags);
-  ImGui::PopStyleVar(3);
+  if (ImGui::Begin("DockSpace Demo", nullptr, window_flags)) {
+    ImGui::PopStyleVar(3);
 
-  // DockSpace
-  ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-  ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-  // Here you can add your own windows, for example:
-  ImGui::Begin("FPS / Frametime");
+    // DockSpace
+    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    // Here you can add your own windows, for example:
+    static constexpr auto draw_stats =
+        [](const auto &average,
+           const auto &command_buffer_with_compute_stats_available) {
+          // Retrieve statistics from the timer and command buffer
+          auto &&[frametime, fps] = average.get_statistics();
+          auto &&[compute_times] =
+              command_buffer_with_compute_stats_available.get_statistics();
 
-  static constexpr auto draw_stats =
-      [](const auto &average,
-         const auto &command_buffer_with_compute_stats_available) {
-        // Retrieve statistics from the timer and command buffer
-        auto &&[frametime, fps] = average.get_statistics();
-        auto &&[compute_times] =
-            command_buffer_with_compute_stats_available.get_statistics();
+          // Start a new ImGui table
+          if (ImGui::BeginTable("StatsTable", 2)) {
+            // Set up column headers
+            ImGui::TableSetupColumn("Statistic");
+            ImGui::TableSetupColumn("Value");
+            ImGui::TableHeadersRow();
 
-        // Start a new ImGui table
-        if (ImGui::BeginTable("StatsTable", 2)) {
-          // Set up column headers
-          ImGui::TableSetupColumn("Statistic");
-          ImGui::TableSetupColumn("Value");
-          ImGui::TableHeadersRow();
+            // Row for frametime
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            UI::text("Frametime");
+            ImGui::TableSetColumnIndex(1);
+            UI::text("{} ms", frametime);
 
-          // Row for frametime
-          ImGui::TableNextRow();
-          ImGui::TableSetColumnIndex(0);
-          ImGui::Text("Frametime");
-          ImGui::TableSetColumnIndex(1);
-          ImGui::Text("%f ms", frametime);
+            // Row for FPS
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            UI::text("FPS");
+            ImGui::TableSetColumnIndex(1);
+            UI::text("{}", fps);
 
-          // Row for FPS
-          ImGui::TableNextRow();
-          ImGui::TableSetColumnIndex(0);
-          ImGui::Text("FPS");
-          ImGui::TableSetColumnIndex(1);
-          ImGui::Text("%f", fps);
+            // Row for Compute Time
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            UI::text("Compute Time");
+            ImGui::TableSetColumnIndex(1);
+            UI::text("{} ms", compute_times);
 
-          // Row for Compute Time
-          ImGui::TableNextRow();
-          ImGui::TableSetColumnIndex(0);
-          ImGui::Text("Compute Time");
-          ImGui::TableSetColumnIndex(1);
-          ImGui::Text("%f ms", compute_times);
+            // End the table
+            ImGui::EndTable();
+          }
+        };
 
-          // End the table
-          ImGui::EndTable();
+    UI::widget("FPS/Frametime",
+               [&]() { draw_stats(get_timer(), *command_buffer); });
+
+    UI::widget("Image", [&]() {
+      const auto &descriptor_info = output_texture_second->get_image_info();
+      auto identifier =
+          UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
+                        descriptor_info.imageLayout);
+      UI::image_drop_button(output_texture_second);
+    });
+
+    UI::widget("Push constant", [&]() {
+      UI::text("Edit PCForMaterial Properties");
+      ImGui::Separator();
+
+      // Assuming the kernel size is between 3 and some upper limit, with a
+      // step of 2 (to ensure odd values)
+      int kernelInput = std::sqrt(
+          pc.kernel_size); // Convert current kernel size to N for display
+      if (ImGui::SliderInt("Kernel N", &kernelInput, 3, 9, "%d",
+                           ImGuiSliderFlags_AlwaysClamp)) {
+        if (kernelInput % 2 == 0) {
+          kernelInput++; // Ensure it's always an odd number
         }
-      };
-
-  draw_stats(get_timer(), *command_buffer);
-
-  ImGui::End();
-
-  UI::widget("Image", [&]() {
-    const auto &descriptor_info = output_texture_second->get_image_info();
-    auto identifier =
-        UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
-                      descriptor_info.imageLayout);
-    UI::image_drop_button(output_texture_second);
-  });
-
-  UI::widget("Push constant", [&]() {
-    ImGui::Text("Edit PCForMaterial Properties");
-    ImGui::Separator();
-
-    // Assuming the kernel size is between 3 and some upper limit, with a step
-    // of 2 (to ensure odd values)
-    int kernelInput = std::sqrt(
-        pc.kernel_size); // Convert current kernel size to N for display
-    if (ImGui::SliderInt("Kernel N", &kernelInput, 3, 9, "%d",
-                         ImGuiSliderFlags_AlwaysClamp)) {
-      if (kernelInput % 2 == 0) {
-        kernelInput++; // Ensure it's always an odd number
+        auto [kernel, half, center] =
+            compute_kernel_size(kernelInput); // Compile error here, see below
+        pc.kernel_size = kernel;
+        pc.half_size = half;
+        pc.center_value = center;
       }
-      auto [kernel, half, center] =
-          compute_kernel_size(kernelInput); // Compile error here, see below
-      pc.kernel_size = kernel;
-      pc.half_size = half;
-      pc.center_value = center;
-    }
 
-    UI::text("Kernel Size: {}", pc.kernel_size);
-    UI::text("Half Size: {}", pc.half_size);
-    UI::text("Center Value: {}", pc.center_value);
-  });
-  // for (auto &widget : widgets)
-  //  widget->on_interface(system);
+      UI::text("Kernel Size: {}", pc.kernel_size);
+      UI::text("Half Size: {}", pc.half_size);
+      UI::text("Center Value: {}", pc.center_value);
+    });
 
-  // Show the demo window (you can remove this once you're familiar with Dear
-  // ImGui)
-  ImGui::ShowDemoWindow();
+    // Show the demo window (you can remove this once you're familiar with
+    // Dear ImGui)
+    ImGui::ShowDemoWindow();
 
-  // End the dockspace window
-  ImGui::End();
+    // End the dockspace window
+    ImGui::End();
+  }
+
+  for (auto &widget : widgets)
+    widget->on_interface(system);
 }

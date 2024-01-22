@@ -49,7 +49,7 @@ auto ImmediateCommandBuffer::get_command_buffer() const -> VkCommandBuffer {
 }
 
 CommandBuffer::CommandBuffer(const Device &dev, CommandBufferProperties props)
-    : device(dev), properties(props), compute_times(200) {
+    : device(dev), properties(props) {
   if (properties.queue_type == Queue::Type::Unknown) {
     throw NoQueueTypeException("Unknown queue type");
   }
@@ -200,7 +200,7 @@ auto CommandBuffer::submit() -> void {
                                   timestamp_period * 1.0e-9F;
     const auto times_in_ms = time_taken_seconds * 1000.0F;
 
-    compute_times.push(times_in_ms);
+    //    compute_times.push(times_in_ms);
   }
 }
 

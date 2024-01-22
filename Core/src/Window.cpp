@@ -73,6 +73,7 @@ auto Window::should_close() const -> bool {
 auto Window::update() -> void { glfwPollEvents(); }
 
 auto Window::get_native() const -> const GLFWwindow * { return window; }
+auto Window::get_native() -> GLFWwindow * { return window; }
 auto Window::get_surface() const -> VkSurfaceKHR { return surface; }
 
 auto Window::construct(const Instance &instance,

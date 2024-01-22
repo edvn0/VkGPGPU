@@ -18,11 +18,10 @@ void FilesystemWidget::on_update(Core::floating ts) {
 }
 
 void FilesystemWidget::on_interface(Core::InterfaceSystem &interface_system) {
-  if (UI::begin("Filesystem")) {
-    render_navigation_buttons();
-    render_directory_contents();
-    UI::end();
-  }
+  UI::begin("Filesystem");
+  render_navigation_buttons();
+  render_directory_contents();
+  UI::end();
 }
 
 void FilesystemWidget::update_directory_cache(const Core::FS::Path &path) {
@@ -83,34 +82,37 @@ void FilesystemWidget::render_navigation_buttons() {
 
 void FilesystemWidget::render_directory_contents() {
   const int columns = 10; // Number of columns in the grid
-  int current_column = 0;
 
   auto render_file_or_directory = [&](const auto &entry) {
     if (entry.is_directory()) {
       if (UI::image_button(*directory_icon)) {
         change_directory(entry.path());
       }
+      ImGui::NewLine();
+      ImGui::Text("%s", entry.path().filename().string().c_str());
     } else {
       UI::image(*file_icon);
-      ImGui::SameLine();
+      ImGui::NewLine();
       ImGui::Text("%s", entry.path().filename().string().c_str());
     }
   };
 
-  if (ImGui::BeginTable("##fileSystemTable", columns,
-                        ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable)) {
-    ImGui::TableNextRow();  // Begin the first row
-    int current_column = 0; // Reset column counter
-    for (const auto &entry : Core::FS::DirectoryIterator(current_path)) {
+  if (ImGui::BeginTable("##fileSystemTable", columns)) {
+    ImGui::TableHeadersRow();
+
+    int current_column = 0;
+
+    for (const auto &entries = get_cached_directory_contents(current_path);
+         const auto &entry : entries) {
       if (current_column >= columns) {
-        ImGui::TableNextRow(); // Begin a new row if we reached the maximum
-                               // number of columns
-        current_column = 0;    // Reset column counter for the new row
+        ImGui::TableNextRow();
+        current_column = 0;
       }
       ImGui::TableSetColumnIndex(current_column);
-      render_file_or_directory(entry); // Render the file or directory cell
-      current_column++;                // Move to the next column
+      render_file_or_directory(entry);
+      current_column++;
     }
+
     ImGui::EndTable();
   }
 }

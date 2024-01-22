@@ -1,10 +1,44 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
+#include <memory>
 #include <optional>
 #include <ranges>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
 
 namespace Core::Container {
+
+struct StringLikeHasher {
+  using is_transparent = void; // This enables heterogeneous lookup
+
+  size_t operator()(const std::string &s) const {
+    return std::hash<std::string>{}(s);
+  }
+
+  size_t operator()(const std::string_view sv) const {
+    return std::hash<std::string_view>{}(sv);
+  }
+};
+
+struct StringLikeEqual {
+  using is_transparent = void; // This enables heterogeneous lookup
+
+  bool operator()(const std::string &lhs, const std::string &rhs) const {
+    return lhs == rhs;
+  }
+
+  bool operator()(const std::string_view lhs,
+                  const std::string_view rhs) const {
+    return lhs == rhs;
+  }
+};
+
+template <typename Value>
+using StringLikeMap =
+    std::unordered_map<std::string, Value, StringLikeHasher, StringLikeEqual>;
 
 template <typename T>
 concept Container = requires(T t) {
@@ -30,7 +64,7 @@ auto sort(Container auto &container, auto &&predicate) -> void {
   std::ranges::sort(container.begin(), container.end(), predicate);
 }
 
-template <class T, std::integral IndexType = usize>
+template <class T, std::integral IndexType = std::size_t>
   requires(std::is_nothrow_constructible_v<T> &&
            std::is_default_constructible_v<T>)
 class CircularBuffer {
