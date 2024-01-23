@@ -19,6 +19,7 @@ set(SOURCES
     include/Exception.hpp
     include/Filesystem.hpp
     include/Formatters.hpp
+    include/GIFTexture.hpp
     include/Image.hpp
     include/Instance.hpp
     include/Logger.hpp
@@ -49,6 +50,7 @@ set(SOURCES
     src/Instance.cpp
     src/Logger.cpp
     src/Material.cpp
+    src/GIFTexture.cpp
     src/Pipeline.cpp
     src/InterfaceSystem.cpp
     src/Shader.cpp
@@ -60,7 +62,7 @@ set(SOURCES
 )
 
 add_library(Core STATIC ${SOURCES})
-target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include)
+target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
 target_link_libraries(Core PUBLIC Platform Reflection imgui glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 

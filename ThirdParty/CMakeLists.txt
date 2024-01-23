@@ -37,8 +37,17 @@ function(add_imgui)
     add_library(imgui STATIC ${IMGUI_SOURCES})
     target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
     target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
-
 endfunction()
+
+# Function to add a header-only library
+function(add_header_only_library LIB_NAME INCLUDE_PATH)
+    add_library(${LIB_NAME} INTERFACE)
+    target_include_directories(${LIB_NAME} INTERFACE ${INCLUDE_PATH})
+endfunction()
+
+# Assuming your 'reponame' folder is in the current source directory
+set(REPONAME_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thread-pool/include)
+add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
 

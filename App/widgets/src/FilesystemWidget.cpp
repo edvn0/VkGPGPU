@@ -21,7 +21,7 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
   this->pop_one_from_texture_cache_thread = std::jthread{
       [this](const auto &stop_token) {
         while (!stop_token.stop_requested()) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          std::this_thread::sleep_for(std::chrono::milliseconds(333));
           texture_cache.update_one();
         }
       },

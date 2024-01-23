@@ -4,6 +4,7 @@
 #include "Containers.hpp"
 #include "Device.hpp"
 #include "Texture.hpp"
+#include "ThreadPool.hpp"
 #include "Types.hpp"
 
 #include <future>
@@ -40,7 +41,9 @@ template <class T, class P> struct DefaultConstructor {
  * @tparam P The properties type used for object identification and
  * construction.
  * @tparam C A constructor-like class for creating objects of type T. Must
- * satisfy ConstructorLike concept.
+ * satisfy ConstructorLike concept. The ConstructorLike concept is satisfied by
+ * any class with a static construct function that returns a Scope<T> and takes
+ * a const Device & and a const P & as arguments.
  */
 template <class T, class P, ConstructorLike C = DefaultConstructor<T, P>>
   requires(Cacheable<T, P>)
@@ -65,17 +68,16 @@ public:
    * texture if loading.
    */
   auto put_or_get(const P &props) -> const Scope<T> & {
+    std::scoped_lock lock(access);
     if (future_cache.contains(props.identifier)) {
       return loading;
     }
 
-    std::scoped_lock lock(access);
     if (auto it = type_cache.find(props.identifier); it != type_cache.end()) {
       return it->second;
     } else {
-      auto future_texture = std::async(std::launch::async, [this, props]() {
-        return C::construct(*device, props);
-      });
+      auto future_texture = ThreadPool::submit(
+          [this, props]() { return C::construct(*device, props); });
       future_cache[props.identifier] = std::move(future_texture);
       return loading;
     }
@@ -83,12 +85,10 @@ public:
 
   auto update_one() {
     if (auto it = future_cache.begin(); it != future_cache.end()) {
-      if (it->second.wait_for(std::chrono::seconds(0)) ==
-          std::future_status::ready) {
-        std::scoped_lock static_lock(access);
-        type_cache[it->first] = it->second.get();
-        future_cache.erase(it);
-      }
+      auto get = it->second.get();
+      std::scoped_lock lock(access);
+      type_cache[it->first] = std::move(get);
+      future_cache.erase(it);
     }
   }
 
@@ -102,6 +102,7 @@ private:
   Container::StringLikeMap<std::future<Scope<T>>> future_cache;
   Container::StringLikeMap<Scope<T>> type_cache;
   std::mutex access;
+  std::mutex other;
   Scope<T> loading;
 };
 
