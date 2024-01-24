@@ -4,6 +4,14 @@
 
 namespace Core::Config {
 
+enum class Precision : u8 { Low, Medium, High };
+
+#ifdef GPGPU_PRECISION
+static constexpr Precision precision = Precision::GPGPU_PRECISION;
+#else
+static constexpr Precision precision = Precision::High;
+#endif
+
 #ifdef GPGPU_FRAME_COUNT
 static constexpr u32 frame_count = GPGPU_FRAME_COUNT;
 #else

@@ -23,3 +23,6 @@
 [submodule "ThirdParty/thread-pool"]
 	path = ThirdParty/thread-pool
 	url = git@github.com:bshoshany/thread-pool.git
+[submodule "ThirdParty/glm"]
+	path = ThirdParty/glm
+	url = git@github.com:g-truc/glm.git

@@ -19,7 +19,7 @@ TEST_CASE("Construct image", "[image]") {
     Core::Image image(device,
                       Core::ImageProperties{
                           .extent = {10, 10},
-                          .format = Core::ImageFormat::R8G8B8A8Unorm,
+                          .format = Core::ImageFormat::UNORM_RGBA8,
                           .layout = Core::ImageLayout::ShaderReadOnlyOptimal,
                       });
 
@@ -31,7 +31,7 @@ TEST_CASE("Construct image", "[image]") {
     Core::Image image(device,
                       Core::ImageProperties{
                           .extent = {10, 10},
-                          .format = Core::ImageFormat::R8G8B8A8Unorm,
+                          .format = Core::ImageFormat::UNORM_RGBA8,
                           .layout = Core::ImageLayout::ShaderReadOnlyOptimal,
                       });
 

@@ -49,7 +49,8 @@ auto begin(const std::string_view name) -> bool {
 
 auto end() -> void { return ImGui::End(); }
 
-auto image(const Texture &texture, ImageProperties properties) -> void {
+auto image(const Texture &texture, InterfaceImageProperties properties)
+    -> void {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
@@ -58,18 +59,27 @@ auto image(const Texture &texture, ImageProperties properties) -> void {
   ImGui::PopID();
 }
 
-auto image_button(const Texture &texture, ImageProperties properties) -> bool {
+auto image_button(const Texture &texture, InterfaceImageProperties properties)
+    -> bool {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
   return ImGui::ImageButton(made.c_str(), set, to_imvec2(properties.extent));
 }
 
+auto image_button(const Image &image, InterfaceImageProperties properties)
+    -> bool {
+  const auto &[sampler, view, layout] = image.get_descriptor_info();
+  auto set = add_image(sampler, view, layout);
+  auto made = make_id(set, sampler, view, layout, image.hash());
+  return ImGui::ImageButton(made.c_str(), set, to_imvec2(properties.extent));
+}
+
 auto image_drop_button(Scope<Core::Texture> &texture,
-                       ImageProperties properties) -> void {
+                       InterfaceImageProperties properties) -> void {
   if (texture) {
     const Texture &textureToShow = *texture;
-    if (UI::image_button(textureToShow)) {
+    if (UI::image_button(textureToShow, properties)) {
       // Button click logic (if any)
     }
   } else {
@@ -87,7 +97,7 @@ auto image_drop_button(Scope<Core::Texture> &texture,
       device.perform([&](auto &device) {
         auto new_text = Texture::construct_shader(
             device, {
-                        .format = ImageFormat::R8G8B8A8Unorm,
+                        .format = ImageFormat::UNORM_RGBA8,
                         .path = path,
                         .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                                  ImageUsage::TransferDst,

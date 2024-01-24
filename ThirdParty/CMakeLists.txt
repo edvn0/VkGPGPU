@@ -51,6 +51,8 @@ add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
 
+add_subdirectory(glm)
+
 if(ENABLE_TESTING)
     add_subdirectory(Catch2)
 endif()

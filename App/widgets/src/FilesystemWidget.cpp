@@ -10,7 +10,7 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
     : device(&dev), current_path(start_path), home_path(start_path),
       texture_cache(dev, Texture::construct_shader(
                              dev, {
-                                      .format = ImageFormat::R8G8B8A8Unorm,
+                                      .format = ImageFormat::UNORM_RGBA8,
                                       .path = FS::icon("loading.png"),
                                       .usage = ImageUsage::Sampled |
                                                ImageUsage::TransferSrc |
@@ -147,7 +147,7 @@ void FilesystemWidget::render_directory_contents() {
 
       if (is_image(path)) {
         const auto &texture = texture_cache.put_or_get(TextureProperties{
-            .format = ImageFormat::R8G8B8A8Unorm,
+            .format = ImageFormat::UNORM_RGBA8,
             .identifier = filename_string,
             .path = path,
             .extent = extent,
@@ -176,14 +176,14 @@ void FilesystemWidget::render_directory_contents() {
 void FilesystemWidget::load_icons() {
   back_icon = Texture::construct_shader(
       *device, {
-                   .format = ImageFormat::R8G8B8A8Unorm,
+                   .format = ImageFormat::UNORM_RGBA8,
                    .path = FS::icon("back.png"),
                    .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                             ImageUsage::TransferDst,
                });
   forward_icon = Texture::construct_shader(
       *device, {
-                   .format = ImageFormat::R8G8B8A8Unorm,
+                   .format = ImageFormat::UNORM_RGBA8,
                    .path = FS::icon("forward.png"),
                    .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                             ImageUsage::TransferDst,
@@ -191,7 +191,7 @@ void FilesystemWidget::load_icons() {
                });
   home_icon = Texture::construct_shader(
       *device, {
-                   .format = ImageFormat::R8G8B8A8Unorm,
+                   .format = ImageFormat::UNORM_RGBA8,
                    .path = FS::icon("home.png"),
                    .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                             ImageUsage::TransferDst,
@@ -199,14 +199,14 @@ void FilesystemWidget::load_icons() {
                });
   file_icon = Texture::construct_shader(
       *device, {
-                   .format = ImageFormat::R8G8B8A8Unorm,
+                   .format = ImageFormat::UNORM_RGBA8,
                    .path = FS::icon("file.png"),
                    .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                             ImageUsage::TransferDst,
                });
   directory_icon = Texture::construct_shader(
       *device, {
-                   .format = ImageFormat::R8G8B8A8Unorm,
+                   .format = ImageFormat::UNORM_RGBA8,
                    .path = FS::icon("directory.png"),
                    .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
                             ImageUsage::TransferDst,

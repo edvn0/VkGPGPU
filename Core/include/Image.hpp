@@ -20,10 +20,10 @@ auto load_databuffer_from_file(StringLike auto path, Extent<u32> &extent)
 
 struct ImageProperties {
   Extent<u32> extent;
-  ImageFormat format;
+  ImageFormat format{ImageFormat::Undefined};
   ImageTiling tiling{ImageTiling::Optimal};
   ImageUsage usage{ImageUsage::Sampled};
-  ImageLayout layout{ImageLayout::Undefined};
+  ImageLayout layout{ImageLayout::ColorAttachmentOptimal};
   SamplerFilter min_filter{SamplerFilter::Nearest};
   SamplerFilter max_filter{SamplerFilter::Nearest};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
@@ -44,10 +44,21 @@ public:
         const DataBuffer &data_buffer);
   ~Image();
 
+  auto recreate() -> void;
+
+  auto get_properties() noexcept -> ImageProperties & { return properties; }
+  auto get_properties() const noexcept -> const ImageProperties & {
+    return properties;
+  }
   [[nodiscard]] auto get_descriptor_info() const
       -> const VkDescriptorImageInfo &;
   [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
   [[nodiscard]] auto get_extent() const noexcept -> const Extent<u32> &;
+  [[nodiscard]] auto hash() const noexcept -> usize;
+
+  static auto construct_reference(const Device &device,
+                                  const ImageProperties &properties)
+      -> Ref<Image>;
 
 private:
   const Device *device{nullptr};

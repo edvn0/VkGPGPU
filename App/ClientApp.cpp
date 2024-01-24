@@ -3,6 +3,7 @@
 #include "BufferSet.hpp"
 #include "Config.hpp"
 #include "FilesystemWidget.hpp"
+#include "Framebuffer.hpp"
 #include "Material.hpp"
 #include "UI.hpp"
 
@@ -94,32 +95,13 @@ auto create_or_get_write_descriptor_for(std::uint32_t frames_in_flight,
 }
 
 auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
-  static constexpr auto xy_to_index = [](Math::Mat4 &matrix, u64 x,
-                                         u64 y) -> float & {
-    return matrix.data.at(x).at(y);
-  };
-
   static std::random_device rd;
   static std::mt19937 gen(rd());
   static std::uniform_real_distribution<float> dis(-1.0F, 1.0F);
 
-  for (auto &matrix : matrices) {
-    xy_to_index(matrix, 0, 0) = dis(gen);
-    xy_to_index(matrix, 0, 1) = dis(gen);
-    xy_to_index(matrix, 0, 2) = dis(gen);
-    xy_to_index(matrix, 0, 3) = dis(gen);
-    xy_to_index(matrix, 1, 0) = dis(gen);
-    xy_to_index(matrix, 1, 1) = dis(gen);
-    xy_to_index(matrix, 1, 2) = dis(gen);
-    xy_to_index(matrix, 1, 3) = dis(gen);
-    xy_to_index(matrix, 2, 0) = dis(gen);
-    xy_to_index(matrix, 2, 1) = dis(gen);
-    xy_to_index(matrix, 2, 2) = dis(gen);
-    xy_to_index(matrix, 2, 3) = dis(gen);
-    xy_to_index(matrix, 3, 0) = dis(gen);
-    xy_to_index(matrix, 3, 1) = dis(gen);
-    xy_to_index(matrix, 3, 2) = dis(gen);
-    xy_to_index(matrix, 3, 3) = dis(gen);
+  // Randomize span of glm::mat4
+  for (auto &mat : matrices) {
+    Math::for_each(mat, [&](floating &value) { value = dis(gen); });
   }
 }
 
@@ -179,34 +161,36 @@ void ClientApp::on_destroy() {
   output_texture.reset();
 }
 
+class SceneRenderer {
+public:
+  auto begin_renderpass(const CommandBuffer &commandbuffer,
+                        const Framebuffer &framebuffer) -> void {
+    VkRenderPassBeginInfo render_pass_begin_info = {};
+    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_begin_info.renderPass = framebuffer.get_render_pass();
+    render_pass_begin_info.framebuffer = framebuffer.get_framebuffer();
+    render_pass_begin_info.renderArea.extent = {
+        .width = framebuffer.get_width(),
+        .height = framebuffer.get_height(),
+    };
+    const auto &clear_values = framebuffer.get_clear_values();
+    render_pass_begin_info.clearValueCount =
+        static_cast<u32>(clear_values.size());
+    render_pass_begin_info.pClearValues = clear_values.data();
+    vkCmdBeginRenderPass(commandbuffer.get_command_buffer(),
+                         &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+  }
+  auto end_renderpass(const CommandBuffer &commandbuffer) -> void {
+    vkCmdEndRenderPass(commandbuffer.get_command_buffer());
+  }
+};
+
 auto ClientApp::graphics(floating ts) -> void {
-  command_buffer->begin(frame());
-  dispatcher->set_command_buffer(command_buffer.get());
-  dispatcher->bind(*second_pipeline);
-
-  second_material->set("pc.kernelSize", pc.kernel_size);
-  second_material->set("pc.halfSize", pc.half_size);
-  second_material->set("pc.precomputedCenterValue", pc.center_value);
-  second_material->set("input_image", *output_texture);
-  second_material->set("output_image", *output_texture_second);
-  update_material_for_rendering(FrameIndex{frame()}, *second_material,
-                                &uniform_buffer_set, &storage_buffer_set);
-
-  second_material->bind(*command_buffer, *second_pipeline, frame());
-
-  constexpr auto wg_size = 16UL;
-
-  // Number of groups in each dimension
-  constexpr auto dispatchX = 1024 / wg_size;
-  constexpr auto dispatchY = 1024 / wg_size;
-  dispatcher->push_constant(*second_pipeline, *second_material);
-  dispatcher->dispatch({
-      .group_count_x = dispatchX,
-      .group_count_y = dispatchY,
-      .group_count_z = 1,
-  });
-
-  command_buffer->end_and_submit();
+  static SceneRenderer scene_renderer;
+  graphics_command_buffer->begin(frame());
+  scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
+  scene_renderer.end_renderpass(*graphics_command_buffer);
+  graphics_command_buffer->end_and_submit();
 }
 
 auto ClientApp::compute(floating ts) -> void {
@@ -229,10 +213,9 @@ auto ClientApp::compute(floating ts) -> void {
       uniform_buffer_set.get(DescriptorBinding(3), frame(), DescriptorSet(0));
   simple_uniform->write(&angle_in_radians, simple_uniform->get_size());
 
-  auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
-  material->set("pc.kernelSize", kernel_size);
-  material->set("pc.halfSize", half_size);
-  material->set("pc.precomputedCenterValue", center_value);
+  material->set("pc.kernelSize", pc.kernel_size);
+  material->set("pc.halfSize", pc.half_size);
+  material->set("pc.precomputedCenterValue", pc.center_value);
   material->set("input_image", *texture);
   material->set("output_image", *output_texture);
   update_material_for_rendering(FrameIndex{frame()}, *material,
@@ -265,13 +248,36 @@ auto ClientApp::compute(floating ts) -> void {
   // End command buffer
   DebugMarker::end_region(command_buffer->get_command_buffer());
   command_buffer->end_and_submit();
+
+  command_buffer->begin(frame());
+  dispatcher->set_command_buffer(command_buffer.get());
+  dispatcher->bind(*second_pipeline);
+
+  second_material->set("pc.kernelSize", pc.kernel_size);
+  second_material->set("pc.halfSize", pc.half_size);
+  second_material->set("pc.precomputedCenterValue", pc.center_value);
+  second_material->set("input_image", *output_texture);
+  second_material->set("output_image", *output_texture_second);
+  update_material_for_rendering(FrameIndex{frame()}, *second_material,
+                                &uniform_buffer_set, &storage_buffer_set);
+
+  second_material->bind(*command_buffer, *second_pipeline, frame());
+
+  dispatcher->push_constant(*second_pipeline, *second_material);
+  dispatcher->dispatch({
+      .group_count_x = dispatchX,
+      .group_count_y = dispatchY,
+      .group_count_z = 1,
+  });
+
+  command_buffer->end_and_submit();
 }
 
 void ClientApp::perform() {
   texture = Texture::construct_storage(
       *get_device(),
       {
-          .format = ImageFormat::R8G8B8A8Unorm,
+          .format = ImageFormat::UNORM_RGBA8,
           .path = FS::texture("viking_room.png"),
           .usage = ImageUsage::Sampled | ImageUsage::Storage |
                    ImageUsage::TransferDst | ImageUsage::TransferSrc,
@@ -285,6 +291,11 @@ void ClientApp::perform() {
   command_buffer = CommandBuffer::construct(
       *get_device(), CommandBufferProperties{
                          .queue_type = Queue::Type::Compute,
+                         .record_stats = true,
+                     });
+  graphics_command_buffer = CommandBuffer::construct(
+      *get_device(), CommandBufferProperties{
+                         .queue_type = Queue::Type::Graphics,
                          .record_stats = true,
                      });
   randomize_span_of_matrices(matrices);
@@ -330,6 +341,19 @@ void ClientApp::perform() {
   }
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
+
+  FramebufferProperties props{
+      .width = get_swapchain()->get_extent().width,
+      .height = get_swapchain()->get_extent().height,
+      .attachments =
+          FramebufferAttachmentSpecification{
+              FramebufferTextureSpecification{
+                  .format = ImageFormat::UNORM_RGBA8,
+              },
+          },
+      .debug_name = "DefaultFramebuffer",
+  };
+  framebuffer = Framebuffer::construct(*get_device(), props);
 }
 
 void ClientApp::update_material_for_rendering(
@@ -430,9 +454,14 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                [&]() { draw_stats(get_timer(), *command_buffer); });
 
     UI::widget("Image", [&]() {
-      UI::image_drop_button(texture);
-      UI::image_button(*output_texture, {512, 512});
-      UI::image_button(*output_texture_second, {512, 512});
+      UI::image_drop_button(texture, {128, 128});
+      ImGui::SameLine();
+      UI::image_button(*output_texture, {128, 128});
+      ImGui::SameLine();
+      UI::image_button(*output_texture_second, {128, 128});
+      ImGui::SameLine();
+      UI::text("Framebuffer image: ");
+      UI::image_button(*framebuffer->get_image(0), {128, 128});
     });
 
     UI::widget("Push constant", [&]() {

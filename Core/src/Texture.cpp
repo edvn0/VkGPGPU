@@ -46,7 +46,7 @@ auto Texture::construct(const Device &device, const FS::Path &path)
     -> Scope<Texture> {
   TextureProperties properties;
   properties.path = path;
-  properties.format = ImageFormat::R8G8B8A8Unorm;
+  properties.format = ImageFormat::UNORM_RGBA8;
   properties.usage = ImageUsage::ColorAttachment | ImageUsage::TransferDst |
                      ImageUsage::TransferSrc;
   properties.layout = ImageLayout::ShaderReadOnlyOptimal;
@@ -68,7 +68,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
       *device,
       ImageProperties{
           .extent = properties.extent,
-          .format = ImageFormat::R8G8B8A8Unorm,
+          .format = ImageFormat::UNORM_RGBA8,
           .tiling = ImageTiling::Linear,
           .usage = ImageUsage::Sampled | ImageUsage::Storage |
                    ImageUsage::TransferDst | ImageUsage::TransferSrc,

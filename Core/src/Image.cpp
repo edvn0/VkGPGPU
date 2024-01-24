@@ -15,6 +15,27 @@
 
 namespace Core {
 
+auto to_vulkan_format(ImageFormat format) -> VkFormat {
+  switch (format) {
+    using enum Core::ImageFormat;
+  case UNORM_RGBA8:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  case SRGB_RGBA8:
+    return VK_FORMAT_R8G8B8A8_SRGB;
+  case Undefined:
+    return VK_FORMAT_UNDEFINED;
+  case DEPTH32F:
+    return VK_FORMAT_D32_SFLOAT;
+  case DEPTH24STENCIL8:
+    return VK_FORMAT_D24_UNORM_S8_UINT;
+  case DEPTH16:
+    return VK_FORMAT_D16_UNORM;
+  default:
+    assert(false);
+    return VK_FORMAT_MAX_ENUM;
+  }
+}
+
 bool transition_image(const ImmediateCommandBuffer &buffer,
                       VkImage &to_transition, VkImageLayout from,
                       VkImageLayout to) {
@@ -187,7 +208,17 @@ Image::Image(const Device &dev, ImageProperties props)
   ensure(properties.layout != ImageLayout::Undefined,
          "Layout cannot be undefined");
 
-  impl = make_scope<ImageStorageImpl>(device);
+  recreate();
+}
+
+auto Image::construct_reference(const Device &device,
+                                const ImageProperties &properties)
+    -> Ref<Image> {
+  return make_ref<Image>(device, properties);
+}
+
+auto Image::recreate() -> void {
+  impl.reset(new ImageStorageImpl(device));
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
@@ -196,8 +227,6 @@ Image::Image(const Device &dev, ImageProperties props)
 Image::Image(const Device &dev, ImageProperties properties,
              const DataBuffer &data_buffer)
     : Image(dev, properties) {
-  static std::mutex access;
-  std::scoped_lock lock{access};
 
   // Create a transfer buffer
   Allocator allocator{"Image"};
@@ -220,9 +249,12 @@ Image::Image(const Device &dev, ImageProperties properties,
   {
     auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
+    {
+      static std::mutex access;
+      std::scoped_lock lock{access};
+      transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    }
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -238,12 +270,17 @@ Image::Image(const Device &dev, ImageProperties properties,
         1,
     };
 
-    vkCmdCopyBufferToImage(buffer.get_command_buffer(), staging_buffer,
-                           impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                           &region);
+    {
+      static std::mutex access;
+      std::scoped_lock lock{access};
+      vkCmdCopyBufferToImage(buffer.get_command_buffer(), staging_buffer,
+                             impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             1, &region);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     to_vulkan_layout(properties.layout));
+      transition_image(buffer, impl->image,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       to_vulkan_layout(properties.layout));
+    }
   }
 
   allocator.deallocate_buffer(allocation, staging_buffer);
@@ -282,6 +319,21 @@ auto Image::get_extent() const noexcept -> const Extent<u32> & {
   return properties.extent;
 }
 
+namespace {
+auto hash_combine(usize &seed, const void *value) noexcept -> void {
+  static auto hasher = std::hash<const void *>{};
+  seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+} // namespace
+
+auto Image::hash() const noexcept -> usize {
+  usize hash = 0;
+  hash_combine(hash, impl->image);
+  hash_combine(hash, impl->image_view);
+  hash_combine(hash, impl->sampler);
+  return hash;
+}
+
 Image::~Image() = default;
 
 auto Image::initialise_vulkan_image() -> void {
@@ -289,7 +341,7 @@ auto Image::initialise_vulkan_image() -> void {
   VkImageCreateInfo image_create_info{};
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_create_info.imageType = VK_IMAGE_TYPE_2D;
-  image_create_info.format = static_cast<VkFormat>(properties.format);
+  image_create_info.format = to_vulkan_format(properties.format);
   image_create_info.extent.width = properties.extent.width;
   image_create_info.extent.height = properties.extent.height;
   image_create_info.extent.depth = 1;
@@ -321,7 +373,7 @@ auto Image::initialise_vulkan_image() -> void {
   image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   image_view_create_info.image = impl->image;
   image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  image_view_create_info.format = static_cast<VkFormat>(properties.format);
+  image_view_create_info.format = to_vulkan_format(properties.format);
   image_view_create_info.subresourceRange.aspectMask =
       VK_IMAGE_ASPECT_COLOR_BIT;
   image_view_create_info.subresourceRange.baseMipLevel = 0;

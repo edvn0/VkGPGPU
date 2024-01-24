@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Colours.hpp"
 #include "Filesystem.hpp"
 #include "Texture.hpp"
 #include "Types.hpp"
@@ -38,28 +39,17 @@ auto widget(const std::string_view name, auto &&func) {
   }
 }
 
-namespace Colours {
-struct Colour {
-  std::array<float, 4> colours;
-
-  constexpr auto r() const -> decltype(auto) { return colours.at(0); };
-  constexpr auto g() const -> decltype(auto) { return colours.at(0); };
-  constexpr auto b() const -> decltype(auto) { return colours.at(0); };
-  constexpr auto a() const -> decltype(auto) { return colours.at(0); };
-};
-
-static constexpr auto White = Colour{1.0F, 1.0F, 1.0F, 1.0F};
-
-} // namespace Colours
-
-struct ImageProperties {
+struct InterfaceImageProperties {
   Extent<u32> extent{64, 64};
-  Colours::Colour colour{Colours::White};
+  Colours::Colour colour{Colours::white};
 };
 
-auto image(const Texture &, ImageProperties = {}) -> void;
-auto image_button(const Texture &, ImageProperties = {}) -> bool;
-auto image_drop_button(Scope<Core::Texture> &, ImageProperties = {}) -> void;
+auto image(const Texture &, InterfaceImageProperties = {}) -> void;
+auto image(const Image &, InterfaceImageProperties = {}) -> void;
+auto image_button(const Texture &, InterfaceImageProperties = {}) -> bool;
+auto image_button(const Image &, InterfaceImageProperties = {}) -> bool;
+auto image_drop_button(Scope<Core::Texture> &, InterfaceImageProperties = {})
+    -> void;
 auto accept_drag_drop_payload(std::string_view) -> std::string;
 auto set_drag_drop_payload(std::string_view payload_type,
                            const StringLike auto &data) -> bool {

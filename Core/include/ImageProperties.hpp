@@ -4,10 +4,11 @@
 
 #include <fmt/core.h>
 #include <type_traits>
+#include <vulkan/vulkan.h>
 
 namespace Core {
 
-#define MAKE_OR_AND_ANDABLE(TYPE, BaseType)                                    \
+#define MAKE_BITFIELD(TYPE, BaseType)                                          \
   constexpr auto operator|(TYPE lhs, TYPE rhs) {                               \
     return static_cast<TYPE>(static_cast<BaseType>(lhs) |                      \
                              static_cast<BaseType>(rhs));                      \
@@ -71,7 +72,7 @@ enum class ImageUsage : std::uint8_t {
   TransientAttachment = bit(6),
   InputAttachment = bit(7),
 };
-MAKE_OR_AND_ANDABLE(ImageUsage, std::uint8_t)
+MAKE_BITFIELD(ImageUsage, std::uint8_t)
 
 enum class ImageLayout : std::uint16_t {
   Undefined = bit(0),
@@ -91,60 +92,17 @@ enum class ImageLayout : std::uint16_t {
   ShadingRateOptimalNV = bit(14),
   FragmentDensityMapOptimalEXT = bit(15),
 };
-MAKE_OR_AND_ANDABLE(ImageLayout, std::uint16_t)
+MAKE_BITFIELD(ImageLayout, std::uint16_t)
 
 enum class ImageFormat : std::uint8_t {
   Undefined,
-  R4G4UnormPack8,
-  R4G4B4A4UnormPack16,
-  B4G4R4A4UnormPack16,
-  R5G6B5UnormPack16,
-  B5G6R5UnormPack16,
-  R5G5B5A1UnormPack16,
-  B5G5R5A1UnormPack16,
-  A1R5G5B5UnormPack16,
-  R8Unorm,
-  R8Snorm,
-  R8Uscaled,
-  R8Sscaled,
-  R8Uint,
-  R8Sint,
-  R8Srgb,
-  R8G8Unorm,
-  R8G8Snorm,
-  R8G8Uscaled,
-  R8G8Sscaled,
-  R8G8Uint,
-  R8G8Sint,
-  R8G8Srgb,
-  R8G8B8Unorm,
-  R8G8B8Snorm,
-  R8G8B8Uscaled,
-  R8G8B8Sscaled,
-  R8G8B8Uint,
-  R8G8B8Sint,
-  R8G8B8Srgb,
-  B8G8R8Unorm,
-  B8G8R8Snorm,
-  B8G8R8Uscaled,
-  B8G8R8Sscaled,
-  B8G8R8Uint,
-  B8G8R8Sint,
-  B8G8R8Srgb,
-  R8G8B8A8Unorm,
-  R8G8B8A8Snorm,
-  R8G8B8A8Uscaled,
-  R8G8B8A8Sscaled,
-  R8G8B8A8Uint,
-  R8G8B8A8Sint,
-  R8G8B8A8Srgb,
-  B8G8R8A8Unorm,
-  B8G8R8A8Snorm,
-  B8G8R8A8Uscaled,
-  B8G8R8A8Sscaled,
-  B8G8R8A8Uint,
-  B8G8R8A8Sint
+  SRGB_RGBA8,
+  UNORM_RGBA8,
+  DEPTH32F,
+  DEPTH24STENCIL8,
+  DEPTH16
 };
+auto to_vulkan_format(ImageFormat format) -> VkFormat;
 
 enum class SamplerFilter : std::uint8_t {
   Nearest,

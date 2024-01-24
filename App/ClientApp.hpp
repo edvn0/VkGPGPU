@@ -11,6 +11,7 @@
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
+#include "Framebuffer.hpp"
 #include "Image.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
@@ -54,6 +55,8 @@ private:
   Timer timer;
 
   Scope<CommandBuffer> command_buffer;
+  Scope<CommandBuffer> graphics_command_buffer;
+  Scope<Framebuffer> framebuffer;
 
   Scope<Material> material;
   Scope<Pipeline> pipeline;
