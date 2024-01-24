@@ -196,6 +196,8 @@ Image::Image(const Device &dev, ImageProperties props)
 Image::Image(const Device &dev, ImageProperties properties,
              const DataBuffer &data_buffer)
     : Image(dev, properties) {
+  static std::mutex access;
+  std::scoped_lock lock{access};
 
   // Create a transfer buffer
   Allocator allocator{"Image"};

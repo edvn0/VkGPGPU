@@ -8,11 +8,15 @@
 
 namespace Core {
 
+enum class TextureDataRetainmentStrategy : std::uint8_t { None, Keep, Delete };
+
 struct TextureProperties {
   ImageFormat format;
   std::string identifier{};
   FS::Path path{};
   Extent<u32> extent{};
+  TextureDataRetainmentStrategy data_retainment_strategy{
+      TextureDataRetainmentStrategy::Delete};
   ImageTiling tiling{ImageTiling::Optimal};
   ImageUsage usage{ImageUsage::Sampled};
   ImageLayout layout{ImageLayout::ShaderReadOnlyOptimal};
@@ -32,7 +36,7 @@ public:
   [[nodiscard]] auto valid() const noexcept -> bool;
 
   auto write_to_file(const FS::Path &) -> bool;
-  [[nodiscard]] auto size_bytes() const -> usize { return data_buffer.size(); }
+  [[nodiscard]] auto size_bytes() const -> usize { return cached_size; }
   [[nodiscard]] auto get_extent() const -> const auto & {
     return properties.extent;
   }
@@ -55,7 +59,10 @@ private:
 
   const Device *device{nullptr};
   TextureProperties properties;
+
   DataBuffer data_buffer;
+  usize cached_size{0};
+
   Scope<Image> image{nullptr};
 };
 

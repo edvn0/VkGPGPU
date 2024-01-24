@@ -12,6 +12,12 @@
 
 namespace Core {
 
+auto Pipeline::construct(const Device &dev,
+                         const PipelineConfiguration &configuration)
+    -> Scope<Pipeline> {
+  return Scope<Pipeline>(new Pipeline(dev, configuration));
+}
+
 Pipeline::Pipeline(const Device &dev,
                    const PipelineConfiguration &configuration)
     : device(dev), name(configuration.name) {

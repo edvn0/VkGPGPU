@@ -12,7 +12,7 @@
 
 using namespace Core;
 
-using TextureCache = GenericCache<Texture, TextureProperties>;
+using TextureCache = GenericCache<Texture, TextureProperties, false>;
 
 class FilesystemWidget : public Widget {
 public:

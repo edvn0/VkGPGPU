@@ -302,11 +302,11 @@ void ClientApp::perform() {
                                FS::shader("LaplaceEdgeDetection.comp.spv"));
 
     material = Material::construct(*get_device(), *shader);
-    pipeline = make_scope<Pipeline>(*get_device(), PipelineConfiguration{
-                                                       "LaplaceEdgeDetection",
-                                                       PipelineStage::Compute,
-                                                       *shader,
-                                                   });
+    pipeline = Pipeline::construct(*get_device(), PipelineConfiguration{
+                                                      "LaplaceEdgeDetection",
+                                                      PipelineStage::Compute,
+                                                      *shader,
+                                                  });
     auto &&[kernel_size, half_size, center_value] = compute_kernel_size<3>();
     material->set("pc.kernelSize", kernel_size);
     material->set("pc.halfSize", half_size);
@@ -318,11 +318,11 @@ void ClientApp::perform() {
 
     second_material = Material::construct(*get_device(), *second_shader);
     second_pipeline =
-        make_scope<Pipeline>(*get_device(), PipelineConfiguration{
-                                                "LaplaceEdgeDetection_Second",
-                                                PipelineStage::Compute,
-                                                *second_shader,
-                                            });
+        Pipeline::construct(*get_device(), PipelineConfiguration{
+                                               "LaplaceEdgeDetection_Second",
+                                               PipelineStage::Compute,
+                                               *second_shader,
+                                           });
     auto &&[kernel_size, half_size, center_value] = compute_kernel_size<127>();
     second_material->set("pc.kernelSize", kernel_size);
     second_material->set("pc.halfSize", half_size);
@@ -430,11 +430,9 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                [&]() { draw_stats(get_timer(), *command_buffer); });
 
     UI::widget("Image", [&]() {
-      const auto &descriptor_info = output_texture_second->get_image_info();
-      auto identifier =
-          UI::add_image(descriptor_info.sampler, descriptor_info.imageView,
-                        descriptor_info.imageLayout);
-      UI::image_drop_button(output_texture_second, {512, 512});
+      UI::image_drop_button(texture);
+      UI::image_button(*output_texture, {512, 512});
+      UI::image_button(*output_texture_second, {512, 512});
     });
 
     UI::widget("Push constant", [&]() {

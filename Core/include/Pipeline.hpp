@@ -27,8 +27,6 @@ struct PipelineConfiguration {
 
 class Pipeline {
 public:
-  explicit Pipeline(const Device &dev,
-                    const PipelineConfiguration &configuration);
   ~Pipeline();
 
   [[nodiscard]] auto get_pipeline() const -> VkPipeline { return pipeline; }
@@ -43,7 +41,13 @@ public:
 
   auto bind(const CommandBuffer &) -> void;
 
+  static auto construct(const Device &dev,
+                        const PipelineConfiguration &configuration)
+      -> Scope<Pipeline>;
+
 private:
+  explicit Pipeline(const Device &dev,
+                    const PipelineConfiguration &configuration);
   auto construct_pipeline(const PipelineConfiguration &configuration) -> void;
 
   [[nodiscard]] auto try_load_pipeline_cache(const std::string &name)

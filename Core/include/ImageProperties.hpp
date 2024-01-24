@@ -7,6 +7,26 @@
 
 namespace Core {
 
+#define MAKE_OR_AND_ANDABLE(TYPE, BaseType)                                    \
+  constexpr auto operator|(TYPE lhs, TYPE rhs) {                               \
+    return static_cast<TYPE>(static_cast<BaseType>(lhs) |                      \
+                             static_cast<BaseType>(rhs));                      \
+  }                                                                            \
+  constexpr auto operator|=(TYPE &lhs, TYPE rhs) {                             \
+    lhs = static_cast<TYPE>(static_cast<BaseType>(lhs) |                       \
+                            static_cast<BaseType>(rhs));                       \
+    return lhs;                                                                \
+  }                                                                            \
+  constexpr auto operator&(TYPE lhs, TYPE rhs) {                               \
+    return static_cast<TYPE>(static_cast<BaseType>(lhs) &                      \
+                             static_cast<BaseType>(rhs));                      \
+  }                                                                            \
+  constexpr auto operator&=(TYPE &lhs, TYPE rhs) {                             \
+    lhs = static_cast<TYPE>(static_cast<BaseType>(lhs) &                       \
+                            static_cast<BaseType>(rhs));                       \
+    return lhs;                                                                \
+  }
+
 template <IsNumber T> struct Extent {
   T width{0};
   T height{0};
@@ -51,25 +71,7 @@ enum class ImageUsage : std::uint8_t {
   TransientAttachment = bit(6),
   InputAttachment = bit(7),
 };
-constexpr auto operator|(ImageUsage lhs, ImageUsage rhs) {
-  return static_cast<ImageUsage>(static_cast<std::byte>(lhs) |
-                                 static_cast<std::byte>(rhs));
-}
-// Operator |=
-constexpr auto operator|=(ImageUsage &lhs, ImageUsage rhs) {
-  lhs = static_cast<ImageUsage>(static_cast<std::byte>(lhs) |
-                                static_cast<std::byte>(rhs));
-  return lhs;
-}
-constexpr auto operator&(ImageUsage lhs, ImageUsage rhs) {
-  return static_cast<ImageUsage>(static_cast<std::byte>(lhs) &
-                                 static_cast<std::byte>(rhs));
-}
-constexpr auto operator&=(ImageUsage &lhs, ImageUsage rhs) {
-  lhs = static_cast<ImageUsage>(static_cast<std::byte>(lhs) &
-                                static_cast<std::byte>(rhs));
-  return lhs;
-}
+MAKE_OR_AND_ANDABLE(ImageUsage, std::uint8_t)
 
 enum class ImageLayout : std::uint16_t {
   Undefined = bit(0),
@@ -89,6 +91,7 @@ enum class ImageLayout : std::uint16_t {
   ShadingRateOptimalNV = bit(14),
   FragmentDensityMapOptimalEXT = bit(15),
 };
+MAKE_OR_AND_ANDABLE(ImageLayout, std::uint16_t)
 
 enum class ImageFormat : std::uint8_t {
   Undefined,

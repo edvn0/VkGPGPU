@@ -8,9 +8,15 @@
 #include "Types.hpp"
 
 #include <future>
+#include <queue>
 #include <string>
+#include <unordered_set>
 
 namespace Core {
+
+template <typename R> bool is_ready(const std::future<R> &f) {
+  return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
 
 template <class Constructor>
 concept ConstructorLike = requires(
@@ -45,7 +51,8 @@ template <class T, class P> struct DefaultConstructor {
  * any class with a static construct function that returns a Scope<T> and takes
  * a const Device & and a const P & as arguments.
  */
-template <class T, class P, ConstructorLike C = DefaultConstructor<T, P>>
+template <class T, class P, bool IsAsynchronous = true,
+          ConstructorLike C = DefaultConstructor<T, P>>
   requires(Cacheable<T, P>)
 class GenericCache {
 public:
@@ -69,27 +76,47 @@ public:
    */
   auto put_or_get(const P &props) -> const Scope<T> & {
     std::scoped_lock lock(access);
-    if (future_cache.contains(props.identifier)) {
+    if (processing_identifier_cache.contains(props.identifier)) {
       return loading;
     }
 
-    if (auto it = type_cache.find(props.identifier); it != type_cache.end()) {
-      return it->second;
+    if (type_cache.contains(props.identifier)) {
+      return type_cache.at(props.identifier);
     } else {
-      auto future_texture = ThreadPool::submit(
-          [this, props]() { return C::construct(*device, props); });
-      future_cache[props.identifier] = std::move(future_texture);
-      return loading;
+      if constexpr (IsAsynchronous) {
+
+        processing_identifier_cache.emplace(props.identifier);
+        auto future_texture = ThreadPool::submit(
+            [this, props]() { return C::construct(*device, props); });
+
+        future_cache.emplace(CacheTask{
+            .identifier = props.identifier,
+            .future = std::move(future_texture),
+        });
+        return loading;
+      } else {
+        type_cache[props.identifier] = C::construct(*device, props);
+        return type_cache.at(props.identifier);
+      }
     }
   }
 
   auto update_one() {
-    if (auto it = future_cache.begin(); it != future_cache.end()) {
-      auto get = it->second.get();
-      std::scoped_lock lock(access);
-      type_cache[it->first] = std::move(get);
-      future_cache.erase(it);
+    if (future_cache.empty()) {
+      return;
     }
+
+    std::scoped_lock lock(access);
+    auto &&[identifier, future] = future_cache.front();
+    // Check state of future
+    if (is_ready(future)) {
+      return;
+    }
+
+    auto result = future.get();
+    type_cache[identifier] = std::move(result);
+    future_cache.pop();
+    processing_identifier_cache.erase(identifier);
   }
 
   auto type_cache_size() const -> usize { return type_cache.size(); }
@@ -99,7 +126,14 @@ public:
 
 private:
   const Device *device;
-  Container::StringLikeMap<std::future<Scope<T>>> future_cache;
+
+  struct CacheTask {
+    std::string identifier;
+    std::future<Scope<T>> future;
+  };
+
+  std::queue<CacheTask> future_cache;
+  std::unordered_set<std::string> processing_identifier_cache;
   Container::StringLikeMap<Scope<T>> type_cache;
   std::mutex access;
   std::mutex other;

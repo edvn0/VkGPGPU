@@ -38,8 +38,23 @@ auto widget(const std::string_view name, auto &&func) {
   }
 }
 
+namespace Colours {
+struct Colour {
+  std::array<float, 4> colours;
+
+  constexpr auto r() const -> decltype(auto) { return colours.at(0); };
+  constexpr auto g() const -> decltype(auto) { return colours.at(0); };
+  constexpr auto b() const -> decltype(auto) { return colours.at(0); };
+  constexpr auto a() const -> decltype(auto) { return colours.at(0); };
+};
+
+static constexpr auto White = Colour{1.0F, 1.0F, 1.0F, 1.0F};
+
+} // namespace Colours
+
 struct ImageProperties {
   Extent<u32> extent{64, 64};
+  Colours::Colour colour{Colours::White};
 };
 
 auto image(const Texture &, ImageProperties = {}) -> void;

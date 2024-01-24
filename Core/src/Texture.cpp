@@ -55,8 +55,7 @@ auto Texture::construct(const Device &device, const FS::Path &path)
 }
 
 Texture::~Texture() {
-  info("Destroyed Texture '{}', size: {}", properties.identifier,
-       data_buffer.size());
+  info("Destroyed Texture '{}', size: {}", properties.identifier, cached_size);
 }
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
@@ -64,6 +63,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
   properties.extent = extent;
   properties.identifier = fmt::format("Empty-Size{}", size);
   data_buffer.fill_zero();
+  cached_size = data_buffer.size();
   image = make_scope<Image>(
       *device,
       ImageProperties{
@@ -107,6 +107,12 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
                             },
                             data_buffer);
   info("Created texture '{}', {}", properties.identifier, properties.extent);
+  cached_size = data_buffer.size();
+
+  if (properties.data_retainment_strategy ==
+      TextureDataRetainmentStrategy::Delete) {
+    data_buffer.clear();
+  }
 }
 
 auto Texture::hash() const -> usize {

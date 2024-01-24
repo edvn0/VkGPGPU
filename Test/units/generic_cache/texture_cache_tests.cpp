@@ -21,8 +21,8 @@ struct MockDefault {
     return nullptr;
   }
 };
-using TextureCache =
-    Core::GenericCache<Core::Texture, Core::TextureProperties, MockDefault>;
+using TextureCache = Core::GenericCache<Core::Texture, Core::TextureProperties,
+                                        true, MockDefault>;
 
 TEST_CASE("Texture Cache tests", "[GenericCache]") {
   const MockInstance instance{};

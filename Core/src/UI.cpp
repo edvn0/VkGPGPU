@@ -2,6 +2,7 @@
 
 #include "InterfaceSystem.hpp"
 #include "PlatformUI.hpp"
+#include "Texture.hpp"
 
 #include <backends/imgui_impl_vulkan.h>
 #include <fmt/format.h>
@@ -66,18 +67,14 @@ auto image_button(const Texture &texture, ImageProperties properties) -> bool {
 
 auto image_drop_button(Scope<Core::Texture> &texture,
                        ImageProperties properties) -> void {
-
   if (texture) {
-    const auto &[sampler, view, layout] = texture->get_image_info();
-    auto set = add_image(sampler, view, layout);
-    if (ImGui::ImageButton("ImageDropButtonTexture", set,
-                           to_imvec2(properties.extent))) {
-      device.perform(
-          [&](auto &device) { info("Texture: {}", fmt::ptr(texture.get())); });
+    const Texture &textureToShow = *texture;
+    if (UI::image_button(textureToShow)) {
+      // Button click logic (if any)
     }
   } else {
-    if (ImGui::Button("Drop Image Here")) {
-      // Button logic
+    if (ImGui::Button("Whatever")) {
+      // Button click logic (if any)
     }
   }
 
@@ -85,8 +82,21 @@ auto image_drop_button(Scope<Core::Texture> &texture,
   const auto dropped_file_path =
       Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
   if (!dropped_file_path.empty()) {
-    // Create and swap textures based on the dropped file path
-    info("Path: {}", dropped_file_path);
+    try {
+      auto path = std::filesystem::path{dropped_file_path};
+      device.perform([&](auto &device) {
+        auto new_text = Texture::construct_shader(
+            device, {
+                        .format = ImageFormat::R8G8B8A8Unorm,
+                        .path = path,
+                        .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
+                                 ImageUsage::TransferDst,
+                    });
+        texture = std::move(new_text);
+      });
+    } catch (const std::exception &exc) {
+      error("Path was :{}, exc:  {}", dropped_file_path, exc.what());
+    }
   }
 }
 

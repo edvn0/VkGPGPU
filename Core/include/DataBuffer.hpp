@@ -185,6 +185,11 @@ public:
     std::memcpy(data.get(), from.data.get(), from.size());
   }
 
+  auto clear() noexcept -> void {
+    buffer_size = 0;
+    data.reset();
+  }
+
   [[nodiscard]] auto size() const noexcept -> usize { return buffer_size; }
   [[nodiscard]] auto hash() const noexcept -> usize {
     return std::hash<usize>{}(buffer_size) ^
