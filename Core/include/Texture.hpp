@@ -29,6 +29,7 @@ struct TextureProperties {
 class Texture {
 public:
   ~Texture();
+  auto on_resize(const Extent<u32> &) -> void {}
 
   [[nodiscard]] auto get_image_info() const noexcept
       -> const VkDescriptorImageInfo &;

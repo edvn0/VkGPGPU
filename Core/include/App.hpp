@@ -80,6 +80,7 @@ public:
 
 protected:
   virtual auto on_update(floating ts) -> void = 0;
+  virtual auto on_resize(const Extent<u32> &) -> void = 0;
   virtual auto on_interface(InterfaceSystem &) -> void = 0;
   virtual auto on_create() -> void = 0;
   virtual auto on_destroy() -> void = 0;
@@ -101,9 +102,12 @@ protected:
   [[nodiscard]] auto get_swapchain() const -> const Scope<Swapchain> & {
     return swapchain;
   }
-
   [[nodiscard]] auto get_instance() const -> const Scope<Instance> & {
     return instance;
+  }
+
+  [[nodiscard]] auto was_resized() const -> bool {
+    return window->was_resized();
   }
 
   [[nodiscard]] auto get_frame_counter() const -> u64 { return frame_counter; }

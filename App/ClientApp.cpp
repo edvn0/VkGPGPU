@@ -128,7 +128,8 @@ ClientApp::ClientApp(const ApplicationProperties &props)
   pc.kernel_size = kernel;
   pc.half_size = half;
   pc.center_value = center;
-  widgets.emplace_back(make_scope<FilesystemWidget>(*get_device(), "."));
+  widgets.emplace_back(make_scope<FilesystemWidget>(
+      *get_device(), std::filesystem::current_path()));
 };
 
 auto ClientApp::on_update(floating ts) -> void {
@@ -182,6 +183,56 @@ public:
   }
   auto end_renderpass(const CommandBuffer &commandbuffer) -> void {
     vkCmdEndRenderPass(commandbuffer.get_command_buffer());
+
+    bound_pipeline.reset(commandbuffer);
+  }
+
+  struct DrawParameters {
+    u32 index_count;
+    u32 instance_count{1};
+    u32 first_index{0};
+    u32 vertex_offset{0};
+    u32 first_instance{0};
+  };
+  auto draw(const CommandBuffer &buffer, const DrawParameters &params) {
+    vkCmdDrawIndexed(buffer.get_command_buffer(), params.index_count,
+                     params.instance_count, params.first_index,
+                     params.vertex_offset, params.first_instance);
+  }
+
+  auto bind_pipeline(const CommandBuffer &buffer,
+                     const GraphicsPipeline &pipeline) {
+    if (!check_already_bound_and_set_if_not_bound(pipeline))
+      return;
+
+    vkCmdBindPipeline(buffer.get_command_buffer(),
+                      VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get_pipeline());
+  }
+
+private:
+  struct PipelineAndHash {
+    VkPipeline bound_pipeline{nullptr};
+    u64 hash{0};
+
+    auto reset(const auto &buffer) {
+      bound_pipeline = nullptr;
+      vkCmdBindPipeline(buffer.get_command_buffer(),
+                        VK_PIPELINE_BIND_POINT_GRAPHICS, bound_pipeline);
+      hash = 0;
+    }
+  };
+  PipelineAndHash bound_pipeline{};
+
+  auto
+  check_already_bound_and_set_if_not_bound(const GraphicsPipeline &pipeline)
+      -> bool {
+    if (const auto hash = pipeline.hash(); bound_pipeline.hash != hash) {
+      bound_pipeline.bound_pipeline = pipeline.get_pipeline();
+      bound_pipeline.hash = hash;
+      return true;
+    }
+
+    return false;
   }
 };
 
@@ -189,6 +240,13 @@ auto ClientApp::graphics(floating ts) -> void {
   static SceneRenderer scene_renderer;
   graphics_command_buffer->begin(frame());
   scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
+  scene_renderer.bind_pipeline(*graphics_command_buffer, *graphics_pipeline);
+  scene_renderer.bind_index_buffer(*graphics_command_buffer, *index_buffer);
+  scene_renderer.bind_vertex_buffer(*graphics_command_buffer, *index_buffer);
+  scene_renderer.draw(*graphics_command_buffer, {
+                                                    .index_count = 3,
+                                                    .instance_count = 1,
+                                                });
   scene_renderer.end_renderpass(*graphics_command_buffer);
   graphics_command_buffer->end_and_submit();
 }
@@ -339,21 +397,38 @@ void ClientApp::perform() {
     second_material->set("pc.halfSize", half_size);
     second_material->set("pc.precomputedCenterValue", center_value);
   }
+  {
+    FramebufferProperties props{
+        .width = get_swapchain()->get_extent().width,
+        .height = get_swapchain()->get_extent().height,
+        .attachments =
+            FramebufferAttachmentSpecification{
+                FramebufferTextureSpecification{
+                    .format = ImageFormat::UNORM_RGBA8,
+                },
+            },
+        .debug_name = "DefaultFramebuffer",
+    };
+    framebuffer = Framebuffer::construct(*get_device(), props);
+
+    graphics_shader =
+        Shader::construct(*get_device(), FS::shader("Triangle.vert.spv"),
+                          FS::shader("Triangle.frag.spv"));
+
+    graphics_material = Material::construct(*get_device(), *graphics_shader);
+    graphics_pipeline = GraphicsPipeline::construct(
+        *get_device(), GraphicsPipelineConfiguration{
+                           .name = "DefaultGraphicsPipeline",
+                           .shader = graphics_shader.get(),
+                           .framebuffer = framebuffer.get(),
+                       });
+    auto &&[kernel_size, half_size, center_value] = compute_kernel_size<127>();
+    graphics_material->set("pc.kernelSize", kernel_size);
+    graphics_material->set("pc.halfSize", half_size);
+    graphics_material->set("pc.precomputedCenterValue", center_value);
+  }
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
-
-  FramebufferProperties props{
-      .width = get_swapchain()->get_extent().width,
-      .height = get_swapchain()->get_extent().height,
-      .attachments =
-          FramebufferAttachmentSpecification{
-              FramebufferTextureSpecification{
-                  .format = ImageFormat::UNORM_RGBA8,
-              },
-          },
-      .debug_name = "DefaultFramebuffer",
-  };
-  framebuffer = Framebuffer::construct(*get_device(), props);
 }
 
 void ClientApp::update_material_for_rendering(
@@ -493,4 +568,18 @@ void ClientApp::on_interface(InterfaceSystem &system) {
 
   for (auto &widget : widgets)
     widget->on_interface(system);
+}
+
+auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
+  material->on_resize(new_extent);
+  pipeline->on_resize(new_extent);
+  shader->on_resize(new_extent);
+  second_material->on_resize(new_extent);
+  second_pipeline->on_resize(new_extent);
+  second_shader->on_resize(new_extent);
+  texture->on_resize(new_extent);
+  output_texture->on_resize(new_extent);
+  output_texture_second->on_resize(new_extent);
+
+  info("{}", new_extent);
 }

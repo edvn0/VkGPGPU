@@ -91,13 +91,12 @@ auto Window::get_instance() const -> VkInstance {
   return instance->get_instance();
 }
 
-auto Window::resized_or_minimized() -> bool {
+auto Window::was_resized() -> bool {
   if (window == nullptr) {
     return false;
   }
 
-  return glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0 ||
-         user_data.was_resized;
+  return user_data.was_resized;
 }
 
 auto Window::reset_resize_status() -> void { user_data.was_resized = false; }

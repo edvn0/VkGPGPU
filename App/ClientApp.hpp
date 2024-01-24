@@ -37,6 +37,7 @@ public:
   ~ClientApp() override = default;
 
   void on_update(floating ts) override;
+  void on_resize(const Extent<u32> &) override;
   void on_interface(Core::InterfaceSystem &) override;
   void on_create() override;
   void on_destroy() override;
@@ -61,9 +62,14 @@ private:
   Scope<Material> material;
   Scope<Pipeline> pipeline;
   Scope<Shader> shader;
+
   Scope<Material> second_material;
   Scope<Pipeline> second_pipeline;
   Scope<Shader> second_shader;
+
+  Scope<Material> graphics_material;
+  Scope<GraphicsPipeline> graphics_pipeline;
+  Scope<Shader> graphics_shader;
 
   Scope<Texture> texture;
   Scope<Texture> output_texture;

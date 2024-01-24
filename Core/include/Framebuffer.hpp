@@ -17,13 +17,13 @@ enum class FramebufferBlendMode {
   OneZero,
   OneMinusSourceAlpha,
   Additive,
-  ZeroSrcColor
+  ZeroSourceColor
 };
 
 struct FramebufferTextureSpecification {
   ImageFormat format{ImageFormat::SRGB_RGBA8};
   bool blend{true};
-  FramebufferBlendMode BlendMode{FramebufferBlendMode::OneMinusSourceAlpha};
+  FramebufferBlendMode blend_mode{FramebufferBlendMode::OneMinusSourceAlpha};
 };
 
 struct FramebufferAttachmentSpecification {
@@ -94,6 +94,9 @@ public:
   [[nodiscard]] auto get_clear_values() const
       -> const std::vector<VkClearValue> & {
     return clear_values;
+  }
+  [[nodiscard]] auto get_properties() const -> const auto & {
+    return properties;
   }
 
   auto invalidate() -> void;

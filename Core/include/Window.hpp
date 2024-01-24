@@ -25,7 +25,7 @@ public:
   [[nodiscard]] auto get_surface() const -> VkSurfaceKHR;
   [[nodiscard]] auto should_close() const -> bool;
 
-  [[nodiscard]] auto resized_or_minimized() -> bool;
+  [[nodiscard]] auto was_resized() -> bool;
   auto reset_resize_status() -> void;
 
   [[nodiscard]] auto size_is_zero() const -> bool;

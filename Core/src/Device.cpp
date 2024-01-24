@@ -235,6 +235,7 @@ auto Device::create_vulkan_device(
 
   VkPhysicalDeviceFeatures device_features{};
   device_features.pipelineStatisticsQuery = VK_TRUE;
+  device_features.logicOp = VK_TRUE;
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
   for (auto &&[type, queue_info, supports_timestamping] :

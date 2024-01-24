@@ -18,6 +18,8 @@ class Material {
 public:
   static auto construct(const Device &, const Shader &) -> Scope<Material>;
 
+  auto on_resize(const Extent<u32> &) -> void {}
+
   auto set(const std::string_view identifier, const IsBuiltin auto &value)
       -> bool {
     const auto &copy = value;

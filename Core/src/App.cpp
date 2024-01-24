@@ -74,6 +74,12 @@ auto App::run() -> void {
     const auto total_time = last_time;
 
     while (!window->should_close()) {
+      if (was_resized()) {
+        on_resize(window->get_extent());
+        window->reset_resize_status();
+        continue;
+      }
+
       if (!swapchain->begin_frame())
         continue;
 
