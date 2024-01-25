@@ -97,6 +97,7 @@ MAKE_BITFIELD(ImageLayout, std::uint16_t)
 enum class ImageFormat : std::uint8_t {
   Undefined,
   SRGB_RGBA8,
+  SRGB_RGBA32,
   UNORM_RGBA8,
   DEPTH32F,
   DEPTH24STENCIL8,

@@ -45,7 +45,8 @@ template <class T, class P> struct DefaultConstructor {
  *
  * @tparam T The type of objects to cache.
  * @tparam P The properties type used for object identification and
- * construction.
+ * construction
+ * @tparam IsAsynchronous Use the sync version of this cache
  * @tparam C A constructor-like class for creating objects of type T. Must
  * satisfy ConstructorLike concept. The ConstructorLike concept is satisfied by
  * any class with a static construct function that returns a Scope<T> and takes
@@ -122,7 +123,7 @@ public:
   auto type_cache_size() const -> usize { return type_cache.size(); }
   auto future_cache_size() const -> usize { return future_cache.size(); }
 
-  auto get_loading() const -> const Scope<T> & { return loading; }
+  auto get_loading_texture() const -> const Scope<T> & { return loading; }
 
 private:
   const Device *device;

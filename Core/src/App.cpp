@@ -67,66 +67,59 @@ auto App::run() -> void {
   Scope<InterfaceSystem> interface_system =
       make_scope<InterfaceSystem>(*device, *window, *swapchain);
 
-  try {
-    on_create();
+  on_create();
 
-    auto last_time = now();
-    const auto total_time = last_time;
+  auto last_time = now();
+  const auto total_time = last_time;
 
-    while (!window->should_close()) {
-      if (was_resized()) {
-        on_resize(window->get_extent());
-        window->reset_resize_status();
-        continue;
-      }
-
-      if (!swapchain->begin_frame())
-        continue;
-
-      fps_average.update();
-
-      if (fps_average.should_print()) {
-        fps_average.print();
-      }
-
-      device->get_descriptor_resource()->begin_frame(
-          swapchain->current_frame());
-      const auto current_time = now();
-
-      const auto delta_time_seconds =
-          std::chrono::duration<floating>(current_time - last_time).count();
-
-      on_update(delta_time_seconds);
-
-      {
-        interface_system->begin_frame();
-        on_interface(*interface_system);
-        interface_system->end_frame();
-      }
-
-      swapchain->end_frame();
-
-      last_time = current_time;
-
-      frame_counter++;
-
-      window->update();
-
-      device->get_descriptor_resource()->end_frame();
-      swapchain->present();
+  while (!window->should_close()) {
+    if (was_resized()) {
+      on_resize(window->get_extent());
+      window->reset_resize_status();
+      continue;
     }
 
-    vkDeviceWaitIdle(device->get_device());
+    if (!swapchain->begin_frame())
+      continue;
 
-    info("Total time: {} seconds.",
-         std::chrono::duration<floating>(now() - total_time).count());
+    fps_average.update();
 
-    on_destroy();
+    if (fps_average.should_print()) {
+      fps_average.print();
+    }
 
-  } catch (const std::exception &exc) {
-    error("Main loop exception: {}", exc);
-    throw;
+    device->get_descriptor_resource()->begin_frame(swapchain->current_frame());
+    const auto current_time = now();
+
+    const auto delta_time_seconds =
+        std::chrono::duration<floating>(current_time - last_time).count();
+
+    on_update(delta_time_seconds);
+
+    {
+      interface_system->begin_frame();
+      on_interface(*interface_system);
+      interface_system->end_frame();
+    }
+
+    swapchain->end_frame();
+
+    last_time = current_time;
+
+    frame_counter++;
+
+    window->update();
+
+    device->get_descriptor_resource()->end_frame();
+    swapchain->present();
   }
+
+  vkDeviceWaitIdle(device->get_device());
+
+  info("Total time: {} seconds.",
+       std::chrono::duration<floating>(now() - total_time).count());
+
+  on_destroy();
 }
 
 } // namespace Core

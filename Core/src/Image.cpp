@@ -22,6 +22,8 @@ auto to_vulkan_format(ImageFormat format) -> VkFormat {
     return VK_FORMAT_R8G8B8A8_UNORM;
   case SRGB_RGBA8:
     return VK_FORMAT_R8G8B8A8_SRGB;
+  case SRGB_RGBA32:
+    return VK_FORMAT_R32G32B32A32_SFLOAT;
   case Undefined:
     return VK_FORMAT_UNDEFINED;
   case DEPTH32F:
@@ -222,12 +224,12 @@ auto Image::recreate() -> void {
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
+  // if (properties.mip_info.valid()) {
+  //  create_mips();
+  //}
 }
 
-Image::Image(const Device &dev, ImageProperties properties,
-             const DataBuffer &data_buffer)
-    : Image(dev, properties) {
-
+auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
   // Create a transfer buffer
   Allocator allocator{"Image"};
   VkBufferCreateInfo buffer_create_info{};
@@ -249,12 +251,8 @@ Image::Image(const Device &dev, ImageProperties properties,
   {
     auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
-    {
-      static std::mutex access;
-      std::scoped_lock lock{access};
-      transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    }
+    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -263,27 +261,33 @@ Image::Image(const Device &dev, ImageProperties properties,
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
+    region.imageOffset = {
+        0,
+        0,
+        0,
+    };
     region.imageExtent = {
         properties.extent.width,
         properties.extent.height,
         1,
     };
 
-    {
-      static std::mutex access;
-      std::scoped_lock lock{access};
-      vkCmdCopyBufferToImage(buffer.get_command_buffer(), staging_buffer,
-                             impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             1, &region);
+    vkCmdCopyBufferToImage(buffer.get_command_buffer(), staging_buffer,
+                           impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &region);
 
-      transition_image(buffer, impl->image,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       to_vulkan_layout(properties.layout));
-    }
+    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     to_vulkan_layout(properties.layout));
   }
 
   allocator.deallocate_buffer(allocation, staging_buffer);
+}
+
+Image::Image(const Device &dev, ImageProperties properties,
+             const DataBuffer &data_buffer)
+    : Image(dev, properties) {
+  load_image_data_from_buffer(data_buffer);
+  create_mips();
 }
 
 auto Image::initialise_vulkan_descriptor_info() -> void {
@@ -321,7 +325,7 @@ auto Image::get_extent() const noexcept -> const Extent<u32> & {
 
 namespace {
 auto hash_combine(usize &seed, const void *value) noexcept -> void {
-  static auto hasher = std::hash<const void *>{};
+  static constexpr auto hasher = std::hash<const void *>{};
   seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 } // namespace
@@ -336,6 +340,97 @@ auto Image::hash() const noexcept -> usize {
 
 Image::~Image() = default;
 
+void Image::create_mips() {
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.image = impl->image;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.subresourceRange.levelCount = 1;
+  auto &&[mip_width, mip_height] = properties.extent.as<i32>();
+
+  auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
+  transition_image(command_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  for (u32 i = 1; i < properties.mip_info.mips; i++) {
+    barrier.subresourceRange.baseMipLevel = i - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+    vkCmdPipelineBarrier(
+        command_buffer.get_command_buffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkImageBlit blit{};
+    blit.srcOffsets[0] = {
+        0,
+        0,
+        0,
+    };
+    blit.srcOffsets[1] = {
+        mip_width,
+        mip_height,
+        1,
+    };
+    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.srcSubresource.mipLevel = i - 1;
+    blit.srcSubresource.baseArrayLayer = 0;
+    blit.srcSubresource.layerCount = 1;
+    blit.dstOffsets[0] = {
+        0,
+        0,
+        0,
+    };
+    blit.dstOffsets[1] = {
+        mip_width > 1 ? mip_width / 2 : 1,
+        mip_height > 1 ? mip_height / 2 : 1,
+        1,
+    };
+    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.mipLevel = i;
+    blit.dstSubresource.baseArrayLayer = 0;
+    blit.dstSubresource.layerCount = 1;
+
+    vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                   VK_FILTER_LINEAR);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &barrier);
+
+    if (mip_width > 1) {
+      mip_width /= 2;
+    }
+    if (mip_height > 1) {
+      mip_height /= 2;
+    }
+  }
+
+  barrier.subresourceRange.baseMipLevel = properties.mip_info.mips - 1;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.newLayout = to_vulkan_layout(properties.layout);
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+  vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+}
+
 auto Image::initialise_vulkan_image() -> void {
   Allocator allocator{"Image"};
   VkImageCreateInfo image_create_info{};
@@ -345,7 +440,8 @@ auto Image::initialise_vulkan_image() -> void {
   image_create_info.extent.width = properties.extent.width;
   image_create_info.extent.height = properties.extent.height;
   image_create_info.extent.depth = 1;
-  image_create_info.mipLevels = 1;
+  image_create_info.mipLevels =
+      properties.mip_info.valid() ? properties.mip_info.mips : 1;
   image_create_info.arrayLayers = 1;
   image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
   image_create_info.tiling = static_cast<VkImageTiling>(properties.tiling);
@@ -377,7 +473,8 @@ auto Image::initialise_vulkan_image() -> void {
   image_view_create_info.subresourceRange.aspectMask =
       VK_IMAGE_ASPECT_COLOR_BIT;
   image_view_create_info.subresourceRange.baseMipLevel = 0;
-  image_view_create_info.subresourceRange.levelCount = 1;
+  image_view_create_info.subresourceRange.levelCount =
+      properties.mip_info.valid() ? properties.mip_info.mips : 1;
   image_view_create_info.subresourceRange.baseArrayLayer = 0;
   image_view_create_info.subresourceRange.layerCount = 1;
 
@@ -403,10 +500,14 @@ auto Image::initialise_vulkan_image() -> void {
   sampler_create_info.unnormalizedCoordinates = VK_FALSE;
   sampler_create_info.compareEnable = VK_FALSE;
   sampler_create_info.compareOp = VK_COMPARE_OP_ALWAYS;
-  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   sampler_create_info.mipLodBias = 0.0f;
+  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   sampler_create_info.minLod = 0.0f;
-  sampler_create_info.maxLod = 1.0f;
+  sampler_create_info.maxLod =
+      properties.mip_info.valid() ? static_cast<float>(properties.mip_info.mips)
+                                  : 1.0f;
+  sampler_create_info.compareEnable = VK_TRUE;
+  sampler_create_info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
   verify(vkCreateSampler(device->get_device(), &sampler_create_info, nullptr,
                          &impl->sampler),

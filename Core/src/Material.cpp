@@ -18,8 +18,6 @@ namespace Core {
 
 auto Material::construct(const Device &device, const Shader &shader)
     -> Scope<Material> {
-
-  // Since we have a private constructor, make_scope does not work
   return Scope<Material>(new Material(device, shader));
 }
 
@@ -28,6 +26,18 @@ Material::Material(const Device &dev, const Shader &input_shader)
       write_descriptors(Config::frame_count),
       dirty_descriptor_sets(Config::frame_count, false) {
   initialise_constant_buffer();
+}
+
+auto Material::on_resize(const Extent<u32> &) -> void {
+  initialise_constant_buffer();
+  resident_descriptors.clear();
+  resident_descriptor_arrays.clear();
+  pending_descriptors.clear();
+  texture_references.clear();
+  image_references.clear();
+  write_descriptors.resize(write_descriptors.size());
+  dirty_descriptor_sets.resize(dirty_descriptor_sets.size());
+  identifiers.clear();
 }
 
 auto Material::construct_buffers() -> void {}
@@ -46,12 +56,8 @@ auto Material::set(const std::string_view identifier, const void *data)
   return true;
 }
 
-auto Material::find_resource(const std::string_view identifier) const
+auto Material::find_resource(const std::string_view identifier)
     -> std::optional<const Reflection::ShaderResourceDeclaration *> {
-  static std::unordered_map<std::string_view,
-                            Reflection::ShaderResourceDeclaration>
-      identifiers{};
-
   if (identifiers.contains(identifier)) {
     return &identifiers.at(identifier);
   }
@@ -109,9 +115,9 @@ auto Material::invalidate() -> void {
 
 auto Material::bind_impl(const CommandBuffer &command_buffer,
                          const VkPipelineLayout &layout,
-                         const VkPipelineBindPoint &bind_point, u32 frame)
+                         const VkPipelineBindPoint &bind_point, u32 frame) const
     -> void {
-  auto &[frame_sets] = descriptor_sets[frame];
+  auto &[frame_sets] = descriptor_sets.at(frame);
 
   if (frame_sets.empty()) {
     return;
@@ -221,7 +227,7 @@ auto Material::set(std::string_view name, const Texture &texture) -> bool {
     return false;
 
   const auto &found_resource = *resource;
-  const std::uint32_t binding = found_resource->get_register();
+  const u32 binding = found_resource->get_register();
 
   auto &textures = texture_references;
 
@@ -256,7 +262,7 @@ auto Material::set(const std::string_view name, const Image &image) -> bool {
 
   const auto &found_resource = *resource;
 
-  const std::uint32_t binding = found_resource->get_register();
+  const u32 binding = found_resource->get_register();
   auto &images = image_references;
   if (binding < images.size() && images.at(binding) &&
       resident_descriptors.contains(binding)) {
@@ -270,7 +276,7 @@ auto Material::set(const std::string_view name, const Image &image) -> bool {
   images.at(index) = &image;
 
   const auto *wds = shader->get_descriptor_set(name, 1);
-  resident_descriptors.at(binding) =
+  resident_descriptors[binding] =
       std::make_shared<PendingDescriptor>(PendingDescriptor{
           PendingDescriptorType::Image2D,
           *wds,

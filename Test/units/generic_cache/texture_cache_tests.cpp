@@ -50,7 +50,7 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
 
     // How would I correctly (but unsafely get this loading pointer?)
     REQUIRE(texture ==
-            cache.get_loading()); // Initially returns loading texture
+            cache.get_loading_texture()); // Initially returns loading texture
   }
   SECTION("GenericCache returns cached texture if available",
           "[GenericCache]") {
@@ -64,7 +64,7 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
 
     auto &texture = cache.put_or_get(props); // Subsequent call
     // Compare the two pointers for equality
-    REQUIRE(texture == cache.get_loading());
+    REQUIRE(texture == cache.get_loading_texture());
   }
   SECTION("GenericCache handles asynchronous texture loading",
           "[GenericCache]") {
@@ -80,8 +80,7 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     auto &textureAfterLoad = cache.put_or_get(props);
-    REQUIRE(textureAfterLoad !=
-            cache.get_loading()); // Should return the loaded texture
+    REQUIRE(textureAfterLoad == cache.get_loading_texture());
   }
   SECTION("GenericCache handles multiple asynchronous calls",
           "[GenericCache]") {
@@ -99,14 +98,14 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
     auto &texture1 = cache.put_or_get(props1);
     auto &texture2 = cache.put_or_get(props2);
 
-    REQUIRE(texture1 == cache.get_loading());
-    REQUIRE(texture2 == cache.get_loading());
+    REQUIRE(texture1 == cache.get_loading_texture());
+    REQUIRE(texture2 == cache.get_loading_texture());
 
     // Simulate waiting for async operations to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-    REQUIRE(cache.put_or_get(props1) != cache.get_loading());
-    REQUIRE(cache.put_or_get(props2) != cache.get_loading());
+    REQUIRE(cache.put_or_get(props1) == cache.get_loading_texture());
+    REQUIRE(cache.put_or_get(props2) == cache.get_loading_texture());
   }
   SECTION("GenericCache distinguishes textures by unique identifiers",
           "[GenericCache]") {
@@ -124,8 +123,8 @@ TEST_CASE("Texture Cache tests", "[GenericCache]") {
     cache.put_or_get(props1);
     auto &texture2 = cache.put_or_get(props2);
 
-    REQUIRE(texture2 ==
-            cache.get_loading()); // Should be treated as a different texture
+    REQUIRE(texture2 == cache.get_loading_texture()); // Should be treated as a
+                                                      // different texture
   }
   SECTION("GenericCache handles concurrent texture requests",
           "[GenericCache]") {

@@ -71,34 +71,27 @@ class CircularBuffer {
   using Ty = IndexType;
   Ty head{0};
   Ty tail{0};
-  Ty capacity;
   Ty count{0};
-  std::unique_ptr<T[]> storage{nullptr};
+  std::vector<T> storage;
 
 public:
-  explicit CircularBuffer(Ty size) noexcept : capacity(size) {
-    storage = std::make_unique<T[]>(capacity);
-  }
+  explicit CircularBuffer(Ty size) : storage(size) {}
 
   // Destructor (default)
   ~CircularBuffer() = default;
 
   // Copy constructor
   CircularBuffer(const CircularBuffer &other)
-      : storage(new T[other.capacity]), head(other.head), tail(other.tail),
-        capacity(other.capacity), count(other.count) {
-    std::copy(&other.storage[0], &other.storage[other.capacity], &storage[0]);
-  }
+      : storage(other.storage), head(other.head), tail(other.tail),
+        count(other.count) {}
 
   // Copy assignment operator
   CircularBuffer &operator=(const CircularBuffer &other) {
     if (this != &other) {
-      storage = std::make_unique<T[]>(other.capacity);
-      std::copy(&other.storage[0], &other.storage[other.capacity], &storage[0]);
-      capacity = other.capacity;
-      count = other.count;
+      storage = other.storage;
       head = other.head;
       tail = other.tail;
+      count = other.count;
     }
     return *this;
   }
@@ -106,57 +99,46 @@ public:
   // Move constructor
   CircularBuffer(CircularBuffer &&other) noexcept
       : storage(std::move(other.storage)), head(other.head), tail(other.tail),
-        capacity(other.capacity), count(other.count) {
-    other.capacity = 0;
-    other.count = 0;
-    other.head = 0;
-    other.tail = 0;
-  }
+        count(other.count) {}
 
   // Move assignment operator
   CircularBuffer &operator=(CircularBuffer &&other) noexcept {
     if (this != &other) {
       storage = std::move(other.storage);
-      capacity = other.capacity;
-      count = other.count;
       head = other.head;
       tail = other.tail;
-
-      other.capacity = 0;
-      other.count = 0;
-      other.head = 0;
-      other.tail = 0;
+      count = other.count;
     }
     return *this;
   }
 
   auto push(const T &item) noexcept -> void {
     storage[head] = item;
-    head = (head + 1) % capacity;
-    if (count < capacity) {
+    head = (head + 1) % storage.size();
+    if (count < storage.size()) {
       count++;
     } else {
-      tail = (tail + 1) % capacity;
+      tail = (tail + 1) % storage.size();
     }
   }
 
   auto push(T &&item) noexcept -> void {
     storage[head] = std::move(item);
-    head = (head + 1) % capacity;
-    if (count < capacity) {
+    head = (head + 1) % storage.size();
+    if (count < storage.size()) {
       count++;
     } else {
-      tail = (tail + 1) % capacity;
+      tail = (tail + 1) % storage.size();
     }
   }
 
   template <class... Ts> auto emplace(Ts &&...args) noexcept -> void {
     storage[head] = T(std::forward<Ts>(args)...);
-    head = (head + 1) % capacity;
-    if (count < capacity) {
+    head = (head + 1) % storage.size();
+    if (count < storage.size()) {
       count++;
     } else {
-      tail = (tail + 1) % capacity;
+      tail = (tail + 1) % storage.size();
     }
   }
 
@@ -171,8 +153,8 @@ public:
       return T();
     }
 
-    T item = storage[tail];
-    tail = (tail + 1) % capacity;
+    T item = std::move(storage[tail]);
+    tail = (tail + 1) % storage.size();
     count--;
     return item;
   }
@@ -183,7 +165,9 @@ public:
 
   [[nodiscard]] auto empty() const noexcept -> bool { return count == 0; }
 
-  [[nodiscard]] auto full() const noexcept -> bool { return count == capacity; }
+  [[nodiscard]] auto full() const noexcept -> bool {
+    return count == storage.size();
+  }
 };
 
 } // namespace Core::Container

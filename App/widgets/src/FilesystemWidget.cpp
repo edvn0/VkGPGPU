@@ -35,10 +35,11 @@ void FilesystemWidget::on_update(Core::floating ts) {
 }
 
 void FilesystemWidget::on_interface(Core::InterfaceSystem &interface_system) {
-  UI::begin("Filesystem");
-  render_navigation_buttons();
-  render_directory_contents();
-  UI::end();
+  if (UI::begin("Filesystem")) {
+    render_navigation_buttons();
+    render_directory_contents();
+    UI::end();
+  }
 }
 
 void FilesystemWidget::update_directory_cache(const Core::FS::Path &path) {
@@ -151,8 +152,10 @@ void FilesystemWidget::render_directory_contents() {
             .identifier = filename_string,
             .path = path,
             .extent = extent,
+            .tiling = ImageTiling::Linear,
             .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
+            .layout = ImageLayout::ShaderReadOnlyOptimal,
         });
 
         UI::image_button(*texture, {extent});

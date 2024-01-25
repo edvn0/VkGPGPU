@@ -12,7 +12,7 @@
 #include <vulkan/vulkan_core.h>
 
 template <Core::Buffer::Type T>
-auto create_or_get_write_descriptor_for(std::uint32_t frames_in_flight,
+auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                                         Core::BufferSet<T> *buffer_set,
                                         Material &material)
     -> const std::vector<std::vector<VkWriteDescriptorSet>> & {
@@ -132,17 +132,30 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       *get_device(), std::filesystem::current_path()));
 };
 
+auto ClientApp::update_entities(floating ts) -> void {
+  static constexpr std::array<int, 1000> quads{};
+
+  for (const auto &quad : quads) {
+    scene_renderer.submit_static_mesh(mesh.get());
+  }
+}
+
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
+
+  update_entities(ts);
 
   for (const auto &widget : widgets)
     widget->on_update(ts);
 
-  compute(ts);
+  scene_drawing(ts);
   graphics(ts);
+  compute(ts);
 
   timer.end();
 }
+
+auto ClientApp::scene_drawing(floating ts) -> void {}
 
 void ClientApp::on_create() {
   for (const auto &widget : widgets)
@@ -162,109 +175,13 @@ void ClientApp::on_destroy() {
   output_texture.reset();
 }
 
-class SceneRenderer {
-public:
-  auto begin_renderpass(const CommandBuffer &buffer,
-                        const Framebuffer &framebuffer) -> void {
-    VkRenderPassBeginInfo render_pass_begin_info = {};
-    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    render_pass_begin_info.renderPass = framebuffer.get_render_pass();
-    render_pass_begin_info.framebuffer = framebuffer.get_framebuffer();
-    render_pass_begin_info.renderArea.extent = {
-        .width = framebuffer.get_width(),
-        .height = framebuffer.get_height(),
-    };
-    const auto &clear_values = framebuffer.get_clear_values();
-    render_pass_begin_info.clearValueCount =
-        static_cast<u32>(clear_values.size());
-    render_pass_begin_info.pClearValues = clear_values.data();
-    vkCmdBeginRenderPass(buffer.get_command_buffer(), &render_pass_begin_info,
-                         VK_SUBPASS_CONTENTS_INLINE);
-
-    // Scissors and viewport
-    VkViewport viewport = {};
-    viewport.width = static_cast<float>(framebuffer.get_width());
-    viewport.height = static_cast<float>(framebuffer.get_height());
-    viewport.minDepth = 0.0F;
-    viewport.maxDepth = 1.0F;
-    vkCmdSetViewport(buffer.get_command_buffer(), 0, 1, &viewport);
-
-    VkRect2D scissor = {};
-    scissor.extent.width = framebuffer.get_width();
-    scissor.extent.height = framebuffer.get_height();
-    vkCmdSetScissor(buffer.get_command_buffer(), 0, 1, &scissor);
-  }
-
-  auto end_renderpass(const CommandBuffer &buffer) -> void {
-    vkCmdEndRenderPass(buffer.get_command_buffer());
-
-    bound_pipeline.reset();
-  }
-
-  struct DrawParameters {
-    u32 index_count;
-    u32 instance_count{1};
-    u32 first_index{0};
-    u32 vertex_offset{0};
-    u32 first_instance{0};
-  };
-  auto draw(const CommandBuffer &buffer, const DrawParameters &params) {
-    vkCmdDrawIndexed(buffer.get_command_buffer(), params.index_count,
-                     params.instance_count, params.first_index,
-                     params.vertex_offset, params.first_instance);
-  }
-
-  auto bind_pipeline(const CommandBuffer &buffer,
-                     const GraphicsPipeline &pipeline) {
-    pipeline.bind(buffer);
-    bound_pipeline = {
-        .bound_pipeline = pipeline.get_pipeline(),
-        .hash = pipeline.hash(),
-    };
-  }
-
-  auto bind_index_buffer(const CommandBuffer &buffer,
-                         const Buffer &index_buffer) {
-    vkCmdBindIndexBuffer(buffer.get_command_buffer(), index_buffer.get_buffer(),
-                         0, VK_INDEX_TYPE_UINT32);
-  }
-
-  auto bind_vertex_buffer(const CommandBuffer &buffer,
-                          const Buffer &vertex_buffer) {
-    const std::array<VkDeviceSize, 1> offset = {0};
-    const std::array buffers = {vertex_buffer.get_buffer()};
-    vkCmdBindVertexBuffers(buffer.get_command_buffer(), 0, 1, buffers.data(),
-                           offset.data());
-  }
-
-private:
-  struct PipelineAndHash {
-    VkPipeline bound_pipeline{nullptr};
-    u64 hash{0};
-
-    auto reset() -> void {
-      bound_pipeline = nullptr;
-      hash = 0;
-    }
-  };
-  PipelineAndHash bound_pipeline{};
-
-  auto is_already_bound(const GraphicsPipeline &pipeline) -> bool {
-    return pipeline.hash() == bound_pipeline.hash;
-  }
-};
-
 auto ClientApp::graphics(floating ts) -> void {
-  static SceneRenderer scene_renderer;
   graphics_command_buffer->begin(frame());
   scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
   scene_renderer.bind_pipeline(*graphics_command_buffer, *graphics_pipeline);
 
-  graphics_material->set("input_image", *output_texture);
-  graphics_material->set("output_image", *output_texture_second);
-  graphics_material->set("geometry_texture", *output_texture_second);
-  update_material_for_rendering(FrameIndex{frame()}, *graphics_material,
-                                &uniform_buffer_set, &storage_buffer_set);
+  graphics_material->set("geometry_texture", *texture);
+  update_material_for_rendering(FrameIndex{frame()}, *graphics_material);
   graphics_material->bind(*graphics_command_buffer, *graphics_pipeline,
                           frame());
 
@@ -274,7 +191,7 @@ auto ClientApp::graphics(floating ts) -> void {
                                                     .index_count = 3,
                                                     .instance_count = 1,
                                                 });
-  scene_renderer.end_renderpass(*graphics_command_buffer);
+  scene_renderer.end_renderpass(*graphics_command_buffer, frame());
   graphics_command_buffer->end_and_submit();
 }
 
@@ -301,7 +218,7 @@ auto ClientApp::compute(floating ts) -> void {
   material->set("pc.kernelSize", pc.kernel_size);
   material->set("pc.halfSize", pc.half_size);
   material->set("pc.precomputedCenterValue", pc.center_value);
-  material->set("input_image", *texture);
+  material->set("input_image", *framebuffer->get_image(0));
   material->set("output_image", *output_texture);
   update_material_for_rendering(FrameIndex{frame()}, *material,
                                 &uniform_buffer_set, &storage_buffer_set);
@@ -367,6 +284,10 @@ void ClientApp::perform() {
           .usage = ImageUsage::Sampled | ImageUsage::Storage |
                    ImageUsage::TransferDst | ImageUsage::TransferSrc,
           .layout = ImageLayout::General,
+          .mip_generation =
+              {
+                  .strategy = MipGenerationStrategy::Unused,
+              },
       });
   output_texture = Texture::empty_with_size(
       *get_device(), texture->size_bytes(), texture->get_extent());
@@ -393,19 +314,18 @@ void ClientApp::perform() {
   storage_buffer_set.create(matrices_size, SetBinding(2));
   uniform_buffer_set.create(4, SetBinding(3));
 
-  vertex_buffer = Buffer::construct(*get_device(), sizeof(float) * 3 * 3,
-                                    Buffer::Type::Vertex);
-  vertex_buffer->write(
-      std::array{
-          -1.0F, -1.0F, 0.0F, // bottom left
-          1.0F, -1.0F, 0.0F,  // bottom right
-          0.0F, 1.0F, 0.0F,   // top
-      }
-          .data(),
-      sizeof(float) * 3 * 3);
-  index_buffer =
-      Buffer::construct(*get_device(), sizeof(u32) * 3, Buffer::Type::Index);
-  index_buffer->write(std::array{0U, 1U, 2U}.data(), sizeof(u32) * 3);
+  constexpr std::array vertex_data{
+      -1.0F, -1.0F, 0.0F, // bottom left
+      1.0F,  -1.0F, 0.0F, // bottom right
+      0.0F,  1.0F,  0.0F, // top
+  };
+  constexpr std::array index_data{0U, 1U, 2U};
+  vertex_buffer = Buffer::construct(
+      *get_device(), sizeof(float) * vertex_data.size(), Buffer::Type::Vertex);
+  vertex_buffer->write(vertex_data.data(), sizeof(float) * vertex_data.size());
+  index_buffer = Buffer::construct(
+      *get_device(), index_data.size() * sizeof(u32), Buffer::Type::Index);
+  index_buffer->write(index_data.data(), index_data.size() * sizeof(u32));
 
   {
     shader = Shader::construct(*get_device(),
@@ -442,10 +362,11 @@ void ClientApp::perform() {
     FramebufferProperties props{
         .width = get_swapchain()->get_extent().width,
         .height = get_swapchain()->get_extent().height,
+        .blend = false,
         .attachments =
             FramebufferAttachmentSpecification{
                 FramebufferTextureSpecification{
-                    .format = ImageFormat::SRGB_RGBA8,
+                    .format = ImageFormat::SRGB_RGBA32,
                 },
             },
         .debug_name = "DefaultFramebuffer",
@@ -462,6 +383,8 @@ void ClientApp::perform() {
                            .name = "DefaultGraphicsPipeline",
                            .shader = graphics_shader.get(),
                            .framebuffer = framebuffer.get(),
+                           .cull_mode = CullMode::Back,
+                           .face_mode = FaceMode::CounterClockwise,
                        });
     auto &&[kernel_size, half_size, center_value] = compute_kernel_size<127>();
     graphics_material->set("pc.kernelSize", kernel_size);
@@ -470,6 +393,45 @@ void ClientApp::perform() {
   }
 
   dispatcher = make_scope<CommandDispatcher>(command_buffer.get());
+
+  scene_renderer.create(*get_device(), *get_swapchain());
+
+  mesh = make_scope<Mesh>();
+  const std::array<Mesh::Vertex, 3> triangle_vertices{
+      Mesh::Vertex{
+          .pos = {0.5f, -0.5f, 0.0f},
+          .uvs = {1.0f, 0.0f},
+      },
+      Mesh::Vertex{
+          .pos = {0.5f, 0.5f, 0.0f},
+          .uvs = {1.0f, 1.0f},
+      },
+      Mesh::Vertex{
+          .pos = {-0.5f, -0.5f, 0.0f},
+          .uvs = {0.0f, 0.0f},
+      },
+  };
+  const std::array<u32, 3> triangle_indices{0, 1, 2};
+
+  mesh->vertex_buffer = Buffer::construct(
+      *get_device(), sizeof(Mesh::Vertex) * triangle_vertices.size(),
+      Buffer::Type::Vertex);
+  mesh->vertex_buffer->write(triangle_vertices.data(),
+                             sizeof(Mesh::Vertex) * triangle_vertices.size());
+  mesh->index_buffer = Buffer::construct(
+      *get_device(), index_data.size() * sizeof(u32), Buffer::Type::Index);
+  mesh->index_buffer->write(triangle_indices.data(),
+                            triangle_indices.size() * sizeof(u32));
+  mesh->submeshes = {
+      Mesh::Submesh{
+          .base_vertex = 0,
+          .base_index = 0,
+          .material_index = 0,
+          .index_count = 3,
+          .vertex_count = 3,
+      },
+  };
+  mesh->submesh_indices.push_back(0);
 }
 
 void ClientApp::update_material_for_rendering(
@@ -500,6 +462,12 @@ void ClientApp::update_material_for_rendering(
   }
 }
 
+void ClientApp::update_material_for_rendering(FrameIndex frame_index,
+                                              Material &material_for_update) {
+  update_material_for_rendering(frame_index, material_for_update, nullptr,
+                                nullptr);
+}
+
 void ClientApp::on_interface(InterfaceSystem &system) {
 
   // Create a fullscreen window for the dockspace
@@ -524,88 +492,87 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     // DockSpace
     ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-    // Here you can add your own windows, for example:
-    static constexpr auto draw_stats =
-        [](const auto &average,
-           const auto &command_buffer_with_compute_stats_available) {
-          // Retrieve statistics from the timer and command buffer
-          auto &&[frametime, fps] = average.get_statistics();
-          auto &&[compute_times] =
-              command_buffer_with_compute_stats_available.get_statistics();
-
-          // Start a new ImGui table
-          if (ImGui::BeginTable("StatsTable", 2)) {
-            // Set up column headers
-            ImGui::TableSetupColumn("Statistic");
-            ImGui::TableSetupColumn("Value");
-            ImGui::TableHeadersRow();
-
-            // Row for frametime
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            UI::text("Frametime");
-            ImGui::TableSetColumnIndex(1);
-            UI::text("{} ms", frametime);
-
-            // Row for FPS
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            UI::text("FPS");
-            ImGui::TableSetColumnIndex(1);
-            UI::text("{}", fps);
-
-            // Row for Compute Time
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            UI::text("Compute Time");
-            ImGui::TableSetColumnIndex(1);
-            UI::text("{} ms", compute_times);
-
-            // End the table
-            ImGui::EndTable();
-          }
-        };
-
-    UI::widget("FPS/Frametime",
-               [&]() { draw_stats(get_timer(), *command_buffer); });
-
-    UI::widget("Image", [&]() {
-      UI::image_drop_button(texture, {128, 128});
-      ImGui::SameLine();
-      UI::image_button(*output_texture, {128, 128});
-      ImGui::SameLine();
-      UI::image_button(*output_texture_second, {128, 128});
-      ImGui::SameLine();
-      UI::text("Framebuffer image: ");
-      UI::image_button(*framebuffer->get_image(0), {128, 128});
-    });
-
-    UI::widget("Push constant", [&]() {
-      UI::text("Edit PCForMaterial Properties");
-      ImGui::Separator();
-
-      // Assuming the kernel size is between 3 and some upper limit, with a
-      // step of 2 (to ensure odd values)
-      int kernelInput = std::sqrt(
-          pc.kernel_size); // Convert current kernel size to N for display
-      if (ImGui::SliderInt("Kernel N", &kernelInput, 3, 9, "%d",
-                           ImGuiSliderFlags_AlwaysClamp)) {
-        if (kernelInput % 2 == 0) {
-          kernelInput++; // Ensure it's always an odd number
-        }
-        auto [kernel, half, center] = compute_kernel_size(kernelInput);
-        pc.kernel_size = kernel;
-        pc.half_size = half;
-        pc.center_value = center;
-      }
-
-      UI::text("Kernel Size: {}", pc.kernel_size);
-      UI::text("Half Size: {}", pc.half_size);
-      UI::text("Center Value: {}", pc.center_value);
-    });
-
     ImGui::End();
   }
+
+  static constexpr auto draw_stats =
+      [](const auto &average,
+         const auto &command_buffer_with_compute_stats_available) {
+        // Retrieve statistics from the timer and command buffer
+        auto &&[frametime, fps] = average.get_statistics();
+        auto &&[compute_times] =
+            command_buffer_with_compute_stats_available.get_statistics();
+
+        // Start a new ImGui table
+        if (ImGui::BeginTable("StatsTable", 2)) {
+          // Set up column headers
+          ImGui::TableSetupColumn("Statistic");
+          ImGui::TableSetupColumn("Value");
+          ImGui::TableHeadersRow();
+
+          // Row for frametime
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          UI::text("Frametime");
+          ImGui::TableSetColumnIndex(1);
+          UI::text("{} ms", frametime);
+
+          // Row for FPS
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          UI::text("FPS");
+          ImGui::TableSetColumnIndex(1);
+          UI::text("{}", fps);
+
+          // Row for Compute Time
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          UI::text("Compute Time");
+          ImGui::TableSetColumnIndex(1);
+          UI::text("{} ms", compute_times);
+
+          // End the table
+          ImGui::EndTable();
+        }
+      };
+
+  UI::widget("FPS/Frametime",
+             [&]() { draw_stats(get_timer(), *command_buffer); });
+
+  /*UI::widget("Image", [&]() {
+    UI::image_drop_button(texture, {128, 128});
+    ImGui::SameLine();
+    UI::image(*output_texture, {128, 128});
+    ImGui::SameLine();
+    UI::image(*output_texture_second, {128, 128});
+  });*/
+
+  UI::widget("Scene", [&](const auto &extent) {
+    const auto &width = framebuffer->get_width();
+    const auto &height = framebuffer->get_height();
+    UI::image(*framebuffer->get_image(0), {extent.width, extent.height});
+  });
+
+  UI::widget("Push constant", [&]() {
+    UI::text("Edit PCForMaterial Properties");
+    ImGui::Separator();
+
+    int kernel_input = std::sqrt(pc.kernel_size);
+    if (ImGui::SliderInt("Kernel N", &kernel_input, 3, 9, "%d",
+                         ImGuiSliderFlags_AlwaysClamp)) {
+      if (kernel_input % 2 == 0) {
+        kernel_input++; // Ensure it's always an odd number
+      }
+      auto [kernel, half, center] = compute_kernel_size(kernel_input);
+      pc.kernel_size = kernel;
+      pc.half_size = half;
+      pc.center_value = center;
+    }
+
+    UI::text("Kernel Size: {}", pc.kernel_size);
+    UI::text("Half Size: {}", pc.half_size);
+    UI::text("Center Value: {}", pc.center_value);
+  });
 
   for (auto &widget : widgets)
     widget->on_interface(system);
@@ -621,6 +588,8 @@ auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
   texture->on_resize(new_extent);
   output_texture->on_resize(new_extent);
   output_texture_second->on_resize(new_extent);
+
+  framebuffer->on_resize(new_extent);
 
   info("{}", new_extent);
 }

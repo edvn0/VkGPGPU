@@ -45,13 +45,19 @@ Framebuffer::~Framebuffer() {
   debug("Destroyed Framebuffer '{}'", properties.debug_name);
 }
 
-auto Framebuffer::resize(u32 w, u32 h, bool should_clean) -> void {
+auto Framebuffer::on_resize(const Extent<u32> &new_extent) -> void {
+  return on_resize(new_extent.width, new_extent.height, true);
+}
+
+auto Framebuffer::on_resize(u32 w, u32 h, bool should_clean) -> void {
   if (w == properties.width && h == properties.height) {
     return;
   }
 
   properties.width = w;
   properties.height = h;
+  width = w;
+  height = h;
 
   if (should_clean) {
     clean();
@@ -165,6 +171,8 @@ auto Framebuffer::create_framebuffer() -> void {
         if (create_images) {
           ImageProperties spec{};
           spec.format = attachment_specification.format;
+          spec.min_filter = SamplerFilter::Nearest,
+          spec.max_filter = SamplerFilter::Nearest,
           spec.layout = ImageLayout::ShaderReadOnlyOptimal;
           spec.usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
                        ImageUsage::TransferSrc | ImageUsage::TransferDst;
@@ -178,6 +186,7 @@ auto Framebuffer::create_framebuffer() -> void {
           spec.layout = ImageLayout::ShaderReadOnlyOptimal;
           spec.extent.width = static_cast<u32>(width * properties.scale);
           spec.extent.height = static_cast<u32>(height * properties.scale);
+          spec.format = attachment_specification.format;
           color_attachment = image;
           if (attachment_index == 0 &&
               properties.existing_image_layers[0] == 0) {
@@ -234,63 +243,63 @@ auto Framebuffer::create_framebuffer() -> void {
 
   if (attachment_images.size()) {
     {
-      VkSubpassDependency &depedency = dependencies.emplace_back();
-      depedency.srcSubpass = VK_SUBPASS_EXTERNAL;
-      depedency.dstSubpass = 0;
-      depedency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-      depedency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      depedency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      depedency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+      VkSubpassDependency &dependency = dependencies.emplace_back();
+      dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+      dependency.dstSubpass = 0;
+      dependency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      dependency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     }
     {
-      VkSubpassDependency &depedency = dependencies.emplace_back();
-      depedency.srcSubpass = 0;
-      depedency.dstSubpass = VK_SUBPASS_EXTERNAL;
-      depedency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      depedency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      depedency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-      depedency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+      VkSubpassDependency &dependency = dependencies.emplace_back();
+      dependency.srcSubpass = 0;
+      dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
+      dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     }
   }
 
   if (depth_attachment_image) {
     {
-      VkSubpassDependency &depedency = dependencies.emplace_back();
-      depedency.srcSubpass = VK_SUBPASS_EXTERNAL;
-      depedency.dstSubpass = 0;
-      depedency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-      depedency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-      depedency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      depedency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-      depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+      VkSubpassDependency &dependency = dependencies.emplace_back();
+      dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+      dependency.dstSubpass = 0;
+      dependency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      dependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+      dependency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      dependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+      dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     }
 
     {
-      VkSubpassDependency &depedency = dependencies.emplace_back();
-      depedency.srcSubpass = 0;
-      depedency.dstSubpass = VK_SUBPASS_EXTERNAL;
-      depedency.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-      depedency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-      depedency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-      depedency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+      VkSubpassDependency &dependency = dependencies.emplace_back();
+      dependency.srcSubpass = 0;
+      dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
+      dependency.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+      dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+      dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     }
   }
 
   // Create the actual renderpass
-  VkRenderPassCreateInfo renderPassInfo = {};
-  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  renderPassInfo.attachmentCount =
+  VkRenderPassCreateInfo render_pass_info = {};
+  render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  render_pass_info.attachmentCount =
       static_cast<u32>(attachmentDescriptions.size());
-  renderPassInfo.pAttachments = attachmentDescriptions.data();
-  renderPassInfo.subpassCount = 1;
-  renderPassInfo.pSubpasses = &subpassDescription;
-  renderPassInfo.dependencyCount = static_cast<u32>(dependencies.size());
-  renderPassInfo.pDependencies = dependencies.data();
+  render_pass_info.pAttachments = attachmentDescriptions.data();
+  render_pass_info.subpassCount = 1;
+  render_pass_info.pSubpasses = &subpassDescription;
+  render_pass_info.dependencyCount = static_cast<u32>(dependencies.size());
+  render_pass_info.pDependencies = dependencies.data();
 
-  verify(vkCreateRenderPass(device->get_device(), &renderPassInfo, nullptr,
+  verify(vkCreateRenderPass(device->get_device(), &render_pass_info, nullptr,
                             &render_pass),
          "vkCreateRenderPass", "Failed to create render pass!");
   DebugMarker::set_object_name(*device, render_pass,
@@ -322,6 +331,9 @@ auto Framebuffer::create_framebuffer() -> void {
   DebugMarker::set_object_name(*device, framebuffer,
                                VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT,
                                properties.debug_name.c_str());
+
+  info("Created Framebuffer '{}'. Size: {}x{}", properties.debug_name, width,
+       height);
 }
 
 } // namespace Core

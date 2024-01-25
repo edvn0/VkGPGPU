@@ -31,7 +31,7 @@ output_buffer_a;
 layout(std140, set = 0, binding = 3) uniform UniformBuffer { float angle; }
 ubo;
 
-layout(set = 1, binding = 0, rgba8) readonly uniform image2D input_image;
+layout(set = 1, binding = 0) uniform sampler2D input_image;
 layout(set = 1, binding = 1, rgba8) writeonly uniform image2D output_image;
 
 float getKernelWeight(int x, int y) {
@@ -50,7 +50,7 @@ float getKernelWeight(int x, int y) {
 }
 
 void main() {
-  ivec2 imageSize = imageSize(input_image);
+  ivec2 imageSize = textureSize(input_image, 0);
   ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 
   // Ensure we don't read or write outside the image bounds
@@ -70,7 +70,7 @@ void main() {
 
   for (int y = -halfSize; y <= halfSize; ++y) {
     for (int x = -halfSize; x <= halfSize; ++x) {
-      vec4 texColor = imageLoad(input_image, pos + ivec2(x, y));
+      vec4 texColor = texture(input_image, pos + ivec2(x, y));
       float intensity = (texColor.r + texColor.g + texColor.b) / 3.0;
 
       edge += getKernelWeight(x, y) * intensity;

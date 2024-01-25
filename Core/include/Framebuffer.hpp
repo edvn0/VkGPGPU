@@ -66,17 +66,19 @@ class Framebuffer {
 public:
   ~Framebuffer();
 
-  auto resize(u32, u32, bool should_clean = false) -> void;
+  auto on_resize(u32, u32, bool should_clean = false) -> void;
+  auto on_resize(const Extent<u32> &) -> void;
   auto add_resize_callback(const resize_callback &func) -> void;
 
   [[nodiscard]] auto get_width() const -> u32 { return width; }
   [[nodiscard]] auto get_height() const -> u32 { return height; }
 
-  [[nodiscard]] auto get_image(u32 attachment_index = 0) const -> Ref<Image> {
-    return attachment_images[attachment_index];
+  [[nodiscard]] auto get_image(u32 attachment_index = 0) const
+      -> const Ref<Image> & {
+    return attachment_images.at(attachment_index);
   }
 
-  [[nodiscard]] auto get_depth_image() const -> Ref<Image> {
+  [[nodiscard]] auto get_depth_image() const -> const Ref<Image> & {
     return depth_attachment_image;
   }
   [[nodiscard]] auto get_colour_attachment_count() const -> usize {

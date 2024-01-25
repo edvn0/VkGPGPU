@@ -200,7 +200,7 @@ auto CommandBuffer::submit() -> void {
                                   timestamp_period * 1.0e-9F;
     const auto times_in_ms = time_taken_seconds * 1000.0F;
 
-    //    compute_times.push(times_in_ms);
+    compute_times.push(times_in_ms);
   }
 }
 

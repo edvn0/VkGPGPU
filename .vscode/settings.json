@@ -3,6 +3,7 @@
   "C_Cpp.default.compileCommands": "${workspaceFolder}\\compile_commands.json",
   "C_Cpp.codeAnalysis.clangTidy.useBuildPath": true,
   "cSpell.words": [
+    "blit",
     "databuffer",
     "librenderdoc",
     "rdoc",

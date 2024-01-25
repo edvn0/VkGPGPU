@@ -8,15 +8,24 @@
 
 namespace Core {
 
-enum class TextureDataRetainmentStrategy : std::uint8_t { None, Keep, Delete };
+enum class TextureDataStrategy : std::uint8_t { None, Keep, Delete };
+enum class MipGenerationStrategy : std::uint8_t {
+  FromSize,
+  Literal,
+  Unused,
+};
+
+struct MipGeneration {
+  MipGenerationStrategy strategy{MipGenerationStrategy::Literal};
+  u32 mips{1};
+};
 
 struct TextureProperties {
   ImageFormat format;
   std::string identifier{};
   FS::Path path{};
   Extent<u32> extent{};
-  TextureDataRetainmentStrategy data_retainment_strategy{
-      TextureDataRetainmentStrategy::Delete};
+  TextureDataStrategy texture_data_strategy{TextureDataStrategy::Delete};
   ImageTiling tiling{ImageTiling::Optimal};
   ImageUsage usage{ImageUsage::Sampled};
   ImageLayout layout{ImageLayout::ShaderReadOnlyOptimal};
@@ -24,12 +33,13 @@ struct TextureProperties {
   SamplerFilter max_filter{SamplerFilter::Nearest};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
+  MipGeneration mip_generation{};
 };
 
 class Texture {
 public:
   ~Texture();
-  auto on_resize(const Extent<u32> &) -> void {}
+  auto on_resize(const Extent<u32> &) -> void;
 
   [[nodiscard]] auto get_image_info() const noexcept
       -> const VkDescriptorImageInfo &;
@@ -63,6 +73,7 @@ private:
 
   DataBuffer data_buffer;
   usize cached_size{0};
+  bool storage{false};
 
   Scope<Image> image{nullptr};
 };

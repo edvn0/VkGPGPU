@@ -71,6 +71,7 @@ static constexpr auto to_size(ElementType type) -> std::size_t {
   default:
     assert(false && "Could not map to size.");
   }
+  return std::numeric_limits<u32>::max();
 }
 
 struct LayoutElement {

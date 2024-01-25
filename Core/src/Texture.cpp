@@ -58,8 +58,15 @@ Texture::~Texture() {
   debug("Destroyed Texture '{}', size: {}", properties.identifier, cached_size);
 }
 
+static auto calculate_mips(const Extent<u32> &ext) {
+  auto max_dimension = std::max(ext.width, ext.height);
+  return static_cast<u32>(std::ceil(std::log2(max_dimension))) + 1;
+}
+
+auto Texture::on_resize(const Extent<u32> &new_extent) -> void {}
+
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
-    : device(&dev), data_buffer(size) {
+    : device(&dev), data_buffer(size), storage(true) {
   properties.extent = extent;
   properties.identifier = fmt::format("Empty-Size{}", size);
   data_buffer.fill_zero();
@@ -93,9 +100,26 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
 
   properties.identifier = properties.path.filename().string();
 
+  u32 mip_count = 1;
+  if (properties.mip_generation.strategy == MipGenerationStrategy::Unused) {
+    mip_count = 1;
+  } else if (properties.mip_generation.strategy ==
+             MipGenerationStrategy::Literal) {
+    mip_count =
+        properties.mip_generation.mips > 0 ? properties.mip_generation.mips : 1;
+  } else if (properties.mip_generation.strategy ==
+             MipGenerationStrategy::FromSize) {
+    mip_count = calculate_mips(properties.extent);
+  }
+
   image = make_scope<Image>(*device,
                             ImageProperties{
                                 .extent = properties.extent,
+                                .mip_info =
+                                    {
+                                        .mips = mip_count,
+                                        .use_mips = true,
+                                    },
                                 .format = properties.format,
                                 .tiling = properties.tiling,
                                 .usage = properties.usage,
@@ -109,8 +133,7 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
   debug("Created texture '{}', {}", properties.identifier, properties.extent);
   cached_size = data_buffer.size();
 
-  if (properties.data_retainment_strategy ==
-      TextureDataRetainmentStrategy::Delete) {
+  if (properties.texture_data_strategy == TextureDataStrategy::Delete) {
     data_buffer.clear();
   }
 }

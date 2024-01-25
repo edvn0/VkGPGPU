@@ -49,11 +49,34 @@ auto begin(const std::string_view name) -> bool {
 
 auto end() -> void { return ImGui::End(); }
 
+auto window_size() -> Extent<u32> {
+  Extent<u32> output;
+
+  auto content_min = ImGui::GetWindowContentRegionMin();
+  auto content_max = ImGui::GetWindowContentRegionMax();
+
+  output.width =
+      static_cast<u32>(content_max.x) - static_cast<u32>(content_min.x);
+  output.height =
+      static_cast<u32>(content_max.y) - static_cast<u32>(content_min.y);
+
+  return output;
+}
+
 auto image(const Texture &texture, InterfaceImageProperties properties)
     -> void {
   const auto &[sampler, view, layout] = texture.get_image_info();
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
+  ImGui::PushID(made.c_str());
+  ImGui::Image(set, to_imvec2(properties.extent));
+  ImGui::PopID();
+}
+
+auto image(const Image &image, InterfaceImageProperties properties) -> void {
+  const auto &[sampler, view, layout] = image.get_descriptor_info();
+  auto set = add_image(sampler, view, layout);
+  auto made = make_id(set, sampler, view, layout, image.hash());
   ImGui::PushID(made.c_str());
   ImGui::Image(set, to_imvec2(properties.extent));
   ImGui::PopID();

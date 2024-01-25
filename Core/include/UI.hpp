@@ -32,9 +32,17 @@ auto add_image(VkSampler sampler, VkImageView image_view, VkImageLayout layout)
 auto begin(std::string_view) -> bool;
 auto end() -> void;
 
+auto window_size() -> Extent<u32>;
+
 auto widget(const std::string_view name, auto &&func) {
   if (UI::begin(name)) {
-    func();
+    if constexpr (std::is_invocable_r_v<void, decltype(func),
+                                        const Extent<u32> &>) {
+      const auto &current_size = UI::window_size();
+      func(current_size);
+    } else {
+      func();
+    }
     UI::end();
   }
 }
