@@ -296,7 +296,7 @@ GraphicsPipeline::~GraphicsPipeline() {
   vkDestroyPipeline(vk_device, pipeline, nullptr);
 };
 
-auto GraphicsPipeline::bind(const CommandBuffer &buffer) -> void {
+auto GraphicsPipeline::bind(const CommandBuffer &buffer) const -> void {
   vkCmdBindPipeline(buffer.get_command_buffer(),
                     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
@@ -372,9 +372,11 @@ auto GraphicsPipeline::initialise_blend_states(
 auto GraphicsPipeline::construct_pipeline(
     const GraphicsPipelineConfiguration &configuration) -> void {
 
-  std::vector dynamic_states = {VK_DYNAMIC_STATE_VIEWPORT,
-                                VK_DYNAMIC_STATE_SCISSOR,
-                                VK_DYNAMIC_STATE_LINE_WIDTH};
+  std::vector dynamic_states = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+      VK_DYNAMIC_STATE_LINE_WIDTH,
+  };
 
   VkPipelineDynamicStateCreateInfo dynamic_state{};
   dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

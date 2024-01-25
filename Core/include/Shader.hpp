@@ -69,7 +69,12 @@ private:
     const std::filesystem::path path;
     const Type type;
 
-    auto operator<=>(const PathShaderType &) const = default;
+    auto operator<=>(const PathShaderType &other) const {
+      return type <=> other.type;
+    }
+    auto operator==(const PathShaderType &other) const {
+      return type == other.type;
+    }
   };
   struct Hasher {
     using is_transparent = void;

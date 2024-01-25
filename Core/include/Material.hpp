@@ -40,7 +40,16 @@ public:
     update_for_rendering(frame_index, {});
   }
 
-  auto bind(const CommandBuffer &, const Pipeline &, u32 frame) -> void;
+  template <class T>
+    requires requires(const T &t) {
+      { t.get_pipeline_layout() } -> std::same_as<const VkPipelineLayout &>;
+      { t.get_bind_point() } -> std::same_as<const VkPipelineBindPoint &>;
+    }
+  auto bind(const CommandBuffer &command_buffer, const T &pipeline, u32 frame)
+      -> void {
+    bind_impl(command_buffer, pipeline.get_pipeline_layout(),
+              pipeline.get_bind_point(), frame);
+  }
 
   auto get_shader() const -> const auto & { return *shader; }
 
@@ -48,6 +57,9 @@ private:
   Material(const Device &, const Shader &);
   auto construct_buffers() -> void;
   auto construct_images() -> void;
+
+  auto bind_impl(const CommandBuffer &, const VkPipelineLayout &,
+                 const VkPipelineBindPoint &, u32 frame) -> void;
 
   auto set(std::string_view, const void *data) -> bool;
   [[nodiscard]] auto find_resource(std::string_view) const

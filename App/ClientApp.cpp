@@ -164,7 +164,7 @@ void ClientApp::on_destroy() {
 
 class SceneRenderer {
 public:
-  auto begin_renderpass(const CommandBuffer &commandbuffer,
+  auto begin_renderpass(const CommandBuffer &buffer,
                         const Framebuffer &framebuffer) -> void {
     VkRenderPassBeginInfo render_pass_begin_info = {};
     render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -178,13 +178,27 @@ public:
     render_pass_begin_info.clearValueCount =
         static_cast<u32>(clear_values.size());
     render_pass_begin_info.pClearValues = clear_values.data();
-    vkCmdBeginRenderPass(commandbuffer.get_command_buffer(),
-                         &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-  }
-  auto end_renderpass(const CommandBuffer &commandbuffer) -> void {
-    vkCmdEndRenderPass(commandbuffer.get_command_buffer());
+    vkCmdBeginRenderPass(buffer.get_command_buffer(), &render_pass_begin_info,
+                         VK_SUBPASS_CONTENTS_INLINE);
 
-    bound_pipeline.reset(commandbuffer);
+    // Scissors and viewport
+    VkViewport viewport = {};
+    viewport.width = static_cast<float>(framebuffer.get_width());
+    viewport.height = static_cast<float>(framebuffer.get_height());
+    viewport.minDepth = 0.0F;
+    viewport.maxDepth = 1.0F;
+    vkCmdSetViewport(buffer.get_command_buffer(), 0, 1, &viewport);
+
+    VkRect2D scissor = {};
+    scissor.extent.width = framebuffer.get_width();
+    scissor.extent.height = framebuffer.get_height();
+    vkCmdSetScissor(buffer.get_command_buffer(), 0, 1, &scissor);
+  }
+
+  auto end_renderpass(const CommandBuffer &buffer) -> void {
+    vkCmdEndRenderPass(buffer.get_command_buffer());
+
+    bound_pipeline.reset();
   }
 
   struct DrawParameters {
@@ -202,11 +216,25 @@ public:
 
   auto bind_pipeline(const CommandBuffer &buffer,
                      const GraphicsPipeline &pipeline) {
-    if (!check_already_bound_and_set_if_not_bound(pipeline))
-      return;
+    pipeline.bind(buffer);
+    bound_pipeline = {
+        .bound_pipeline = pipeline.get_pipeline(),
+        .hash = pipeline.hash(),
+    };
+  }
 
-    vkCmdBindPipeline(buffer.get_command_buffer(),
-                      VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get_pipeline());
+  auto bind_index_buffer(const CommandBuffer &buffer,
+                         const Buffer &index_buffer) {
+    vkCmdBindIndexBuffer(buffer.get_command_buffer(), index_buffer.get_buffer(),
+                         0, VK_INDEX_TYPE_UINT32);
+  }
+
+  auto bind_vertex_buffer(const CommandBuffer &buffer,
+                          const Buffer &vertex_buffer) {
+    const std::array<VkDeviceSize, 1> offset = {0};
+    const std::array buffers = {vertex_buffer.get_buffer()};
+    vkCmdBindVertexBuffers(buffer.get_command_buffer(), 0, 1, buffers.data(),
+                           offset.data());
   }
 
 private:
@@ -214,25 +242,15 @@ private:
     VkPipeline bound_pipeline{nullptr};
     u64 hash{0};
 
-    auto reset(const auto &buffer) {
+    auto reset() -> void {
       bound_pipeline = nullptr;
-      vkCmdBindPipeline(buffer.get_command_buffer(),
-                        VK_PIPELINE_BIND_POINT_GRAPHICS, bound_pipeline);
       hash = 0;
     }
   };
   PipelineAndHash bound_pipeline{};
 
-  auto
-  check_already_bound_and_set_if_not_bound(const GraphicsPipeline &pipeline)
-      -> bool {
-    if (const auto hash = pipeline.hash(); bound_pipeline.hash != hash) {
-      bound_pipeline.bound_pipeline = pipeline.get_pipeline();
-      bound_pipeline.hash = hash;
-      return true;
-    }
-
-    return false;
+  auto is_already_bound(const GraphicsPipeline &pipeline) -> bool {
+    return pipeline.hash() == bound_pipeline.hash;
   }
 };
 
@@ -241,8 +259,17 @@ auto ClientApp::graphics(floating ts) -> void {
   graphics_command_buffer->begin(frame());
   scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
   scene_renderer.bind_pipeline(*graphics_command_buffer, *graphics_pipeline);
+
+  graphics_material->set("input_image", *output_texture);
+  graphics_material->set("output_image", *output_texture_second);
+  graphics_material->set("geometry_texture", *output_texture_second);
+  update_material_for_rendering(FrameIndex{frame()}, *graphics_material,
+                                &uniform_buffer_set, &storage_buffer_set);
+  graphics_material->bind(*graphics_command_buffer, *graphics_pipeline,
+                          frame());
+
   scene_renderer.bind_index_buffer(*graphics_command_buffer, *index_buffer);
-  scene_renderer.bind_vertex_buffer(*graphics_command_buffer, *index_buffer);
+  scene_renderer.bind_vertex_buffer(*graphics_command_buffer, *vertex_buffer);
   scene_renderer.draw(*graphics_command_buffer, {
                                                     .index_count = 3,
                                                     .instance_count = 1,
@@ -366,6 +393,20 @@ void ClientApp::perform() {
   storage_buffer_set.create(matrices_size, SetBinding(2));
   uniform_buffer_set.create(4, SetBinding(3));
 
+  vertex_buffer = Buffer::construct(*get_device(), sizeof(float) * 3 * 3,
+                                    Buffer::Type::Vertex);
+  vertex_buffer->write(
+      std::array{
+          -1.0F, -1.0F, 0.0F, // bottom left
+          1.0F, -1.0F, 0.0F,  // bottom right
+          0.0F, 1.0F, 0.0F,   // top
+      }
+          .data(),
+      sizeof(float) * 3 * 3);
+  index_buffer =
+      Buffer::construct(*get_device(), sizeof(u32) * 3, Buffer::Type::Index);
+  index_buffer->write(std::array{0U, 1U, 2U}.data(), sizeof(u32) * 3);
+
   {
     shader = Shader::construct(*get_device(),
                                FS::shader("LaplaceEdgeDetection.comp.spv"));
@@ -404,7 +445,7 @@ void ClientApp::perform() {
         .attachments =
             FramebufferAttachmentSpecification{
                 FramebufferTextureSpecification{
-                    .format = ImageFormat::UNORM_RGBA8,
+                    .format = ImageFormat::SRGB_RGBA8,
                 },
             },
         .debug_name = "DefaultFramebuffer",

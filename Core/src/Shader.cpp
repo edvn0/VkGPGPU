@@ -78,7 +78,7 @@ Shader::~Shader() {
   for (const auto &layout : descriptor_set_layouts) {
     vkDestroyDescriptorSetLayout(device.get_device(), layout, nullptr);
   }
-  info("Destroyed shader module!");
+  debug("Destroyed Shader '{}'", name);
 }
 
 auto Shader::hash() const -> usize {
@@ -141,13 +141,13 @@ auto Shader::allocate_descriptor_set(u32 set) const
 
 auto Shader::create_descriptor_set_layouts() -> void {
   auto *vk_device = device.get_device();
+  auto &descriptor_sets = reflection_data.shader_descriptor_sets;
 
-  for (u32 set = 0; set < reflection_data.shader_descriptor_sets.size();
-       set++) {
-    auto &shader_descriptor_set = reflection_data.shader_descriptor_sets[set];
+  for (u32 set = 0; set < descriptor_sets.size(); set++) {
+    auto &shader_descriptor_set = descriptor_sets[set];
 
     std::vector<VkDescriptorSetLayoutBinding> layout_bindings{};
-    for (auto &[binding, uniform_buffer] :
+    for (const auto &[binding, uniform_buffer] :
          shader_descriptor_set.uniform_buffers) {
       VkDescriptorSetLayoutBinding &layout_binding =
           layout_bindings.emplace_back();
@@ -166,7 +166,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, storage_buffer] :
+    for (const auto &[binding, storage_buffer] :
          shader_descriptor_set.storage_buffers) {
       VkDescriptorSetLayoutBinding &layout_binding =
           layout_bindings.emplace_back();
@@ -187,7 +187,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.sampled_images) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -210,7 +210,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.separate_textures) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -235,7 +235,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.separate_samplers) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -262,18 +262,18 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[bindingAndSet, imageSampler] :
+    for (const auto &[binding_and_set, image_sampler] :
          shader_descriptor_set.storage_images) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-      layout_binding.descriptorCount = imageSampler.array_size;
-      layout_binding.stageFlags = imageSampler.shader_stage;
+      layout_binding.descriptorCount = image_sampler.array_size;
+      layout_binding.stageFlags = image_sampler.shader_stage;
       layout_binding.pImmutableSamplers = nullptr;
 
       // Name a variable which has the value 0xFFFFFFFF
       static constexpr auto max_set = std::numeric_limits<Core::u32>::max();
 
-      Core::u32 binding = bindingAndSet & max_set;
+      Core::u32 binding = binding_and_set & max_set;
       layout_binding.binding = binding;
 
       ensure(!shader_descriptor_set.uniform_buffers.contains(binding),
@@ -288,7 +288,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
              "Binding is already present!");
 
       VkWriteDescriptorSet &write_set =
-          shader_descriptor_set.write_descriptor_sets[imageSampler.name];
+          shader_descriptor_set.write_descriptor_sets[image_sampler.name];
       write_set = {};
       write_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       write_set.descriptorType = layout_binding.descriptorType;
@@ -330,7 +330,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
   }
 }
 
-Shader::Type to_shader_type(const std::filesystem::path &path) {
+auto to_shader_type(const std::filesystem::path &path) {
   Shader::Type from_extension;
   // Path can end in .spv, since it is compiled. The naming scheme is
   // filename.vert.spv, filename.frag.spv or filename.comp.spv

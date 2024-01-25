@@ -30,4 +30,9 @@ concept StringLike =
 template <class T>
 concept IsNumber = std::is_arithmetic_v<T>;
 
+template <class T, class OutputType>
+concept TypeDoesSupply = requires(const T &t) {
+  { t.get_output() } -> std::same_as<OutputType>;
+};
+
 } // namespace Core

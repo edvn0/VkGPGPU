@@ -139,6 +139,9 @@ public:
   [[nodiscard]] auto get_pipeline_layout() const -> const VkPipelineLayout & {
     return pipeline_layout;
   }
+  [[nodiscard]] auto get_bind_point() const -> const VkPipelineBindPoint & {
+    return bind_point;
+  }
   [[nodiscard]] auto hash() const noexcept -> usize {
     static constexpr std::hash<std::string> hasher;
     static constexpr std::hash<const void *> void_hasher;
@@ -156,6 +159,7 @@ private:
 
   const Device &device;
   std::string name{};
+  VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_COMPUTE};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};
   VkPipeline pipeline{};
@@ -183,8 +187,11 @@ public:
   [[nodiscard]] auto get_pipeline() const -> const VkPipeline & {
     return pipeline;
   }
-  [[nodiscard]] auto get_pipeline_layout() const -> VkPipelineLayout {
+  [[nodiscard]] auto get_pipeline_layout() const -> const VkPipelineLayout & {
     return pipeline_layout;
+  }
+  [[nodiscard]] auto get_bind_point() const -> const VkPipelineBindPoint & {
+    return bind_point;
   }
   [[nodiscard]] auto hash() const noexcept -> usize {
     static constexpr std::hash<std::string> hasher;
@@ -192,7 +199,7 @@ public:
     return hasher(name) ^ void_hasher(static_cast<const void *>(pipeline));
   }
 
-  auto bind(const CommandBuffer &) -> void;
+  auto bind(const CommandBuffer &) const -> void;
 
   static auto construct(const Device &dev,
                         const GraphicsPipelineConfiguration &)
@@ -208,6 +215,7 @@ private:
   const Device *device;
   Extent<u32> extent;
   std::string name{};
+  VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_GRAPHICS};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};
   VkPipeline pipeline{};

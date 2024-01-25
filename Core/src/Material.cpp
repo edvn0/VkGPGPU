@@ -101,23 +101,24 @@ auto Material::invalidate() -> void {
   if (const auto &shader_descriptor_sets =
           shader->get_reflection_data().shader_descriptor_sets;
       !shader_descriptor_sets.empty()) {
-    for (auto &descriptor : resident_descriptors | std::views::values) {
+    for (const auto &descriptor : resident_descriptors | std::views::values) {
       pending_descriptors.push_back(descriptor);
     }
   }
 }
 
-auto Material::bind(const CommandBuffer &command_buffer,
-                    const Pipeline &pipeline, u32 frame) -> void {
+auto Material::bind_impl(const CommandBuffer &command_buffer,
+                         const VkPipelineLayout &layout,
+                         const VkPipelineBindPoint &bind_point, u32 frame)
+    -> void {
   auto &[frame_sets] = descriptor_sets[frame];
 
   if (frame_sets.empty()) {
     return;
   }
-  vkCmdBindDescriptorSets(
-      command_buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-      pipeline.get_pipeline_layout(), 0, static_cast<u32>(frame_sets.size()),
-      frame_sets.data(), 0, nullptr);
+  vkCmdBindDescriptorSets(command_buffer.get_command_buffer(), bind_point,
+                          layout, 0, static_cast<u32>(frame_sets.size()),
+                          frame_sets.data(), 0, nullptr);
 }
 
 auto Material::update_for_rendering(

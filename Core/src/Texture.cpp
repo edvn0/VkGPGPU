@@ -55,7 +55,7 @@ auto Texture::construct(const Device &device, const FS::Path &path)
 }
 
 Texture::~Texture() {
-  info("Destroyed Texture '{}', size: {}", properties.identifier, cached_size);
+  debug("Destroyed Texture '{}', size: {}", properties.identifier, cached_size);
 }
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
@@ -79,7 +79,7 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
           .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
-  info("Created texture '{}', {}", properties.identifier, properties.extent);
+  debug("Created texture '{}', {}", properties.identifier, properties.extent);
 }
 
 Texture::Texture(const Device &dev, const TextureProperties &props)
@@ -106,7 +106,7 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
                                 .border_color = properties.border_color,
                             },
                             data_buffer);
-  info("Created texture '{}', {}", properties.identifier, properties.extent);
+  debug("Created texture '{}', {}", properties.identifier, properties.extent);
   cached_size = data_buffer.size();
 
   if (properties.data_retainment_strategy ==

@@ -60,13 +60,15 @@ public:
 
   static auto construct(const Device &, u64 input_size, Type buffer_type,
                         u32 binding) -> Scope<Buffer>;
+  static auto construct(const Device &, u64 input_size, Type buffer_type)
+      -> Scope<Buffer>;
 
 private:
-  const Device &device;
+  const Device *device;
   Scope<BufferDataImpl> buffer_data{};
   u64 size{};
-  u32 binding{};
   Type type{Type::Invalid};
+  u32 binding{};
   VkDescriptorBufferInfo descriptor_info{};
 
   void initialise_vulkan_buffer();
@@ -76,6 +78,8 @@ private:
   void initialise_index_buffer();
   void initialise_uniform_buffer();
   void initialise_storage_buffer();
+
+  static constexpr u32 invalid_binding = std::numeric_limits<u32>::max();
 
   auto read_raw(size_t offset, size_t data_size) -> std::vector<char>;
 };

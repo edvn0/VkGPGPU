@@ -67,6 +67,8 @@ private:
   Scope<Pipeline> second_pipeline;
   Scope<Shader> second_shader;
 
+  Scope<Buffer> vertex_buffer;
+  Scope<Buffer> index_buffer;
   Scope<Material> graphics_material;
   Scope<GraphicsPipeline> graphics_pipeline;
   Scope<Shader> graphics_shader;

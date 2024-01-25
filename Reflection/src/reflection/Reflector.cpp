@@ -157,11 +157,6 @@ static auto reflect_push_constants(
     ReflectionData &output) -> void {
 
   for (const auto &resource : resources) {
-    const auto &buffer_name = resource.name;
-    if (output.constant_buffers.contains(buffer_name)) {
-      continue;
-    }
-
     const auto &buffer_type = compiler.get_type(resource.base_type_id);
     const auto buffer_size = static_cast<std::uint32_t>(
         compiler.get_declared_struct_size(buffer_type));
@@ -174,6 +169,7 @@ static auto reflect_push_constants(
     push_constant_range.size = buffer_size;
     push_constant_range.offset = 0;
 
+    const auto &buffer_name = resource.name;
     if (buffer_name.empty()) {
       continue;
     }
@@ -202,11 +198,6 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER> {
           const spirv_cross::SmallVector<spirv_cross::Resource> &resources,
           ReflectionData &output) -> void {
     for (const auto &resource : resources) {
-      if (auto active_buffers = compiler.get_active_buffer_ranges(resource.id);
-          active_buffers.empty()) {
-        continue;
-      }
-
       const auto &name = resource.name;
       const auto &buffer_type = compiler.get_type(resource.base_type_id);
       auto binding =
@@ -248,11 +239,6 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER> {
           const spirv_cross::SmallVector<spirv_cross::Resource> &resources,
           ReflectionData &output) -> void {
     for (const auto &resource : resources) {
-      if (auto active_buffers = compiler.get_active_buffer_ranges(resource.id);
-          active_buffers.empty()) {
-        continue;
-      }
-
       const auto &name = resource.name;
       const auto &buffer_type = compiler.get_type(resource.base_type_id);
       auto binding =

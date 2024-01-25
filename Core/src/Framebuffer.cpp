@@ -40,9 +40,9 @@ Framebuffer::~Framebuffer() {
     vkDestroyRenderPass(device->get_device(), render_pass, nullptr);
   }
   // release other resource manually
-  this->attachment_images.clear();
-  this->depth_attachment_image = nullptr;
-  info("Destroyed Framebuffer '{}'", properties.debug_name);
+  attachment_images.clear();
+  depth_attachment_image = nullptr;
+  debug("Destroyed Framebuffer '{}'", properties.debug_name);
 }
 
 auto Framebuffer::resize(u32 w, u32 h, bool should_clean) -> void {
