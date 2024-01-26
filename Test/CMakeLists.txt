@@ -11,6 +11,6 @@ add_executable(Test
     units/generic_cache/texture_cache_tests.cpp
 )
 
-target_include_directories(Test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include ../Platform/include)
+target_include_directories(Test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include ../Platform/include ${CMAKE_SOURCE_DIR}/ThirdParty/glm)
 target_link_libraries(Test PRIVATE Catch2::Catch2WithMain Core Platform Vulkan::Vulkan)
 catch_discover_tests(Test)

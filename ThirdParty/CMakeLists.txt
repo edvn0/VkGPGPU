@@ -51,7 +51,20 @@ add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
 
-add_subdirectory(glm)
+
+function(add_glm)
+    set(GLM_BUILD_LIBRARY OFF CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_SSE2 ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_SSE3 ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_SSSE3 ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_SSE4_1 ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_SSE4_2 ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_AVX ON CACHE BOOL "")
+    set(GLM_ENABLE_SIMD_AVX2 ON CACHE BOOL "")
+    add_subdirectory(glm)
+endfunction()
+
+add_glm()
 
 if(ENABLE_TESTING)
     add_subdirectory(Catch2)

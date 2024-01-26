@@ -78,8 +78,15 @@ set(SOURCES
 )
 
 add_library(Core STATIC ${SOURCES})
-target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/inline ${CMAKE_SOURCE_DIR}/Platform ${CMAKE_SOURCE_DIR}/ThirdParty/stb ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
-target_link_libraries(Core PUBLIC Platform Reflection imgui glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT glm::glm)
+target_include_directories(Core PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include 
+    ${CMAKE_CURRENT_SOURCE_DIR}/inline 
+    ${CMAKE_SOURCE_DIR}/Platform 
+    ${CMAKE_SOURCE_DIR}/ThirdParty/glm
+    ${CMAKE_SOURCE_DIR}/ThirdParty/stb 
+    ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include 
+    ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
+target_link_libraries(Core PUBLIC Platform Reflection imgui glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
