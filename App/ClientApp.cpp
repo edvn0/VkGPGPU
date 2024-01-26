@@ -81,14 +81,12 @@ template <auto N, float K> auto generate_points() {
 }
 
 auto ClientApp::update_entities(floating ts) -> void {
-  static auto positions =
-      generate_points<Config::transform_buffer_size / 2, 3.0F>();
+  static auto positions = generate_points<3, 3.0F>();
 
   for (const auto &pos : positions) {
     scene_renderer.submit_static_mesh(mesh.get(), pos);
   }
-  static auto other_positions =
-      generate_points<Config::transform_buffer_size / 2, 7.0F>();
+  static auto other_positions = generate_points<3, 7.0F>();
 
   for (const auto &pos : other_positions) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
@@ -100,15 +98,22 @@ auto ClientApp::on_update(floating ts) -> void {
   scene_renderer.begin_frame(*get_device(), frame(), camera_position);
 
   update_entities(ts);
+  {
+    graphics_command_buffer->begin(frame());
+    graphics(ts);
+    graphics_command_buffer->end_and_submit();
+  }
+  compute(ts);
 
   for (const auto &widget : widgets) {
     widget->on_update(ts);
   }
 
-  scene_drawing(ts);
-  graphics(ts);
-  compute(ts);
-
+  {
+    graphics_command_buffer->begin(frame());
+    scene_drawing(ts);
+    graphics_command_buffer->end_and_submit();
+  }
   scene_renderer.end_frame();
   timer.end();
 }
@@ -139,12 +144,12 @@ void ClientApp::on_destroy() {
 }
 
 auto ClientApp::graphics(floating ts) -> void {
-  graphics_command_buffer->begin(frame());
   scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
   scene_renderer.bind_pipeline(*graphics_command_buffer, *graphics_pipeline);
 
   graphics_material->set("geometry_texture", *texture);
-  update_material_for_rendering(FrameIndex{frame()}, *graphics_material);
+  scene_renderer.update_material_for_rendering(FrameIndex{frame()},
+                                               *graphics_material);
   graphics_material->bind(*graphics_command_buffer, *graphics_pipeline,
                           frame());
 
@@ -154,8 +159,7 @@ auto ClientApp::graphics(floating ts) -> void {
                                                     .index_count = 3,
                                                     .instance_count = 1,
                                                 });
-  scene_renderer.end_renderpass(*graphics_command_buffer, frame());
-  graphics_command_buffer->end_and_submit();
+  scene_renderer.end_renderpass(*graphics_command_buffer);
 }
 
 auto ClientApp::compute(floating ts) -> void {
@@ -183,8 +187,8 @@ auto ClientApp::compute(floating ts) -> void {
   material->set("pc.precomputedCenterValue", pc.center_value);
   material->set("input_image", *framebuffer->get_image(0));
   material->set("output_image", *output_texture);
-  update_material_for_rendering(FrameIndex{frame()}, *material,
-                                &uniform_buffer_set, &storage_buffer_set);
+  scene_renderer.update_material_for_rendering(
+      FrameIndex{frame()}, *material, &uniform_buffer_set, &storage_buffer_set);
 
   // Begin command buffer
   command_buffer->begin(frame());
@@ -223,8 +227,9 @@ auto ClientApp::compute(floating ts) -> void {
   second_material->set("pc.precomputedCenterValue", pc.center_value);
   second_material->set("input_image", *output_texture);
   second_material->set("output_image", *output_texture_second);
-  update_material_for_rendering(FrameIndex{frame()}, *second_material,
-                                &uniform_buffer_set, &storage_buffer_set);
+  scene_renderer.update_material_for_rendering(
+      FrameIndex{frame()}, *second_material, &uniform_buffer_set,
+      &storage_buffer_set);
 
   second_material->bind(*command_buffer, *second_pipeline, frame());
 
@@ -363,6 +368,7 @@ void ClientApp::perform() {
   scene_renderer.create(*get_device(), *get_swapchain());
 
   mesh = make_scope<Mesh>();
+  mesh->is_shadow_caster = false;
   const std::array<Mesh::Vertex, 3> triangle_vertices{
       Mesh::Vertex{
           .pos = {0.5f, -0.5f, 0.0f},
@@ -401,40 +407,6 @@ void ClientApp::perform() {
   mesh->submesh_indices.push_back(0);
 
   cube_mesh = Mesh::cube(*get_device());
-}
-
-void ClientApp::update_material_for_rendering(
-    FrameIndex frame_index, Material &material_for_update,
-    BufferSet<Buffer::Type::Uniform> *ubo_set,
-    BufferSet<Buffer::Type::Storage> *sbo_set) {
-  if (ubo_set != nullptr) {
-    auto write_descriptors =
-        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-            Config::frame_count, ubo_set, material_for_update);
-    if (sbo_set != nullptr) {
-      const auto &storage_buffer_write_sets =
-          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-              Config::frame_count, sbo_set, material_for_update);
-
-      for (u32 frame = 0; frame < Config::frame_count; frame++) {
-        const auto &sbo_ws = storage_buffer_write_sets[frame];
-        const auto reserved_size =
-            write_descriptors[frame].size() + sbo_ws.size();
-        write_descriptors[frame].reserve(reserved_size);
-        write_descriptors[frame].insert(write_descriptors[frame].end(),
-                                        sbo_ws.begin(), sbo_ws.end());
-      }
-    }
-    material_for_update.update_for_rendering(frame_index, write_descriptors);
-  } else {
-    material_for_update.update_for_rendering(frame_index);
-  }
-}
-
-void ClientApp::update_material_for_rendering(FrameIndex frame_index,
-                                              Material &material_for_update) {
-  update_material_for_rendering(frame_index, material_for_update, nullptr,
-                                nullptr);
 }
 
 void ClientApp::on_interface(InterfaceSystem &system) {
@@ -517,9 +489,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   });*/
 
   UI::widget("Scene", [&](const auto &extent) {
-    const auto &width = framebuffer->get_width();
-    const auto &height = framebuffer->get_height();
-    UI::image(*framebuffer->get_image(0), {extent.width, extent.height});
+    UI::image(scene_renderer.get_output_image(), {extent.width, extent.height});
   });
 
   UI::widget("Push constant", [&]() {

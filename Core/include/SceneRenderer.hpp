@@ -74,6 +74,9 @@ public:
   auto destroy(const Device &device) -> void;
   auto begin_renderpass(const CommandBuffer &buffer,
                         const Framebuffer &framebuffer) -> void;
+  auto begin_renderpass_with_explicit_clear(const CommandBuffer &buffer,
+                                            const Framebuffer &framebuffer)
+      -> void;
 
   auto draw(const CommandBuffer &buffer, const DrawParameters &params) -> void;
   auto bind_pipeline(const CommandBuffer &buffer,
@@ -84,13 +87,23 @@ public:
                           const Buffer &vertex_buffer) -> void;
   auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
       -> void;
-  auto end_renderpass(const CommandBuffer &buffer, u32 frame = 0) -> void;
+  auto end_renderpass(const CommandBuffer &buffer) -> void;
   auto create(const Device &device, const Swapchain &swapchain) -> void;
   auto begin_frame(const Device &device, u32 frame,
                    const glm::vec3 &camera_position) -> void;
 
   auto flush(const CommandBuffer &buffer, u32 frame) -> void;
   auto end_frame() -> void;
+
+  void update_material_for_rendering(FrameIndex frame_index,
+                                     Material &material_for_update,
+                                     BufferSet<Buffer::Type::Uniform> *ubo_set,
+                                     BufferSet<Buffer::Type::Storage> *sbo_set);
+
+  void update_material_for_rendering(FrameIndex frame_index,
+                                     Material &material_for_update);
+
+  auto get_output_image() const -> const Image &;
 
 private:
   Scope<GraphicsPipeline> geometry_pipeline;
@@ -115,7 +128,8 @@ private:
   std::unordered_map<CommandKey, DrawCommand> draw_commands;
   std::unordered_map<CommandKey, DrawCommand> shadow_draw_commands;
 
-  auto is_already_bound(const GraphicsPipeline &pipeline) -> bool {
+  [[nodiscard]] auto is_already_bound(const GraphicsPipeline &pipeline) const
+      -> bool {
     return pipeline.hash() == bound_pipeline.hash;
   }
 };

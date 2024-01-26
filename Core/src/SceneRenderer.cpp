@@ -7,7 +7,7 @@ namespace Core {
 template <Core::Buffer::Type T>
 auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                                         Core::BufferSet<T> *buffer_set,
-                                        Material &material)
+                                        const Material &material)
     -> const std::vector<std::vector<VkWriteDescriptorSet>> & {
   static std::unordered_map<
       BufferSet<T> *,
@@ -125,6 +125,50 @@ auto SceneRenderer::begin_renderpass(const CommandBuffer &buffer,
   vkCmdSetScissor(buffer.get_command_buffer(), 0, 1, &scissor);
 }
 
+auto SceneRenderer::begin_renderpass_with_explicit_clear(
+    const CommandBuffer &buffer, const Framebuffer &framebuffer) -> void {
+  begin_renderpass(buffer, framebuffer);
+
+  std::vector<VkClearValue> fb_clear_values = framebuffer.get_clear_values();
+
+  const auto color_attachment_count = framebuffer.get_colour_attachment_count();
+  const auto total_attachment_count =
+      color_attachment_count + (framebuffer.has_depth_attachment() ? 1 : 0);
+
+  VkExtent2D extent_2_d = {
+      .width = framebuffer.get_width(),
+      .height = framebuffer.get_height(),
+  };
+
+  std::vector<VkClearAttachment> attachments(total_attachment_count);
+  std::vector<VkClearRect> clear_rects(total_attachment_count);
+  for (u32 i = 0; i < color_attachment_count; i++) {
+    attachments[i].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    attachments[i].colorAttachment = i;
+    attachments[i].clearValue = fb_clear_values[i];
+
+    clear_rects[i].rect.offset = {0, 0};
+    clear_rects[i].rect.extent = extent_2_d;
+    clear_rects[i].baseArrayLayer = 0;
+    clear_rects[i].layerCount = 1;
+  }
+
+  if (framebuffer.has_depth_attachment()) {
+    attachments[color_attachment_count].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    attachments[color_attachment_count].clearValue =
+        fb_clear_values[color_attachment_count];
+    clear_rects[color_attachment_count].rect.offset = {0, 0};
+    clear_rects[color_attachment_count].rect.extent = extent_2_d;
+    clear_rects[color_attachment_count].baseArrayLayer = 0;
+    clear_rects[color_attachment_count].layerCount = 1;
+  }
+
+  vkCmdClearAttachments(
+      buffer.get_command_buffer(), static_cast<u32>(total_attachment_count),
+      attachments.data(), static_cast<u32>(total_attachment_count),
+      clear_rects.data());
+}
+
 auto SceneRenderer::draw(const CommandBuffer &buffer,
                          const DrawParameters &params) -> void {
   vkCmdDrawIndexed(buffer.get_command_buffer(), params.index_count,
@@ -160,28 +204,24 @@ auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
   for (const auto &submesh : mesh->get_submeshes()) {
     CommandKey key{mesh, submesh};
 
-    if (!mesh->casts_shadows()) {
-      auto &command = draw_commands[key];
-      command.mesh_ptr = mesh;
-      command.submesh_index = submesh;
-      command.transforms_and_instances.push_back(transform);
-      command.material = mesh->get_material(submesh);
-    } else {
-      auto &command = shadow_draw_commands[key];
-      command.mesh_ptr = mesh;
-      command.submesh_index = submesh;
-      command.transforms_and_instances.push_back(transform);
-      command.material = mesh->get_material(submesh);
+    auto &command = draw_commands[key];
+    command.mesh_ptr = mesh;
+    command.submesh_index = submesh;
+    command.transforms_and_instances.push_back(transform);
+    command.material = mesh->get_material(submesh);
+
+    if (mesh->casts_shadows()) {
+      auto &shadow_command = shadow_draw_commands[key];
+      shadow_command.mesh_ptr = mesh;
+      shadow_command.submesh_index = submesh;
+      shadow_command.transforms_and_instances.push_back(transform);
+      shadow_command.material = mesh->get_material(submesh);
     }
   }
 }
 
-auto SceneRenderer::end_renderpass(const CommandBuffer &buffer, u32 frame)
-    -> void {
+auto SceneRenderer::end_renderpass(const CommandBuffer &buffer) -> void {
   vkCmdEndRenderPass(buffer.get_command_buffer());
-
-  bound_pipeline.reset();
-  draw_commands.clear();
 }
 
 auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
@@ -189,6 +229,8 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
+      .clear_colour_on_load = false,
+      .clear_depth_on_load = false,
       .blend = false,
       .attachments =
           FramebufferAttachmentSpecification{
@@ -236,16 +278,16 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
               LayoutElement{ElementType::Float3, "tangents"},
               LayoutElement{ElementType::Float3, "bitangents"},
           },
-      .depth_comparison_operator = DepthCompareOperator::LessOrEqual,
-      .cull_mode = CullMode::Back,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
+      .cull_mode = CullMode::Front,
       .face_mode = FaceMode::CounterClockwise,
   };
   geometry_pipeline = GraphicsPipeline::construct(device, config);
 
   GraphicsPipelineConfiguration shadow_config{
-      .name = "DefaultGraphicsPipeline",
-      .shader = geometry_shader.get(),
-      .framebuffer = geometry_framebuffer.get(),
+      .name = "ShadowGraphicsPipeline",
+      .shader = shadow_shader.get(),
+      .framebuffer = shadow_framebuffer.get(),
       .layout =
           VertexLayout{
               LayoutElement{ElementType::Float3, "pos"},
@@ -255,24 +297,24 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
               LayoutElement{ElementType::Float3, "tangents"},
               LayoutElement{ElementType::Float3, "bitangents"},
           },
-      .depth_comparison_operator = DepthCompareOperator::LessOrEqual,
-      .cull_mode = CullMode::Back,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
+      .cull_mode = CullMode::Front,
       .face_mode = FaceMode::CounterClockwise,
   };
   shadow_pipeline = GraphicsPipeline::construct(device, shadow_config);
 
   std::array<VkDescriptorPoolSize, 4> pool_sizes = {
       VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                           Config::frame_count},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, Config::frame_count},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Config::frame_count},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, Config::frame_count},
+                           10 * Config::frame_count},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10 * Config::frame_count},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10 * Config::frame_count},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 10 * Config::frame_count},
   };
 
   VkDescriptorPoolCreateInfo pool_info = {};
   pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pool_info.maxSets = static_cast<u32>(pool_sizes.size()) * 4ul;
+  pool_info.maxSets = static_cast<u32>(pool_sizes.size()) * 4UL;
   pool_info.poolSizeCount = static_cast<u32>(std::size(pool_sizes));
   pool_info.pPoolSizes = pool_sizes.data();
 
@@ -391,19 +433,76 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
     begin_renderpass(buffer, *shadow_framebuffer);
     bind_pipeline(buffer, *shadow_pipeline);
 
+    auto &transforms = ssbos->get(1, frame, 2);
+    transforms->write(value.transforms_and_instances.data(),
+                      value.transforms_and_instances.size() *
+                          sizeof(glm::mat4));
+
     auto &material = value.material;
+    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
 
-    update_material_for_rendering(FrameIndex{frame()}, *material);
-    material->bind(*graphics_command_buffer, *graphics_pipeline, frame());
+    if (material) {
+      update_material_for_rendering(FrameIndex{frame}, *material);
+      material->bind(buffer, *shadow_pipeline, frame);
+    }
 
-    bind_index_buffer(buffer, *index_buffer);
-    bind_vertex_buffer(buffer, *vertex_buffer);
+    vkCmdBindDescriptorSets(
+        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+        shadow_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
+
+    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
+
     draw(buffer, {
-                     .index_count = 3,
-                     .instance_count = 1,
+                     .index_count = submesh.index_count,
+                     .instance_count = static_cast<u32>(
+                         value.transforms_and_instances.size()),
+                     .first_index = submesh.base_index,
                  });
-    end_renderpass(buffer, frame);
+    end_renderpass(buffer);
   }
+
+  bool first = true;
+  for (const auto &[key, value] : draw_commands) {
+    if (first) {
+      begin_renderpass_with_explicit_clear(buffer, *geometry_framebuffer);
+      first = false;
+    } else {
+      begin_renderpass(buffer, *geometry_framebuffer);
+    }
+    bind_pipeline(buffer, *geometry_pipeline);
+
+    auto &transforms = ssbos->get(1, frame, 2);
+    transforms->write(value.transforms_and_instances.data(),
+                      value.transforms_and_instances.size() *
+                          sizeof(glm::mat4));
+
+    auto &material = value.material;
+    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
+
+    if (material) {
+      update_material_for_rendering(FrameIndex{frame}, *material);
+      material->bind(buffer, *geometry_pipeline, frame);
+    }
+
+    vkCmdBindDescriptorSets(
+        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+        geometry_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
+
+    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
+
+    draw(buffer, {
+                     .index_count = submesh.index_count,
+                     .instance_count = static_cast<u32>(
+                         value.transforms_and_instances.size()),
+                     .first_index = submesh.base_index,
+                 });
+    end_renderpass(buffer);
+  }
+
+  draw_commands.clear();
+  shadow_draw_commands.clear();
 }
 
 auto SceneRenderer::end_frame() -> void {}
@@ -440,6 +539,10 @@ void SceneRenderer::update_material_for_rendering(
     FrameIndex frame_index, Material &material_for_update) {
   update_material_for_rendering(frame_index, material_for_update, nullptr,
                                 nullptr);
+}
+
+auto SceneRenderer::get_output_image() const -> const Image & {
+  return *geometry_framebuffer->get_image(0);
 }
 
 } // namespace Core

@@ -42,10 +42,20 @@ struct Mesh {
   auto get_submesh(u32 index) const -> const auto & {
     return submeshes.at(index);
   }
-  constexpr auto casts_shadows() const -> bool { return true; }
+  constexpr auto casts_shadows() const -> bool { return is_shadow_caster; }
   auto get_materials_span() const -> std::span<Material *>;
   auto get_material(u32 index) const -> Material *;
+
+  [[nodiscard]] auto get_vertex_buffer() const -> const auto & {
+    return vertex_buffer;
+  }
+  [[nodiscard]] auto get_index_buffer() const -> const auto & {
+    return index_buffer;
+  }
+
   static auto cube(const Device &) -> Scope<Mesh>;
+
+  bool is_shadow_caster{true};
 };
 
 } // namespace Core

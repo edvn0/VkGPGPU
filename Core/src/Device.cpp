@@ -119,9 +119,8 @@ auto Device::select_physical_device(
     }
 
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-      return dev;
       info("Selected device: {}", properties.deviceName);
-      break;
+      return dev;
     }
   }
 
