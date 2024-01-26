@@ -1,3 +1,5 @@
+#include "pch/vkgpgpu_pch.hpp"
+
 #include "ClientApp.hpp"
 
 #include "BufferSet.hpp"
@@ -10,89 +12,6 @@
 #include <array>
 #include <imgui.h>
 #include <vulkan/vulkan_core.h>
-
-template <Core::Buffer::Type T>
-auto create_or_get_write_descriptor_for(u32 frames_in_flight,
-                                        Core::BufferSet<T> *buffer_set,
-                                        Material &material)
-    -> const std::vector<std::vector<VkWriteDescriptorSet>> & {
-  static std::unordered_map<
-      BufferSet<T> *,
-      std::unordered_map<std::size_t,
-                         std::vector<std::vector<VkWriteDescriptorSet>>>>
-      buffer_set_write_descriptor_cache;
-
-  constexpr auto get_descriptor_set_vector =
-      [](auto &map, auto *key, auto hash) -> auto & { return map[key][hash]; };
-
-  const auto &vulkan_shader = material.get_shader();
-  const auto shader_hash = vulkan_shader.hash();
-  if (buffer_set_write_descriptor_cache.contains(buffer_set)) {
-    const auto &shader_map = buffer_set_write_descriptor_cache.at(buffer_set);
-    if (shader_map.contains(shader_hash)) {
-      const auto &write_descriptors = shader_map.at(shader_hash);
-      return write_descriptors;
-    }
-  }
-
-  if (!vulkan_shader.has_descriptor_set(0) ||
-      !vulkan_shader.has_descriptor_set(1)) {
-    return get_descriptor_set_vector(buffer_set_write_descriptor_cache,
-                                     buffer_set, shader_hash);
-  }
-
-  const auto &shader_descriptor_sets =
-      vulkan_shader.get_reflection_data().shader_descriptor_sets;
-  if (shader_descriptor_sets.empty()) {
-    return get_descriptor_set_vector(buffer_set_write_descriptor_cache,
-                                     buffer_set, shader_hash);
-  }
-
-  const auto &shader_descriptor_set = shader_descriptor_sets[0];
-  const auto &storage_buffers = shader_descriptor_set.storage_buffers;
-  const auto &uniform_buffers = shader_descriptor_set.uniform_buffers;
-
-  if constexpr (T == Buffer::Type::Storage) {
-    for (const auto &binding : storage_buffers | std::views::keys) {
-      auto &write_descriptors = get_descriptor_set_vector(
-          buffer_set_write_descriptor_cache, buffer_set, shader_hash);
-      write_descriptors.resize(frames_in_flight);
-      for (auto frame = FrameIndex{0}; frame < frames_in_flight; ++frame) {
-        const auto &stored_buffer = buffer_set->get(DescriptorBinding(binding),
-                                                    frame, DescriptorSet(0));
-
-        VkWriteDescriptorSet wds = {};
-        wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        wds.descriptorCount = 1;
-        wds.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        wds.pBufferInfo = &stored_buffer->get_descriptor_info();
-        wds.dstBinding = stored_buffer->get_binding();
-        write_descriptors[frame].push_back(wds);
-      }
-    }
-  } else {
-    for (const auto &binding : uniform_buffers | std::views::keys) {
-      auto &write_descriptors = get_descriptor_set_vector(
-          buffer_set_write_descriptor_cache, buffer_set, shader_hash);
-      write_descriptors.resize(frames_in_flight);
-      for (auto frame = FrameIndex{0}; frame < frames_in_flight; ++frame) {
-        const auto &stored_buffer = buffer_set->get(DescriptorBinding(binding),
-                                                    frame, DescriptorSet(0));
-
-        VkWriteDescriptorSet wds = {};
-        wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        wds.descriptorCount = 1;
-        wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        wds.pBufferInfo = &stored_buffer->get_descriptor_info();
-        wds.dstBinding = stored_buffer->get_binding();
-        write_descriptors[frame].push_back(wds);
-      }
-    }
-  }
-
-  return get_descriptor_set_vector(buffer_set_write_descriptor_cache,
-                                   buffer_set, shader_hash);
-}
 
 auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
   static std::random_device rd;
@@ -132,8 +51,8 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       *get_device(), std::filesystem::current_path()));
 };
 
-std::vector<glm::vec3> generate_points(auto N) {
-  std::vector<glm::vec3> points{};
+template <auto N, float K> auto generate_points() {
+  std::array<glm::mat4, N> points{};
 
   // Random device and generator
   static std::random_device rd;
@@ -153,20 +72,26 @@ std::vector<glm::vec3> generate_points(auto N) {
     float xyPlaneRadius = sqrt(1.0f - z * z);
 
     // Calculate the point position and scale it to a sphere of radius 3
-    points[i] =
+    const auto point =
         glm::vec3(xyPlaneRadius * cos(angle), xyPlaneRadius * sin(angle), z) *
-        3.0f;
+        K;
+    points[i] = glm::translate(glm::mat4{1.0F}, point);
   }
   return points;
 }
 
 auto ClientApp::update_entities(floating ts) -> void {
-  static auto positions = generate_points(10000);
+  static auto positions =
+      generate_points<Config::transform_buffer_size / 2, 3.0F>();
 
   for (const auto &pos : positions) {
-    auto transform = glm::translate(glm::identity<glm::mat4>(), pos);
-    scene_renderer.submit_static_mesh(mesh.get(), transform);
-    scene_renderer.submit_static_mesh(cube_mesh.get(), transform);
+    scene_renderer.submit_static_mesh(mesh.get(), pos);
+  }
+  static auto other_positions =
+      generate_points<Config::transform_buffer_size / 2, 7.0F>();
+
+  for (const auto &pos : other_positions) {
+    scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
 }
 
@@ -188,7 +113,9 @@ auto ClientApp::on_update(floating ts) -> void {
   timer.end();
 }
 
-auto ClientApp::scene_drawing(floating ts) -> void {}
+auto ClientApp::scene_drawing(floating ts) -> void {
+  scene_renderer.flush(*graphics_command_buffer, frame());
+}
 
 void ClientApp::on_create() {
   for (const auto &widget : widgets)
@@ -638,86 +565,4 @@ auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
   framebuffer->on_resize(new_extent);
 
   info("{}", new_extent);
-}
-
-auto Mesh::cube(const Device &device) -> Scope<Mesh> {
-  Scope<Mesh> output_mesh;
-  output_mesh = make_scope<Mesh>();
-  static constexpr const std::array<Mesh::Vertex, 8> cube_vertices{
-      Mesh::Vertex{{-0.5f, -0.5f, 0.5f},
-                   {0.0f, 0.0f},
-                   {1.0f, 0.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{0.5f, -0.5f, 0.5f},
-                   {1.0f, 0.0f},
-                   {1.0f, 0.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{0.5f, 0.5f, 0.5f},
-                   {1.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{-0.5f, 0.5f, 0.5f},
-                   {0.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, 1.0f},
-                   {1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-
-      // Back face
-      Mesh::Vertex{{-0.5f, -0.5f, -0.5f},
-                   {1.0f, 0.0f},
-                   {1.0f, 1.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, -1.0f},
-                   {-1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{0.5f, -0.5f, -0.5f},
-                   {0.0f, 0.0f},
-                   {1.0f, 1.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, -1.0f},
-                   {-1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{0.5f, 0.5f, -0.5f},
-                   {0.0f, 1.0f},
-                   {1.0f, 1.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, -1.0f},
-                   {-1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-      Mesh::Vertex{{-0.5f, 0.5f, -0.5f},
-                   {1.0f, 1.0f},
-                   {1.0f, 1.0f, 0.0f, 1.0f},
-                   {0.0f, 0.0f, -1.0f},
-                   {-1.0f, 0.0f, 0.0f},
-                   {0.0f, 1.0f, 0.0f}},
-  };
-  static constexpr const std::array<u32, 36> cube_indices{
-      0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
-      4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3,
-  };
-
-  output_mesh->vertex_buffer =
-      Buffer::construct(device, sizeof(Mesh::Vertex) * cube_vertices.size(),
-                        Buffer::Type::Vertex);
-  output_mesh->vertex_buffer->write(
-      cube_vertices.data(), sizeof(Mesh::Vertex) * cube_vertices.size());
-  output_mesh->index_buffer = Buffer::construct(
-      device, cube_indices.size() * sizeof(u32), Buffer::Type::Index);
-  output_mesh->index_buffer->write(cube_indices.data(),
-                                   cube_indices.size() * sizeof(u32));
-  output_mesh->submeshes = {
-      Mesh::Submesh{
-          .base_vertex = 0,
-          .base_index = 0,
-          .material_index = 0,
-          .index_count = cube_indices.size(),
-          .vertex_count = cube_vertices.size(),
-      },
-  };
-  output_mesh->submesh_indices.push_back(0);
-  return output_mesh;
 }

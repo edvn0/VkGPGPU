@@ -17,6 +17,7 @@ class FileCouldNotBeOpened;
 class Image;
 class Instance;
 class Logger;
+class Material;
 class Pipeline;
 class Window;
 class QueueUnknownException;

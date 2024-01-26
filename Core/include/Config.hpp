@@ -24,4 +24,10 @@ static constexpr u32 thread_count = GPGPU_THREAD_COUNT;
 static constexpr u32 thread_count = 4;
 #endif
 
+#ifdef GPGPU_TRANSFORM_BUFFER_SIZE
+static constexpr u32 transform_buffer_size = GPGPU_TRANSFORM_BUFFER_SIZE;
+#else
+static constexpr u32 transform_buffer_size = 1000;
+#endif
+
 } // namespace Core::Config

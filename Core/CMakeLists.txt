@@ -25,6 +25,8 @@ set(SOURCES
     include/Formatters.hpp
     include/Framebuffer.hpp
     include/GIFTexture.hpp
+    include/Mesh.hpp
+    include/SceneRenderer.hpp
     include/GenericCache.hpp
     include/Image.hpp
     include/ImageProperties.hpp
@@ -65,6 +67,8 @@ set(SOURCES
     src/Image.cpp
     src/Instance.cpp
     src/InterfaceSystem.cpp
+    src/Mesh.cpp
+    src/SceneRenderer.cpp
     src/Logger.cpp
     src/Material.cpp
     src/Pipeline.cpp
@@ -78,13 +82,13 @@ set(SOURCES
 )
 
 add_library(Core STATIC ${SOURCES})
-target_include_directories(Core PUBLIC 
-    ${CMAKE_CURRENT_SOURCE_DIR}/include 
-    ${CMAKE_CURRENT_SOURCE_DIR}/inline 
-    ${CMAKE_SOURCE_DIR}/Platform 
+target_include_directories(Core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/inline
+    ${CMAKE_SOURCE_DIR}/Platform
     ${CMAKE_SOURCE_DIR}/ThirdParty/glm
-    ${CMAKE_SOURCE_DIR}/ThirdParty/stb 
-    ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include 
+    ${CMAKE_SOURCE_DIR}/ThirdParty/stb
+    ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include
     ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
 target_link_libraries(Core PUBLIC Platform Reflection imgui glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage EnTT::EnTT)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
