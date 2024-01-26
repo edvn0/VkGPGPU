@@ -21,6 +21,7 @@ class Pipeline;
 class Window;
 class QueueUnknownException;
 class Shader;
+class Texture;
 class Timer;
 class Swapchain;
 class VulkanResultException;

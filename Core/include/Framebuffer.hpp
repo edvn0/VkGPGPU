@@ -39,7 +39,7 @@ struct FramebufferProperties {
   u32 height{0};
   floating scale{1.0f};
   Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
-  floating depth_clear_value{0.0f};
+  floating depth_clear_value{1.0f};
   bool clear_colour_on_load{true};
   bool clear_depth_on_load{true};
 

@@ -132,26 +132,59 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       *get_device(), std::filesystem::current_path()));
 };
 
-auto ClientApp::update_entities(floating ts) -> void {
-  static constexpr std::array<int, 1000> quads{};
+std::vector<glm::vec3> generate_points(auto N) {
+  std::vector<glm::vec3> points{};
 
-  for (const auto &quad : quads) {
-    scene_renderer.submit_static_mesh(mesh.get());
+  // Random device and generator
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+
+  // Uniform distributions for angle and z-coordinate
+  static std::uniform_real_distribution<float> angleDistr(0.0f,
+                                                          2.0f * 3.14159265f);
+  static std::uniform_real_distribution<float> zDistr(-1.0f, 1.0f);
+
+  for (size_t i = 0; i < N; ++i) {
+    // Generate random angle and z-coordinate
+    float angle = angleDistr(gen);
+    float z = zDistr(gen);
+
+    // Calculate the radius in the XY-plane for this z value
+    float xyPlaneRadius = sqrt(1.0f - z * z);
+
+    // Calculate the point position and scale it to a sphere of radius 3
+    points[i] =
+        glm::vec3(xyPlaneRadius * cos(angle), xyPlaneRadius * sin(angle), z) *
+        3.0f;
+  }
+  return points;
+}
+
+auto ClientApp::update_entities(floating ts) -> void {
+  static auto positions = generate_points(10000);
+
+  for (const auto &pos : positions) {
+    auto transform = glm::translate(glm::identity<glm::mat4>(), pos);
+    scene_renderer.submit_static_mesh(mesh.get(), transform);
+    scene_renderer.submit_static_mesh(cube_mesh.get(), transform);
   }
 }
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
+  scene_renderer.begin_frame(*get_device(), frame(), camera_position);
 
   update_entities(ts);
 
-  for (const auto &widget : widgets)
+  for (const auto &widget : widgets) {
     widget->on_update(ts);
+  }
 
   scene_drawing(ts);
   graphics(ts);
   compute(ts);
 
+  scene_renderer.end_frame();
   timer.end();
 }
 
@@ -164,8 +197,11 @@ void ClientApp::on_create() {
 }
 
 void ClientApp::on_destroy() {
-  for (const auto &widget : widgets)
+  scene_renderer.destroy(*get_device());
+
+  for (const auto &widget : widgets) {
     widget->on_destroy();
+  }
   // Destroy all fields
   command_buffer.reset();
 
@@ -368,6 +404,9 @@ void ClientApp::perform() {
                 FramebufferTextureSpecification{
                     .format = ImageFormat::SRGB_RGBA32,
                 },
+                FramebufferTextureSpecification{
+                    .format = ImageFormat::DEPTH32F,
+                },
             },
         .debug_name = "DefaultFramebuffer",
     };
@@ -418,8 +457,9 @@ void ClientApp::perform() {
       Buffer::Type::Vertex);
   mesh->vertex_buffer->write(triangle_vertices.data(),
                              sizeof(Mesh::Vertex) * triangle_vertices.size());
-  mesh->index_buffer = Buffer::construct(
-      *get_device(), index_data.size() * sizeof(u32), Buffer::Type::Index);
+  mesh->index_buffer =
+      Buffer::construct(*get_device(), triangle_indices.size() * sizeof(u32),
+                        Buffer::Type::Index);
   mesh->index_buffer->write(triangle_indices.data(),
                             triangle_indices.size() * sizeof(u32));
   mesh->submeshes = {
@@ -432,6 +472,8 @@ void ClientApp::perform() {
       },
   };
   mesh->submesh_indices.push_back(0);
+
+  cube_mesh = Mesh::cube(*get_device());
 }
 
 void ClientApp::update_material_for_rendering(
@@ -572,6 +614,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     UI::text("Kernel Size: {}", pc.kernel_size);
     UI::text("Half Size: {}", pc.half_size);
     UI::text("Center Value: {}", pc.center_value);
+
+    ImGui::SliderFloat3("Position", &camera_position[0], -10.0f, 10.0f);
+    UI::text("Current Position: x={}, y={}, z={}", camera_position.x,
+             camera_position.y, camera_position.z);
   });
 
   for (auto &widget : widgets)
@@ -592,4 +638,86 @@ auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
   framebuffer->on_resize(new_extent);
 
   info("{}", new_extent);
+}
+
+auto Mesh::cube(const Device &device) -> Scope<Mesh> {
+  Scope<Mesh> output_mesh;
+  output_mesh = make_scope<Mesh>();
+  static constexpr const std::array<Mesh::Vertex, 8> cube_vertices{
+      Mesh::Vertex{{-0.5f, -0.5f, 0.5f},
+                   {0.0f, 0.0f},
+                   {1.0f, 0.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{0.5f, -0.5f, 0.5f},
+                   {1.0f, 0.0f},
+                   {1.0f, 0.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{0.5f, 0.5f, 0.5f},
+                   {1.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{-0.5f, 0.5f, 0.5f},
+                   {0.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, 1.0f},
+                   {1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+
+      // Back face
+      Mesh::Vertex{{-0.5f, -0.5f, -0.5f},
+                   {1.0f, 0.0f},
+                   {1.0f, 1.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, -1.0f},
+                   {-1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{0.5f, -0.5f, -0.5f},
+                   {0.0f, 0.0f},
+                   {1.0f, 1.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, -1.0f},
+                   {-1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{0.5f, 0.5f, -0.5f},
+                   {0.0f, 1.0f},
+                   {1.0f, 1.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, -1.0f},
+                   {-1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+      Mesh::Vertex{{-0.5f, 0.5f, -0.5f},
+                   {1.0f, 1.0f},
+                   {1.0f, 1.0f, 0.0f, 1.0f},
+                   {0.0f, 0.0f, -1.0f},
+                   {-1.0f, 0.0f, 0.0f},
+                   {0.0f, 1.0f, 0.0f}},
+  };
+  static constexpr const std::array<u32, 36> cube_indices{
+      0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
+      4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3,
+  };
+
+  output_mesh->vertex_buffer =
+      Buffer::construct(device, sizeof(Mesh::Vertex) * cube_vertices.size(),
+                        Buffer::Type::Vertex);
+  output_mesh->vertex_buffer->write(
+      cube_vertices.data(), sizeof(Mesh::Vertex) * cube_vertices.size());
+  output_mesh->index_buffer = Buffer::construct(
+      device, cube_indices.size() * sizeof(u32), Buffer::Type::Index);
+  output_mesh->index_buffer->write(cube_indices.data(),
+                                   cube_indices.size() * sizeof(u32));
+  output_mesh->submeshes = {
+      Mesh::Submesh{
+          .base_vertex = 0,
+          .base_index = 0,
+          .material_index = 0,
+          .index_count = cube_indices.size(),
+          .vertex_count = cube_vertices.size(),
+      },
+  };
+  output_mesh->submesh_indices.push_back(0);
+  return output_mesh;
 }

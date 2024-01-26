@@ -71,6 +71,7 @@ private:
   ImageProperties properties;
   VkDescriptorImageInfo descriptor_image_info{};
   Scope<ImageStorageImpl> impl{nullptr};
+  VkImageAspectFlags aspect_bit{VK_IMAGE_ASPECT_COLOR_BIT};
 
   auto create_mips() -> void;
   auto load_image_data_from_buffer(const DataBuffer &) -> void;

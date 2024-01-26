@@ -38,9 +38,10 @@ auto to_vulkan_format(ImageFormat format) -> VkFormat {
   }
 }
 
-bool transition_image(const ImmediateCommandBuffer &buffer,
-                      VkImage &to_transition, VkImageLayout from,
-                      VkImageLayout to) {
+bool transition_image(
+    const ImmediateCommandBuffer &buffer, VkImage &to_transition,
+    VkImageLayout from, VkImageLayout to,
+    VkImageAspectFlags aspect_bit = VK_IMAGE_ASPECT_COLOR_BIT) {
   VkImageMemoryBarrier barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   barrier.oldLayout = from;
@@ -48,7 +49,7 @@ bool transition_image(const ImmediateCommandBuffer &buffer,
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.image = to_transition;
-  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.aspectMask = aspect_bit;
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = 1;
   barrier.subresourceRange.baseArrayLayer = 0;
@@ -199,8 +200,16 @@ struct Image::ImageStorageImpl {
   }
 };
 
+auto to_aspect_bit(const ImageFormat &format) -> VkImageAspectFlags {
+  if (format == ImageFormat::DEPTH16 ||
+      format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
+    return VK_IMAGE_ASPECT_DEPTH_BIT;
+  return VK_IMAGE_ASPECT_COLOR_BIT;
+}
+
 Image::Image(const Device &dev, ImageProperties props)
-    : device(&dev), properties(props) {
+    : device(&dev), properties(props),
+      aspect_bit(to_aspect_bit(properties.format)) {
   ensure(device != nullptr, "Device cannot be null. This class name: {}",
          "Image");
   ensure(properties.extent.width > 0, "Extent width must be greater than 0");
@@ -252,12 +261,12 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
     auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
     transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.aspectMask = aspect_bit;
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
@@ -277,7 +286,7 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
                            &region);
 
     transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     to_vulkan_layout(properties.layout));
+                     to_vulkan_layout(properties.layout), aspect_bit);
   }
 
   allocator.deallocate_buffer(allocation, staging_buffer);
@@ -346,7 +355,7 @@ void Image::create_mips() {
   barrier.image = impl->image;
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.aspectMask = aspect_bit;
   barrier.subresourceRange.baseArrayLayer = 0;
   barrier.subresourceRange.layerCount = 1;
   barrier.subresourceRange.levelCount = 1;
@@ -377,7 +386,7 @@ void Image::create_mips() {
         mip_height,
         1,
     };
-    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.srcSubresource.aspectMask = aspect_bit;
     blit.srcSubresource.mipLevel = i - 1;
     blit.srcSubresource.baseArrayLayer = 0;
     blit.srcSubresource.layerCount = 1;
@@ -391,7 +400,7 @@ void Image::create_mips() {
         mip_height > 1 ? mip_height / 2 : 1,
         1,
     };
-    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.aspectMask = aspect_bit;
     blit.dstSubresource.mipLevel = i;
     blit.dstSubresource.baseArrayLayer = 0;
     blit.dstSubresource.layerCount = 1;
@@ -470,8 +479,7 @@ auto Image::initialise_vulkan_image() -> void {
   image_view_create_info.image = impl->image;
   image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
   image_view_create_info.format = to_vulkan_format(properties.format);
-  image_view_create_info.subresourceRange.aspectMask =
-      VK_IMAGE_ASPECT_COLOR_BIT;
+  image_view_create_info.subresourceRange.aspectMask = aspect_bit;
   image_view_create_info.subresourceRange.baseMipLevel = 0;
   image_view_create_info.subresourceRange.levelCount =
       properties.mip_info.valid() ? properties.mip_info.mips : 1;

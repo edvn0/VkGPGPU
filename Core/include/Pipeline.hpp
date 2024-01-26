@@ -75,10 +75,11 @@ static constexpr auto to_size(ElementType type) -> std::size_t {
 }
 
 struct LayoutElement {
-  LayoutElement(ElementType element_type, std::string debug = "Empty")
-      : type(element_type), debug_name(std::move(debug)), size(to_size(type)){
+  constexpr LayoutElement(ElementType element_type,
+                          std::string_view debug = "Empty")
+      : type(element_type), debug_name(debug), size(to_size(type)){
 
-                                                          };
+                                               };
 
   ElementType type;
   std::string debug_name;
@@ -98,6 +99,18 @@ struct VertexLayout {
   VertexLayout(std::initializer_list<LayoutElement> elems,
                const VertexBinding &bind = {})
       : elements(elems), binding(bind) {
+    for (auto &element : elements) {
+      element.offset = total_size;
+      total_size += element.size;
+    }
+    binding.stride = total_size;
+  }
+
+  template <usize N>
+  constexpr VertexLayout(std::array<LayoutElement, N> elmns,
+                         const VertexBinding &bind = {}) {
+    elements.resize(N);
+    elements = {elmns.begin(), elmns.end()};
     for (auto &element : elements) {
       element.offset = total_size;
       total_size += element.size;

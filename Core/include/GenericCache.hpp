@@ -3,7 +3,6 @@
 #include "Concepts.hpp"
 #include "Containers.hpp"
 #include "Device.hpp"
-#include "Texture.hpp"
 #include "ThreadPool.hpp"
 #include "Types.hpp"
 
@@ -11,6 +10,8 @@
 #include <queue>
 #include <string>
 #include <unordered_set>
+
+#include "core/Forward.hpp"
 
 namespace Core {
 
@@ -63,7 +64,7 @@ public:
    * @param dev Reference to the device used for object construction.
    * @param loading_texture The texture to return while objects are loading.
    */
-  explicit GenericCache(const Device &dev, Scope<T> loading_texture)
+  explicit GenericCache(const Device &dev, Scope<Texture> loading_texture)
       : device(&dev), loading(std::move(loading_texture)) {}
 
   /**
@@ -102,6 +103,11 @@ public:
     }
   }
 
+  /**
+   * @brief Update the cache by loading the next object in the queue.
+   *
+   * Will generally be called by external thread (non-main thread).
+   */
   auto update_one() {
     if (future_cache.empty()) {
       return;
@@ -123,7 +129,7 @@ public:
   auto type_cache_size() const -> usize { return type_cache.size(); }
   auto future_cache_size() const -> usize { return future_cache.size(); }
 
-  auto get_loading_texture() const -> const Scope<T> & { return loading; }
+  auto get_loading_texture() const -> const Scope<Texture> & { return loading; }
 
 private:
   const Device *device;
@@ -137,8 +143,7 @@ private:
   std::unordered_set<std::string> processing_identifier_cache;
   Container::StringLikeMap<Scope<T>> type_cache;
   std::mutex access;
-  std::mutex other;
-  Scope<T> loading;
+  Scope<Texture> loading;
 };
 
 } // namespace Core

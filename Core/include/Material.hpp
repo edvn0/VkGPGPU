@@ -4,6 +4,7 @@
 #include "Concepts.hpp"
 #include "Config.hpp"
 #include "Device.hpp"
+#include "Math.hpp"
 #include "Shader.hpp"
 #include "Texture.hpp"
 
@@ -26,6 +27,12 @@ public:
     return set(identifier, static_cast<const void *>(&copy));
   }
 
+  auto set(const std::string_view identifier, const Math::IsGLM auto &value)
+      -> bool {
+    const auto &copy = value;
+    return set(identifier, Math::value_ptr(copy));
+  }
+
   auto set(std::string_view, const Texture &) -> bool;
   auto set(std::string_view, const Image &) -> bool;
   [[nodiscard]] auto get_constant_buffer() const -> const auto & {
@@ -45,10 +52,10 @@ public:
       { t.get_pipeline_layout() } -> std::same_as<const VkPipelineLayout &>;
       { t.get_bind_point() } -> std::same_as<const VkPipelineBindPoint &>;
     }
-  auto bind(const CommandBuffer &command_buffer, const T &pipeline,
-            u32 frame) const -> void {
+  auto bind(const CommandBuffer &command_buffer, const T &pipeline, u32 frame,
+            VkDescriptorSet renderer_set = nullptr) const -> void {
     bind_impl(command_buffer, pipeline.get_pipeline_layout(),
-              pipeline.get_bind_point(), frame);
+              pipeline.get_bind_point(), frame, renderer_set);
   }
 
   auto get_shader() const -> const auto & { return *shader; }
@@ -58,7 +65,8 @@ private:
   auto construct_buffers() -> void;
 
   auto bind_impl(const CommandBuffer &, const VkPipelineLayout &,
-                 const VkPipelineBindPoint &, u32 frame) const -> void;
+                 const VkPipelineBindPoint &, u32 frame,
+                 VkDescriptorSet additional_set) const -> void;
 
   auto set(std::string_view, const void *data) -> bool;
   [[nodiscard]] auto find_resource(std::string_view)

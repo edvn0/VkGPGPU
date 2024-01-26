@@ -8,5 +8,5 @@ layout(location = 0) out vec4 colour;
 
 void main() {
   vec4 scene_colour = texture(geometry_texture, in_uvs);
-  colour = scene_colour;
+  colour = vec4(in_uvs, 1.0F, 1.0F);
 }

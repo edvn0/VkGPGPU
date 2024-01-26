@@ -93,7 +93,7 @@ auto Framebuffer::create_framebuffer() -> void {
 
   std::vector<VkAttachmentDescription> attachmentDescriptions;
 
-  std::vector<VkAttachmentReference> color_attachmentReferences;
+  std::vector<VkAttachmentReference> color_attachment_references;
   VkAttachmentReference depthAttachmentReference;
 
   const auto &attachments = properties.attachments.attachments;
@@ -110,61 +110,70 @@ auto Framebuffer::create_framebuffer() -> void {
       if (properties.existing_image) {
         depth_attachment_image = properties.existing_image;
       } else if (properties.existing_framebuffer) {
-        const auto &existingFramebuffer = properties.existing_framebuffer;
-        depth_attachment_image = existingFramebuffer->get_depth_image();
-      } else if (properties.existing_images.find(attachment_index) !=
-                 properties.existing_images.end()) {
+        const auto &existing_framebuffer = properties.existing_framebuffer;
+        depth_attachment_image = existing_framebuffer->get_depth_image();
+      } else if (properties.existing_images.contains(attachment_index)) {
         Ref<Image> existing_image =
             properties.existing_images.at(attachment_index);
-        // assert on depth format
         depth_attachment_image = existing_image;
       } else {
-        Ref<Image> depthAttachmentImage = depth_attachment_image;
-        auto &spec = depthAttachmentImage->get_properties();
-        spec.layout = ImageLayout::DepthStencilAttachmentOptimal;
-        spec.extent.width = static_cast<u32>(width * properties.scale);
-        spec.extent.height = static_cast<u32>(height * properties.scale);
-        depthAttachmentImage->recreate();
+        if (depth_attachment_image) {
+          auto &spec = depth_attachment_image->get_properties();
+          spec.format = attachment_specification.format;
+          spec.usage = ImageUsage::DepthStencilAttachment;
+          spec.layout = ImageLayout::DepthStencilAttachmentOptimal;
+          spec.extent.width = static_cast<u32>(width * properties.scale);
+          spec.extent.height = static_cast<u32>(height * properties.scale);
+        } else {
+          depth_attachment_image = Image::construct_reference(
+              *device,
+              {
+                  .extent =
+                      {
+                          .width = static_cast<u32>(width * properties.scale),
+                          .height = static_cast<u32>(height * properties.scale),
+                      },
+                  .format = attachment_specification.format,
+                  .usage = ImageUsage::DepthStencilAttachment,
+                  .layout = ImageLayout::DepthStencilAttachmentOptimal,
+              });
+        }
       }
 
-      VkAttachmentDescription &attachmentDescription =
+      VkAttachmentDescription &attachment_description =
           attachmentDescriptions.emplace_back();
-      attachmentDescription.flags = 0;
-      attachmentDescription.format =
+      attachment_description.flags = 0;
+      attachment_description.format =
           to_vulkan_format(attachment_specification.format);
-      attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-      attachmentDescription.loadOp = properties.clear_depth_on_load
-                                         ? VK_ATTACHMENT_LOAD_OP_CLEAR
-                                         : VK_ATTACHMENT_LOAD_OP_LOAD;
-      attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attachmentDescription.initialLayout =
+      attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+      attachment_description.loadOp = properties.clear_depth_on_load
+                                          ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                          : VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachment_description.initialLayout =
           properties.clear_depth_on_load
               ? VK_IMAGE_LAYOUT_UNDEFINED
               : VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-      attachmentDescription.finalLayout =
+      attachment_description.finalLayout =
           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-      attachmentDescription.finalLayout =
+      attachment_description.finalLayout =
           VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
       depthAttachmentReference = {
           attachment_index, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
       clear_values[attachment_index].depthStencil = {
           .depth = properties.depth_clear_value, .stencil = 0};
     } else {
-      // HZ_CORE_ASSERT(!properties.existing_image, "Not supported for color
-      // attachments");
-
       Ref<Image> color_attachment;
       if (properties.existing_framebuffer) {
-        const auto existingFramebuffer = properties.existing_framebuffer;
+        const auto &existing_framebuffer = properties.existing_framebuffer;
         Ref<Image> existing_image =
-            existingFramebuffer->get_image(attachment_index);
+            existing_framebuffer->get_image(attachment_index);
         color_attachment = attachment_images.emplace_back(existing_image);
       } else if (properties.existing_images.contains(attachment_index)) {
         Ref<Image> existing_image =
             properties.existing_images[attachment_index];
-        // assert on depth format
         color_attachment = existing_image;
         attachment_images[attachment_index] = existing_image;
       } else {
@@ -190,41 +199,41 @@ auto Framebuffer::create_framebuffer() -> void {
           color_attachment = image;
           if (attachment_index == 0 &&
               properties.existing_image_layers[0] == 0) {
-            color_attachment->recreate(); // Create immediately
+            color_attachment->recreate();
             // color_attachment->RT_CreatePerSpecificLayerImageViews(
             //    properties.existing_imageLayers);
           } else if (attachment_index == 0) {
             // color_attachment->RT_CreatePerSpecificLayerImageViews(
             //     properties.existing_imageLayers);
           } else {
-            color_attachment->recreate(); // Create immediately
+            color_attachment->recreate();
           }
         }
       }
 
-      VkAttachmentDescription &attachmentDescription =
+      VkAttachmentDescription &attachment_description =
           attachmentDescriptions.emplace_back();
-      attachmentDescription.flags = 0;
-      attachmentDescription.format =
+      attachment_description.flags = 0;
+      attachment_description.format =
           to_vulkan_format(attachment_specification.format);
-      attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-      attachmentDescription.loadOp = properties.clear_colour_on_load
-                                         ? VK_ATTACHMENT_LOAD_OP_CLEAR
-                                         : VK_ATTACHMENT_LOAD_OP_LOAD;
-      attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attachmentDescription.initialLayout =
+      attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+      attachment_description.loadOp = properties.clear_colour_on_load
+                                          ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                          : VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachment_description.initialLayout =
           properties.clear_colour_on_load
               ? VK_IMAGE_LAYOUT_UNDEFINED
               : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-      attachmentDescription.finalLayout =
+      attachment_description.finalLayout =
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-      const auto &clearColor = properties.clear_colour;
+      const auto &clear_colour = properties.clear_colour;
       clear_values[attachment_index].color = {
-          {clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
-      color_attachmentReferences.emplace_back(VkAttachmentReference{
+          {clear_colour.r, clear_colour.g, clear_colour.b, clear_colour.a}};
+      color_attachment_references.emplace_back(VkAttachmentReference{
           attachment_index, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
     }
 
@@ -234,10 +243,11 @@ auto Framebuffer::create_framebuffer() -> void {
   VkSubpassDescription subpassDescription = {};
   subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpassDescription.colorAttachmentCount =
-      u32(color_attachmentReferences.size());
-  subpassDescription.pColorAttachments = color_attachmentReferences.data();
-  if (depth_attachment_image)
+      static_cast<u32>(color_attachment_references.size());
+  subpassDescription.pColorAttachments = color_attachment_references.data();
+  if (depth_attachment_image) {
     subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+  }
 
   std::vector<VkSubpassDependency> dependencies;
 
@@ -319,7 +329,8 @@ auto Framebuffer::create_framebuffer() -> void {
   VkFramebufferCreateInfo framebufferCreateInfo = {};
   framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   framebufferCreateInfo.renderPass = render_pass;
-  framebufferCreateInfo.attachmentCount = u32(view_attachments.size());
+  framebufferCreateInfo.attachmentCount =
+      static_cast<u32>(view_attachments.size());
   framebufferCreateInfo.pAttachments = view_attachments.data();
   framebufferCreateInfo.width = width;
   framebufferCreateInfo.height = height;

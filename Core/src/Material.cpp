@@ -115,16 +115,22 @@ auto Material::invalidate() -> void {
 
 auto Material::bind_impl(const CommandBuffer &command_buffer,
                          const VkPipelineLayout &layout,
-                         const VkPipelineBindPoint &bind_point, u32 frame) const
-    -> void {
+                         const VkPipelineBindPoint &bind_point, u32 frame,
+                         VkDescriptorSet additional_set) const -> void {
   auto &[frame_sets] = descriptor_sets.at(frame);
 
   if (frame_sets.empty()) {
     return;
   }
+
+  auto copy = frame_sets;
+  if (additional_set != nullptr) {
+    copy.push_back(additional_set);
+  }
+
   vkCmdBindDescriptorSets(command_buffer.get_command_buffer(), bind_point,
-                          layout, 0, static_cast<u32>(frame_sets.size()),
-                          frame_sets.data(), 0, nullptr);
+                          layout, 0, static_cast<u32>(copy.size()), copy.data(),
+                          0, nullptr);
 }
 
 auto Material::update_for_rendering(
