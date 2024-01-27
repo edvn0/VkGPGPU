@@ -203,27 +203,36 @@ auto Material::update_for_rendering(
     }
   }
 
-  auto descriptor_set_0 = shader->allocate_descriptor_set(0);
-  auto descriptor_set_1 = shader->allocate_descriptor_set(1);
-  std::ranges::for_each(split_by_type.at(0).begin(), split_by_type.at(0).end(),
-                        [&set = descriptor_set_0](VkWriteDescriptorSet &value) {
-                          value.dstSet = set.descriptor_sets.at(0);
-                        });
-  vkUpdateDescriptorSets(device->get_device(),
-                         static_cast<u32>(split_by_type.at(0).size()),
-                         split_by_type.at(0).data(), 0, nullptr);
+  auto &current_sets = descriptor_sets[frame_index].descriptor_sets;
+  current_sets = {};
+  if (shader->has_descriptor_set(0)) {
+    auto descriptor_set_0 = shader->allocate_descriptor_set(0);
+    std::ranges::for_each(
+        split_by_type.at(0).begin(), split_by_type.at(0).end(),
+        [&set = descriptor_set_0](VkWriteDescriptorSet &value) {
+          value.dstSet = set.descriptor_sets.at(0);
+        });
+    vkUpdateDescriptorSets(device->get_device(),
+                           static_cast<u32>(split_by_type.at(0).size()),
+                           split_by_type.at(0).data(), 0, nullptr);
 
-  std::ranges::for_each(split_by_type.at(1).begin(), split_by_type.at(1).end(),
-                        [&set = descriptor_set_1](VkWriteDescriptorSet &value) {
-                          value.dstSet = set.descriptor_sets.at(0);
-                        });
-  vkUpdateDescriptorSets(device->get_device(),
-                         static_cast<u32>(split_by_type.at(1).size()),
-                         split_by_type.at(1).data(), 0, nullptr);
+    current_sets.push_back(descriptor_set_0.descriptor_sets.at(0));
+  }
 
-  descriptor_sets[frame_index].descriptor_sets = {
-      descriptor_set_0.descriptor_sets.at(0),
-      descriptor_set_1.descriptor_sets.at(0)};
+  if (shader->has_descriptor_set(1)) {
+    auto descriptor_set_1 = shader->allocate_descriptor_set(1);
+    std::ranges::for_each(
+        split_by_type.at(1).begin(), split_by_type.at(1).end(),
+        [&set = descriptor_set_1](VkWriteDescriptorSet &value) {
+          value.dstSet = set.descriptor_sets.at(0);
+        });
+    vkUpdateDescriptorSets(device->get_device(),
+                           static_cast<u32>(split_by_type.at(1).size()),
+                           split_by_type.at(1).data(), 0, nullptr);
+
+    current_sets.push_back(descriptor_set_1.descriptor_sets.at(0));
+  }
+
   pending_descriptors.clear();
 }
 

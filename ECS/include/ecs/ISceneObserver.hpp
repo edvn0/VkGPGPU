@@ -1,17 +1,14 @@
 #pragma once
 
-namespace ECS {
+#include "messages/Message.hpp"
 
-enum class SceneEvent {
-  Closed,
-  Deleted,
-};
+namespace ECS {
 
 class ISceneObserver {
 public:
   virtual ~ISceneObserver() = default;
 
-  virtual auto on_notify(SceneEvent) -> void = 0;
+  virtual auto on_notify(const Message &) -> void = 0;
 };
 
 } // namespace ECS

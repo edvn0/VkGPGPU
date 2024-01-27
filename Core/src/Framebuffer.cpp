@@ -113,7 +113,8 @@ auto Framebuffer::create_framebuffer() -> void {
         const auto &existing_framebuffer = properties.existing_framebuffer;
         depth_attachment_image = existing_framebuffer->get_depth_image();
       } else if (properties.existing_images.contains(attachment_index)) {
-        auto &existing_image = properties.existing_images.at(attachment_index);
+        const auto &existing_image =
+            properties.existing_images.at(attachment_index);
         depth_attachment_image = existing_image;
       } else {
         if (depth_attachment_image) {
@@ -121,8 +122,8 @@ auto Framebuffer::create_framebuffer() -> void {
           spec.format = attachment_specification.format;
           spec.usage = ImageUsage::DepthStencilAttachment;
           spec.layout = ImageLayout::DepthStencilReadOnlyOptimal;
-          spec.extent.width = static_cast<u32>(width * properties.scale);
-          spec.extent.height = static_cast<u32>(height * properties.scale);
+          spec.extent.width = width * properties.scale;
+          spec.extent.height = height * properties.scale;
         } else {
           depth_attachment_image = Image::construct_reference(
               *device,
@@ -133,7 +134,8 @@ auto Framebuffer::create_framebuffer() -> void {
                           .height = static_cast<u32>(height * properties.scale),
                       },
                   .format = attachment_specification.format,
-                  .usage = ImageUsage::DepthStencilAttachment,
+                  .usage =
+                      ImageUsage::DepthStencilAttachment | ImageUsage::Sampled,
                   .layout = ImageLayout::DepthStencilReadOnlyOptimal,
               });
         }
@@ -183,7 +185,7 @@ auto Framebuffer::create_framebuffer() -> void {
           spec.min_filter = SamplerFilter::Nearest,
           spec.max_filter = SamplerFilter::Nearest,
           spec.layout = ImageLayout::ShaderReadOnlyOptimal;
-          spec.usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+          spec.usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                        ImageUsage::TransferSrc | ImageUsage::TransferDst;
           spec.extent.width = static_cast<u32>(width * properties.scale);
           spec.extent.height = static_cast<u32>(height * properties.scale);

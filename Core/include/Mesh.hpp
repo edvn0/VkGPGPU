@@ -38,13 +38,17 @@ struct Mesh {
 
   std::vector<Submesh> submeshes;
   std::vector<u32> submesh_indices;
-  auto get_submeshes() const -> const auto & { return submesh_indices; }
-  auto get_submesh(u32 index) const -> const auto & {
+  [[nodiscard]] auto get_submeshes() const -> const auto & {
+    return submesh_indices;
+  }
+  [[nodiscard]] auto get_submesh(u32 index) const -> const auto & {
     return submeshes.at(index);
   }
-  constexpr auto casts_shadows() const -> bool { return is_shadow_caster; }
-  auto get_materials_span() const -> std::span<Material *>;
-  auto get_material(u32 index) const -> Material *;
+  [[nodiscard]] auto get_materials_span() const -> std::span<Material *>;
+  [[nodiscard]] auto get_material(u32 index) const -> Material *;
+  [[nodiscard]] auto has_material(u32 index) const -> bool {
+    return materials.size() > index;
+  }
 
   [[nodiscard]] auto get_vertex_buffer() const -> const auto & {
     return vertex_buffer;
@@ -55,6 +59,7 @@ struct Mesh {
 
   static auto cube(const Device &) -> Scope<Mesh>;
 
+  constexpr auto casts_shadows() const -> bool { return is_shadow_caster; }
   bool is_shadow_caster{true};
 };
 

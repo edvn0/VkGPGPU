@@ -67,7 +67,7 @@ enum class ImageUsage : std::uint8_t {
   TransferDst = bit(1),
   Sampled = bit(2),
   Storage = bit(3),
-  ColorAttachment = bit(4),
+  ColourAttachment = bit(4),
   DepthStencilAttachment = bit(5),
   TransientAttachment = bit(6),
   InputAttachment = bit(7),

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Types.hpp"
+
 #include <atomic>
 #include <condition_variable>
 #include <fmt/core.h>

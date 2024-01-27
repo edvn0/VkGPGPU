@@ -153,7 +153,7 @@ void FilesystemWidget::render_directory_contents() {
             .path = path,
             .extent = extent,
             .tiling = ImageTiling::Linear,
-            .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+            .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
             .layout = ImageLayout::ShaderReadOnlyOptimal,
         });

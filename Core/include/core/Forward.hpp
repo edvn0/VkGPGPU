@@ -14,6 +14,7 @@ class Device;
 class DynamicLibraryLoader;
 class Environment;
 class FileCouldNotBeOpened;
+class InterfaceSystem;
 class Image;
 class Instance;
 class Logger;

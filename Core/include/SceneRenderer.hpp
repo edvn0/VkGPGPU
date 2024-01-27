@@ -46,6 +46,9 @@ class SceneRenderer {
     glm::mat4 view;
     glm::mat4 projection;
     glm::mat4 view_projection;
+    glm::vec4 light_position;
+    glm::vec4 light_direction;
+    glm::vec4 camera_position;
   };
   struct TransformData {
     std::array<glm::mat4, Config::transform_buffer_size> transforms{};
@@ -107,16 +110,26 @@ public:
                                      Material &material_for_update);
 
   auto get_output_image() const -> const Image &;
+  auto get_depth_image() const -> const Image &;
+
+  auto set_extent(const Extent<u32> &ext) -> void { extent = ext; }
 
 private:
+  Extent<u32> extent{};
+
   Scope<GraphicsPipeline> geometry_pipeline;
   Scope<Shader> geometry_shader;
+  Scope<Material> geometry_material;
   Scope<Framebuffer> geometry_framebuffer;
 
   Scope<GraphicsPipeline> shadow_pipeline;
   Scope<Shader> shadow_shader;
+  Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
 
+  Scope<Image> white_texture;
+  Scope<Image> black_texture;
+  Scope<Texture> disarray_texture;
   struct PipelineAndHash {
     VkPipeline bound_pipeline{nullptr};
     u64 hash{0};

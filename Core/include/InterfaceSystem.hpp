@@ -6,9 +6,10 @@
 #include <functional>
 #include <mutex>
 #include <queue>
-#include <vulkan/vulkan.h>
 
 #include "core/Forward.hpp"
+
+using VkDescriptorPool = struct VkDescriptorPool_T *;
 
 namespace Core {
 

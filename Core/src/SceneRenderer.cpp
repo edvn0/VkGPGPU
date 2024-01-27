@@ -28,7 +28,7 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
     }
   }
 
-  if (!vulkan_shader.has_descriptor_set(0) ||
+  if (!vulkan_shader.has_descriptor_set(0) &&
       !vulkan_shader.has_descriptor_set(1)) {
     return get_descriptor_set_vector(buffer_set_write_descriptor_cache,
                                      buffer_set, shader_hash);
@@ -242,9 +242,9 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   VkWriteDescriptorSet ubo_write = {};
   {
-    auto &ubo = ubos->get(0, frame, 2);
-    renderer_ubo.projection =
-        glm::perspective(glm::radians(70.0F), 1280.0F / 720.0F, 0.1F, 1000.F);
+    const auto &ubo = ubos->get(0, frame);
+    renderer_ubo.projection = glm::perspective(
+        glm::radians(70.0F), extent.aspect_ratio(), 0.1F, 1000.0F);
     renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
     renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
 
@@ -260,11 +260,17 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   VkWriteDescriptorSet shadow_ubo_write = {};
   {
-    auto &ubo_shadow = ubos->get(2, frame, 2);
+    const auto &ubo_shadow = ubos->get(1, frame);
     shadow_ubo.projection =
-        glm::perspective(glm::radians(70.0F), 1280.0F / 720.0F, 0.1F, 1000.F);
-    shadow_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
+        glm::ortho(-10.0F, 10.0F, -10.0F, 10.0F, 0.1F, 1000.0F);
+
+    // Suppose the sun is opposite the camera
+    const auto light_pos = -camera_position;
+    shadow_ubo.view = glm::lookAt(light_pos, {0, 0, 0}, {0, -1, 0});
     shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+    shadow_ubo.light_position = glm::vec4(light_pos, 1.0F);
+    shadow_ubo.light_direction = glm::vec4(-glm::normalize(light_pos), 1.0F);
+    shadow_ubo.camera_position = glm::vec4(camera_position, 1.0F);
 
     ubo_shadow->write(shadow_ubo);
 
@@ -278,7 +284,7 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   VkWriteDescriptorSet ssbo_write = {};
   {
-    auto &ssbo = ssbos->get(1, frame, 2);
+    const auto &ssbo = ssbos->get(2, frame);
 
     ssbo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     ssbo_write.descriptorCount = 1;
@@ -297,8 +303,11 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
 
   begin_renderpass(buffer, *shadow_framebuffer);
   bind_pipeline(buffer, *shadow_pipeline);
+  update_material_for_rendering(FrameIndex{frame}, *shadow_material, ubos.get(),
+                                ssbos.get());
+  shadow_material->bind(buffer, *shadow_pipeline, frame);
   for (const auto &[key, value] : shadow_draw_commands) {
-    auto &transforms = ssbos->get(1, frame, 2);
+    const auto &transforms = ssbos->get(2, frame);
     transforms->write(value.transforms_and_instances.data(),
                       value.transforms_and_instances.size() *
                           sizeof(glm::mat4));
@@ -310,10 +319,6 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
       update_material_for_rendering(FrameIndex{frame}, *material);
       material->bind(buffer, *shadow_pipeline, frame);
     }
-
-    vkCmdBindDescriptorSets(
-        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
-        shadow_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
 
     bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
     bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
@@ -329,12 +334,12 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
 
   begin_renderpass(buffer, *geometry_framebuffer);
   bind_pipeline(buffer, *geometry_pipeline);
-  vkCmdBindDescriptorSets(
-      buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
-      geometry_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
+  update_material_for_rendering(FrameIndex{frame}, *geometry_material,
+                                ubos.get(), ssbos.get());
+  geometry_material->bind(buffer, *geometry_pipeline, frame);
   for (const auto &[key, value] : draw_commands) {
 
-    auto &transforms = ssbos->get(1, frame, 2);
+    const auto &transforms = ssbos->get(2, frame);
     transforms->write(value.transforms_and_instances.data(),
                       value.transforms_and_instances.size() *
                           sizeof(glm::mat4));
@@ -403,13 +408,17 @@ auto SceneRenderer::get_output_image() const -> const Image & {
   return *geometry_framebuffer->get_image(0);
 }
 
+auto SceneRenderer::get_depth_image() const -> const Image & {
+  return *shadow_framebuffer->get_depth_image();
+}
+
 auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
     -> void {
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
       .depth_clear_value = 0.0F,
-      .blend = false,
+      .blend = true,
       .attachments =
           FramebufferAttachmentSpecification{
               FramebufferTextureSpecification{
@@ -417,6 +426,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
               },
               FramebufferTextureSpecification{
                   .format = ImageFormat::DEPTH32F,
+                  .blend = false,
               },
           },
       .debug_name = "DefaultFramebuffer",
@@ -440,10 +450,38 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
 
   geometry_shader = Shader::construct(device, FS::shader("Basic.vert.spv"),
                                       FS::shader("Basic.frag.spv"));
+  geometry_material = Material::construct(device, *geometry_shader);
+
+  DataBuffer white_data(sizeof(u32));
+  u32 white = 0xFFFFFFFF;
+  white_data.write(&white, sizeof(u32));
+  white_texture = make_scope<Image>(
+      device,
+      ImageProperties{
+          .extent = {1, 1},
+          .format = ImageFormat::UNORM_RGBA8,
+          .tiling = ImageTiling::Optimal,
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc | ImageUsage::ColourAttachment,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+      },
+      white_data);
+
+  disarray_texture =
+      Texture::construct(device, FS::texture("Disarray_Logo.png"));
+
+  geometry_material->set("shadow_map", *shadow_framebuffer->get_depth_image());
+  geometry_material->set("albedo", *disarray_texture);
+  geometry_material->set("diffuse_map", *white_texture);
+  geometry_material->set("normal", *white_texture);
+  geometry_material->set("metallic", *white_texture);
+  geometry_material->set("roughness", *white_texture);
+  geometry_material->set("ao", *white_texture);
+
   shadow_shader = Shader::construct(device, FS::shader("Shadow.vert.spv"),
                                     FS::shader("Shadow.frag.spv"));
+  shadow_material = Material::construct(device, *shadow_shader);
 
-  // graphics_material = Material::construct(device, *geometry_shader);
   GraphicsPipelineConfiguration config{
       .name = "DefaultGraphicsPipeline",
       .shader = geometry_shader.get(),
@@ -457,8 +495,9 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
               LayoutElement{ElementType::Float3, "tangents"},
               LayoutElement{ElementType::Float3, "bitangents"},
           },
-      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
-      .cull_mode = CullMode::Front,
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .cull_mode = CullMode::Back,
+      .face_mode = FaceMode::CounterClockwise,
   };
   geometry_pipeline = GraphicsPipeline::construct(device, config);
 
@@ -469,14 +508,10 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .layout =
           VertexLayout{
               LayoutElement{ElementType::Float3, "pos"},
-              LayoutElement{ElementType::Float2, "uvs"},
-              LayoutElement{ElementType::Float4, "colour"},
-              LayoutElement{ElementType::Float3, "normals"},
-              LayoutElement{ElementType::Float3, "tangents"},
-              LayoutElement{ElementType::Float3, "bitangents"},
           },
-      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
-      .cull_mode = CullMode::Front,
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .cull_mode = CullMode::Back,
+      .face_mode = FaceMode::CounterClockwise,
   };
   shadow_pipeline = GraphicsPipeline::construct(device, shadow_config);
 
@@ -535,10 +570,10 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
                               &layout);
 
   ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(device);
-  ubos->create(sizeof(RendererUBO), SetBinding(2, 0));
-  ubos->create(sizeof(ShadowUBO), SetBinding(2, 2));
+  ubos->create(sizeof(RendererUBO), SetBinding(0));
+  ubos->create(sizeof(ShadowUBO), SetBinding(1));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(device);
-  ssbos->create(sizeof(TransformData), SetBinding(2, 1));
+  ssbos->create(sizeof(TransformData), SetBinding(2));
 }
 
 } // namespace Core

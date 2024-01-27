@@ -7,18 +7,31 @@
 #include <string>
 #include <vector>
 
+#include "core/Forward.hpp"
+
 namespace ECS {
 
 class Entity;
 
 class Scene {
 public:
-  auto create_entity(std::string_view) -> Entity;
+  explicit Scene(std::string_view scene_name);
+  ~Scene();
+  auto create_entity(std::string_view, bool add_observer = true) -> Entity;
+
+  // Lifetime events
+  auto on_create() -> void;
+  auto on_destroy() -> void;
+  auto on_update(Core::floating) -> void;
+  auto on_interface(Core::InterfaceSystem &) -> void;
+  auto on_resize(const Core::Extent<Core::u32> &) -> void;
 
 private:
   std::string name{};
   entt::registry registry;
-  std::vector<Core::Scope<ISceneObserver>> observers{};
+  std::vector<ISceneObserver *> observers{};
+
+  friend class Entity;
 };
 
 } // namespace ECS

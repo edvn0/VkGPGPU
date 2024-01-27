@@ -35,6 +35,7 @@ public:
 
   auto set(std::string_view, const Texture &) -> bool;
   auto set(std::string_view, const Image &) -> bool;
+  auto set(std::string_view, const Buffer &) -> bool;
   [[nodiscard]] auto get_constant_buffer() const -> const auto & {
     return constant_buffer;
   }

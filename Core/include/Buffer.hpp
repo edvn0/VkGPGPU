@@ -58,6 +58,22 @@ public:
     std::memcpy(output.data(), raw_data.data(), data_size);
   }
 
+  template <typename T> void write(std::span<T> data) const {
+    write(data.data(), data.size() * sizeof(T));
+  }
+  template <typename T> void write(const T &data) const {
+    write(&data, sizeof(T));
+  }
+
+  void write(const void *data, u64 data_size) const;
+
+  template <typename T>
+  auto read(std::vector<T> &output, size_t offset = 0) const {
+    auto data_size = output.size() * sizeof(T);
+    auto raw_data = read_raw(offset, data_size);
+    std::memcpy(output.data(), raw_data.data(), data_size);
+  }
+
   static auto construct(const Device &, u64 input_size, Type buffer_type,
                         u32 binding) -> Scope<Buffer>;
   static auto construct(const Device &, u64 input_size, Type buffer_type)

@@ -47,8 +47,8 @@ auto Texture::construct(const Device &device, const FS::Path &path)
   TextureProperties properties;
   properties.path = path;
   properties.format = ImageFormat::UNORM_RGBA8;
-  properties.usage = ImageUsage::ColorAttachment | ImageUsage::TransferDst |
-                     ImageUsage::TransferSrc;
+  properties.usage = ImageUsage::ColourAttachment | ImageUsage::TransferDst |
+                     ImageUsage::TransferSrc | ImageUsage::Sampled;
   properties.layout = ImageLayout::ShaderReadOnlyOptimal;
   auto texture = Texture::construct(device, properties);
   return texture;

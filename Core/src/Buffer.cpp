@@ -233,4 +233,20 @@ void Buffer::write(const void *data, u64 data_size) {
   }
 }
 
+void Buffer::write(const void *data, u64 data_size) const {
+  assert(data_size <= size); // Ensure we don't write out of bounds
+
+  const auto is_always_mapped = buffer_data->allocation_info.pMappedData;
+  if (is_always_mapped) {
+    std::memcpy(buffer_data->allocation_info.pMappedData, data, data_size);
+  } else {
+    void *mapped_data{};
+    verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
+                        &mapped_data),
+           "vmaMapMemory", "Failed to map memory");
+    std::memcpy(mapped_data, data, data_size);
+    vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
+  }
+}
+
 } // namespace Core

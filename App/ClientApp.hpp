@@ -50,10 +50,9 @@ public:
   void on_destroy() override;
 
 private:
+  Scope<ECS::Scene> scene;
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
-
-  Scope<ECS::Scene> scene;
 
   glm::vec3 camera_position{-3, -5, 3};
 

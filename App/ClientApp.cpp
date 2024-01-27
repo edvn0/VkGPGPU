@@ -6,12 +6,15 @@
 #include "Config.hpp"
 #include "FilesystemWidget.hpp"
 #include "Framebuffer.hpp"
+#include "Input.hpp"
 #include "Material.hpp"
 #include "UI.hpp"
 
 #include <array>
 #include <imgui.h>
 #include <vulkan/vulkan_core.h>
+
+#include "ecs/Entity.hpp"
 
 auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
   static std::random_device rd;
@@ -49,6 +52,7 @@ ClientApp::ClientApp(const ApplicationProperties &props)
   pc.center_value = center;
   widgets.emplace_back(make_scope<FilesystemWidget>(
       *get_device(), std::filesystem::current_path()));
+  scene_renderer.set_extent(get_swapchain()->get_extent());
 };
 
 template <auto N, float K> auto generate_points() {
@@ -80,20 +84,67 @@ template <auto N, float K> auto generate_points() {
 }
 
 auto ClientApp::update_entities(floating ts) -> void {
-  static auto positions = generate_points<300, 3.0F>();
+  {
+    static auto positions =
+        generate_points<Config::transform_buffer_size / 2, 3.0F>();
 
-  for (const auto &pos : positions) {
-    scene_renderer.submit_static_mesh(mesh.get(), pos);
+    for (const auto &pos : positions) {
+      scene_renderer.submit_static_mesh(mesh.get(), pos);
+    }
   }
 
-  static auto other_positions = generate_points<300, 7.0F>();
+  {
+    static auto positions =
+        generate_points<Config::transform_buffer_size / 2, 3.0F>();
+
+    for (const auto &pos : positions) {
+      scene_renderer.submit_static_mesh(mesh.get(), pos);
+    }
+  }
+
+  cube_mesh->is_shadow_caster = false;
+  static auto other_positions =
+      generate_points<Config::transform_buffer_size / 2, 7.0F>();
   for (const auto &pos : other_positions) {
+    scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
+  }
+
+  cube_mesh->is_shadow_caster = true;
+  static auto other_positions_again =
+      generate_points<Config::transform_buffer_size / 2, 2.0F>();
+  for (const auto &pos : other_positions_again) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
 }
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
+  scene->on_update(ts);
+  static constexpr auto radius = 8.0F;
+  static auto angle = 0.0F;
+  angle += ts * 0.1F;
+
+  if (Input::pressed(KeyCode::KEY_D)) {
+    angle += ts * 0.3F;
+  }
+  if (Input::pressed(KeyCode::KEY_A)) {
+    angle -= ts * 0.3F;
+  }
+  static auto y = camera_position.y;
+
+  if (Input::pressed(KeyCode::KEY_W)) {
+    y -= ts * 0.3F;
+  }
+  if (Input::pressed(KeyCode::KEY_S)) {
+    y += ts * 0.3F;
+  }
+
+  camera_position = {
+      radius * std::cos(angle),
+      y,
+      radius * std::sin(angle),
+  };
+
   scene_renderer.begin_frame(*get_device(), frame(), camera_position);
   for (const auto &widget : widgets) {
     widget->on_update(ts);
@@ -121,8 +172,9 @@ auto ClientApp::scene_drawing(floating ts) -> void {
 }
 
 void ClientApp::on_create() {
-  for (const auto &widget : widgets)
+  for (const auto &widget : widgets) {
     widget->on_create();
+  }
   perform();
 }
 
@@ -406,8 +458,8 @@ void ClientApp::perform() {
 
   cube_mesh = Mesh::cube(*get_device());
 
-  scene = make_scope<ECS::Scene>();
-  auto entity =
+  scene = make_scope<ECS::Scene>("Default");
+  auto entity = scene->create_entity("Test");
 }
 
 void ClientApp::on_interface(InterfaceSystem &system) {
@@ -493,6 +545,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     UI::image(scene_renderer.get_output_image(), {extent.width, extent.height});
   });
 
+  UI::widget("Depth", [&](const auto &extent) {
+    UI::image(scene_renderer.get_depth_image(), {extent.width, extent.height});
+  });
+
   UI::widget("Push constant", [&]() {
     UI::text("Edit PCForMaterial Properties");
     ImGui::Separator();
@@ -518,11 +574,13 @@ void ClientApp::on_interface(InterfaceSystem &system) {
              camera_position.y, camera_position.z);
   });
 
-  for (auto &widget : widgets)
+  for (const auto &widget : widgets)
     widget->on_interface(system);
 }
 
 auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
+  scene_renderer.set_extent(new_extent);
+
   material->on_resize(new_extent);
   pipeline->on_resize(new_extent);
   shader->on_resize(new_extent);
