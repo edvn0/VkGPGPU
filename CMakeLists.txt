@@ -9,6 +9,7 @@ add_subdirectory(ThirdParty)
 add_subdirectory(Core)
 add_subdirectory(App)
 add_subdirectory(Platform)
+add_subdirectory(ECS)
 
 # IF enable testing
 if(ENABLE_TESTING)

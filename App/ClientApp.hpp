@@ -33,6 +33,7 @@
 #include <unordered_map>
 
 #include "bus/MessagingClient.hpp"
+#include "ecs/Scene.hpp"
 #include "widgets/Widget.hpp"
 
 using namespace Core;
@@ -51,6 +52,8 @@ public:
 private:
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
+
+  Scope<ECS::Scene> scene;
 
   glm::vec3 camera_position{-3, -5, 3};
 

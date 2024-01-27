@@ -74,9 +74,12 @@ public:
   auto destroy(const Device &device) -> void;
   auto begin_renderpass(const CommandBuffer &buffer,
                         const Framebuffer &framebuffer) -> void;
-  auto begin_renderpass_with_explicit_clear(const CommandBuffer &buffer,
-                                            const Framebuffer &framebuffer)
-      -> void;
+
+  /**
+   * @brief Does a full renderpass (begins + ends) which clears!
+   */
+  auto explicit_clear(const CommandBuffer &buffer,
+                      const Framebuffer &framebuffer) -> void;
 
   auto draw(const CommandBuffer &buffer, const DrawParameters &params) -> void;
   auto bind_pipeline(const CommandBuffer &buffer,

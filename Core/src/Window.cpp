@@ -2,6 +2,7 @@
 
 #include "Window.hpp"
 
+#include "Input.hpp"
 #include "Verify.hpp"
 
 #include <imgui_impl_glfw.h>
@@ -28,6 +29,7 @@ Window::Window(const Instance &inst, const WindowProperties &props)
   auto &&[width, height] = properties.extent.as<i32>();
 
   window = glfwCreateWindow(width, height, "VkGPGPU", nullptr, nullptr);
+  Input::initialise(window);
 
   verify(glfwCreateWindowSurface(instance->get_instance(), window, nullptr,
                                  &surface),

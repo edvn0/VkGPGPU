@@ -12,5 +12,5 @@ add_executable(Test
 )
 
 target_include_directories(Test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include ../Platform/include ${CMAKE_SOURCE_DIR}/ThirdParty/glm)
-target_link_libraries(Test PRIVATE Catch2::Catch2WithMain Core Platform Vulkan::Vulkan)
+target_link_libraries(Test PRIVATE Catch2::Catch2WithMain Core ECS Platform Vulkan::Vulkan)
 catch_discover_tests(Test)

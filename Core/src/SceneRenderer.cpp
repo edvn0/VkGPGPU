@@ -125,8 +125,8 @@ auto SceneRenderer::begin_renderpass(const CommandBuffer &buffer,
   vkCmdSetScissor(buffer.get_command_buffer(), 0, 1, &scissor);
 }
 
-auto SceneRenderer::begin_renderpass_with_explicit_clear(
-    const CommandBuffer &buffer, const Framebuffer &framebuffer) -> void {
+auto SceneRenderer::explicit_clear(const CommandBuffer &buffer,
+                                   const Framebuffer &framebuffer) -> void {
   begin_renderpass(buffer, framebuffer);
 
   std::vector<VkClearValue> fb_clear_values = framebuffer.get_clear_values();
@@ -147,7 +147,10 @@ auto SceneRenderer::begin_renderpass_with_explicit_clear(
     attachments[i].colorAttachment = i;
     attachments[i].clearValue = fb_clear_values[i];
 
-    clear_rects[i].rect.offset = {0, 0};
+    clear_rects[i].rect.offset = {
+        0,
+        0,
+    };
     clear_rects[i].rect.extent = extent_2_d;
     clear_rects[i].baseArrayLayer = 0;
     clear_rects[i].layerCount = 1;
@@ -167,6 +170,8 @@ auto SceneRenderer::begin_renderpass_with_explicit_clear(
       buffer.get_command_buffer(), static_cast<u32>(total_attachment_count),
       attachments.data(), static_cast<u32>(total_attachment_count),
       clear_rects.data());
+
+  end_renderpass(buffer);
 }
 
 auto SceneRenderer::draw(const CommandBuffer &buffer,
@@ -224,13 +229,186 @@ auto SceneRenderer::end_renderpass(const CommandBuffer &buffer) -> void {
   vkCmdEndRenderPass(buffer.get_command_buffer());
 }
 
+auto SceneRenderer::begin_frame(const Device &device, u32 frame,
+                                const glm::vec3 &camera_position) -> void {
+  vkResetDescriptorPool(device.get_device(), pool, 0);
+
+  VkDescriptorSetAllocateInfo allocation_info{};
+  allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocation_info.descriptorPool = this->pool;
+  allocation_info.descriptorSetCount = 1;
+  allocation_info.pSetLayouts = &layout;
+  vkAllocateDescriptorSets(device.get_device(), &allocation_info, &active);
+
+  VkWriteDescriptorSet ubo_write = {};
+  {
+    auto &ubo = ubos->get(0, frame, 2);
+    renderer_ubo.projection =
+        glm::perspective(glm::radians(70.0F), 1280.0F / 720.0F, 0.1F, 1000.F);
+    renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
+    renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
+
+    ubo->write(renderer_ubo);
+
+    ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    ubo_write.descriptorCount = 1;
+    ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    ubo_write.dstSet = active;
+    ubo_write.dstBinding = 0;
+    ubo_write.pBufferInfo = &ubo->get_descriptor_info();
+  }
+
+  VkWriteDescriptorSet shadow_ubo_write = {};
+  {
+    auto &ubo_shadow = ubos->get(2, frame, 2);
+    shadow_ubo.projection =
+        glm::perspective(glm::radians(70.0F), 1280.0F / 720.0F, 0.1F, 1000.F);
+    shadow_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
+    shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+
+    ubo_shadow->write(shadow_ubo);
+
+    shadow_ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    shadow_ubo_write.descriptorCount = 1;
+    shadow_ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    shadow_ubo_write.dstSet = active;
+    shadow_ubo_write.dstBinding = 2;
+    shadow_ubo_write.pBufferInfo = &ubo_shadow->get_descriptor_info();
+  }
+
+  VkWriteDescriptorSet ssbo_write = {};
+  {
+    auto &ssbo = ssbos->get(1, frame, 2);
+
+    ssbo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    ssbo_write.descriptorCount = 1;
+    ssbo_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    ssbo_write.dstSet = active;
+    ssbo_write.dstBinding = 1;
+    ssbo_write.pBufferInfo = &ssbo->get_descriptor_info();
+  }
+
+  std::array writes{ubo_write, ssbo_write, shadow_ubo_write};
+  vkUpdateDescriptorSets(device.get_device(), static_cast<u32>(writes.size()),
+                         writes.data(), 0, nullptr);
+}
+
+auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
+
+  begin_renderpass(buffer, *shadow_framebuffer);
+  bind_pipeline(buffer, *shadow_pipeline);
+  for (const auto &[key, value] : shadow_draw_commands) {
+    auto &transforms = ssbos->get(1, frame, 2);
+    transforms->write(value.transforms_and_instances.data(),
+                      value.transforms_and_instances.size() *
+                          sizeof(glm::mat4));
+
+    auto &material = value.material;
+    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
+
+    if (material) {
+      update_material_for_rendering(FrameIndex{frame}, *material);
+      material->bind(buffer, *shadow_pipeline, frame);
+    }
+
+    vkCmdBindDescriptorSets(
+        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+        shadow_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
+
+    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
+
+    draw(buffer, {
+                     .index_count = submesh.index_count,
+                     .instance_count = static_cast<u32>(
+                         value.transforms_and_instances.size()),
+                     .first_index = submesh.base_index,
+                 });
+  }
+  end_renderpass(buffer);
+
+  begin_renderpass(buffer, *geometry_framebuffer);
+  bind_pipeline(buffer, *geometry_pipeline);
+  vkCmdBindDescriptorSets(
+      buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
+      geometry_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
+  for (const auto &[key, value] : draw_commands) {
+
+    auto &transforms = ssbos->get(1, frame, 2);
+    transforms->write(value.transforms_and_instances.data(),
+                      value.transforms_and_instances.size() *
+                          sizeof(glm::mat4));
+
+    auto &material = value.material;
+    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
+
+    if (material) {
+      update_material_for_rendering(FrameIndex{frame}, *material);
+      material->bind(buffer, *geometry_pipeline, frame);
+    }
+
+    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
+
+    draw(buffer, {
+                     .index_count = submesh.index_count,
+                     .instance_count = static_cast<u32>(
+                         value.transforms_and_instances.size()),
+                     .first_index = submesh.base_index,
+                 });
+  }
+  end_renderpass(buffer);
+
+  draw_commands.clear();
+  shadow_draw_commands.clear();
+}
+
+auto SceneRenderer::end_frame() -> void {}
+
+void SceneRenderer::update_material_for_rendering(
+    FrameIndex frame_index, Material &material_for_update,
+    BufferSet<Buffer::Type::Uniform> *ubo_set,
+    BufferSet<Buffer::Type::Storage> *sbo_set) {
+  if (ubo_set != nullptr) {
+    auto write_descriptors =
+        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
+            Config::frame_count, ubo_set, material_for_update);
+    if (sbo_set != nullptr) {
+      const auto &storage_buffer_write_sets =
+          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
+              Config::frame_count, sbo_set, material_for_update);
+
+      for (u32 frame = 0; frame < Config::frame_count; frame++) {
+        const auto &sbo_ws = storage_buffer_write_sets[frame];
+        const auto reserved_size =
+            write_descriptors[frame].size() + sbo_ws.size();
+        write_descriptors[frame].reserve(reserved_size);
+        write_descriptors[frame].insert(write_descriptors[frame].end(),
+                                        sbo_ws.begin(), sbo_ws.end());
+      }
+    }
+    material_for_update.update_for_rendering(frame_index, write_descriptors);
+  } else {
+    material_for_update.update_for_rendering(frame_index);
+  }
+}
+
+void SceneRenderer::update_material_for_rendering(
+    FrameIndex frame_index, Material &material_for_update) {
+  update_material_for_rendering(frame_index, material_for_update, nullptr,
+                                nullptr);
+}
+
+auto SceneRenderer::get_output_image() const -> const Image & {
+  return *geometry_framebuffer->get_image(0);
+}
+
 auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
     -> void {
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
-      .clear_colour_on_load = false,
-      .clear_depth_on_load = false,
+      .depth_clear_value = 0.0F,
       .blend = false,
       .attachments =
           FramebufferAttachmentSpecification{
@@ -248,6 +426,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   FramebufferProperties shadow_props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
+      .depth_clear_value = 0.0F,
       .blend = false,
       .attachments =
           FramebufferAttachmentSpecification{
@@ -280,7 +459,6 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
           },
       .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Front,
-      .face_mode = FaceMode::CounterClockwise,
   };
   geometry_pipeline = GraphicsPipeline::construct(device, config);
 
@@ -299,7 +477,6 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
           },
       .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Front,
-      .face_mode = FaceMode::CounterClockwise,
   };
   shadow_pipeline = GraphicsPipeline::construct(device, shadow_config);
 
@@ -362,187 +539,6 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   ubos->create(sizeof(ShadowUBO), SetBinding(2, 2));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(device);
   ssbos->create(sizeof(TransformData), SetBinding(2, 1));
-}
-
-auto SceneRenderer::begin_frame(const Device &device, u32 frame,
-                                const glm::vec3 &camera_position) -> void {
-  vkResetDescriptorPool(device.get_device(), pool, 0);
-
-  VkDescriptorSetAllocateInfo allocation_info{};
-  allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocation_info.descriptorPool = this->pool;
-  allocation_info.descriptorSetCount = 1;
-  allocation_info.pSetLayouts = &layout;
-  vkAllocateDescriptorSets(device.get_device(), &allocation_info, &active);
-
-  VkWriteDescriptorSet ubo_write = {};
-  {
-    auto &ubo = ubos->get(0, frame, 2);
-    renderer_ubo.projection =
-        glm::perspective(glm::radians(70.0F), 1280.0F / 720.0F, 0.1F, 1000.0F);
-    renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
-    renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
-
-    ubo->write(renderer_ubo);
-
-    ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ubo_write.descriptorCount = 1;
-    ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ubo_write.dstSet = active;
-    ubo_write.dstBinding = 0;
-    ubo_write.pBufferInfo = &ubo->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet shadow_ubo_write = {};
-  {
-    auto &ubo_shadow = ubos->get(2, frame, 2);
-    shadow_ubo.projection = glm::ortho(-1, 1, -1, 1);
-    shadow_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
-    shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
-
-    ubo_shadow->write(shadow_ubo);
-
-    shadow_ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    shadow_ubo_write.descriptorCount = 1;
-    shadow_ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    shadow_ubo_write.dstSet = active;
-    shadow_ubo_write.dstBinding = 2;
-    shadow_ubo_write.pBufferInfo = &ubo_shadow->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet ssbo_write = {};
-  {
-    auto &ssbo = ssbos->get(1, frame, 2);
-
-    ssbo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ssbo_write.descriptorCount = 1;
-    ssbo_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    ssbo_write.dstSet = active;
-    ssbo_write.dstBinding = 1;
-    ssbo_write.pBufferInfo = &ssbo->get_descriptor_info();
-  }
-
-  std::array writes{ubo_write, ssbo_write, shadow_ubo_write};
-  vkUpdateDescriptorSets(device.get_device(), static_cast<u32>(writes.size()),
-                         writes.data(), 0, nullptr);
-}
-
-auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
-
-  for (const auto &[key, value] : shadow_draw_commands) {
-    begin_renderpass(buffer, *shadow_framebuffer);
-    bind_pipeline(buffer, *shadow_pipeline);
-
-    auto &transforms = ssbos->get(1, frame, 2);
-    transforms->write(value.transforms_and_instances.data(),
-                      value.transforms_and_instances.size() *
-                          sizeof(glm::mat4));
-
-    auto &material = value.material;
-    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
-
-    if (material) {
-      update_material_for_rendering(FrameIndex{frame}, *material);
-      material->bind(buffer, *shadow_pipeline, frame);
-    }
-
-    vkCmdBindDescriptorSets(
-        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
-        shadow_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
-
-    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
-    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
-
-    draw(buffer, {
-                     .index_count = submesh.index_count,
-                     .instance_count = static_cast<u32>(
-                         value.transforms_and_instances.size()),
-                     .first_index = submesh.base_index,
-                 });
-    end_renderpass(buffer);
-  }
-
-  bool first = true;
-  for (const auto &[key, value] : draw_commands) {
-    if (first) {
-      begin_renderpass_with_explicit_clear(buffer, *geometry_framebuffer);
-      first = false;
-    } else {
-      begin_renderpass(buffer, *geometry_framebuffer);
-    }
-    bind_pipeline(buffer, *geometry_pipeline);
-
-    auto &transforms = ssbos->get(1, frame, 2);
-    transforms->write(value.transforms_and_instances.data(),
-                      value.transforms_and_instances.size() *
-                          sizeof(glm::mat4));
-
-    auto &material = value.material;
-    const auto &submesh = value.mesh_ptr->get_submesh(value.submesh_index);
-
-    if (material) {
-      update_material_for_rendering(FrameIndex{frame}, *material);
-      material->bind(buffer, *geometry_pipeline, frame);
-    }
-
-    vkCmdBindDescriptorSets(
-        buffer.get_command_buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS,
-        geometry_pipeline->get_pipeline_layout(), 2, 1, &active, 0, nullptr);
-
-    bind_vertex_buffer(buffer, *value.mesh_ptr->get_vertex_buffer());
-    bind_index_buffer(buffer, *value.mesh_ptr->get_index_buffer());
-
-    draw(buffer, {
-                     .index_count = submesh.index_count,
-                     .instance_count = static_cast<u32>(
-                         value.transforms_and_instances.size()),
-                     .first_index = submesh.base_index,
-                 });
-    end_renderpass(buffer);
-  }
-
-  draw_commands.clear();
-  shadow_draw_commands.clear();
-}
-
-auto SceneRenderer::end_frame() -> void {}
-
-void SceneRenderer::update_material_for_rendering(
-    FrameIndex frame_index, Material &material_for_update,
-    BufferSet<Buffer::Type::Uniform> *ubo_set,
-    BufferSet<Buffer::Type::Storage> *sbo_set) {
-  if (ubo_set != nullptr) {
-    auto write_descriptors =
-        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-            Config::frame_count, ubo_set, material_for_update);
-    if (sbo_set != nullptr) {
-      const auto &storage_buffer_write_sets =
-          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-              Config::frame_count, sbo_set, material_for_update);
-
-      for (u32 frame = 0; frame < Config::frame_count; frame++) {
-        const auto &sbo_ws = storage_buffer_write_sets[frame];
-        const auto reserved_size =
-            write_descriptors[frame].size() + sbo_ws.size();
-        write_descriptors[frame].reserve(reserved_size);
-        write_descriptors[frame].insert(write_descriptors[frame].end(),
-                                        sbo_ws.begin(), sbo_ws.end());
-      }
-    }
-    material_for_update.update_for_rendering(frame_index, write_descriptors);
-  } else {
-    material_for_update.update_for_rendering(frame_index);
-  }
-}
-
-void SceneRenderer::update_material_for_rendering(
-    FrameIndex frame_index, Material &material_for_update) {
-  update_material_for_rendering(frame_index, material_for_update, nullptr,
-                                nullptr);
-}
-
-auto SceneRenderer::get_output_image() const -> const Image & {
-  return *geometry_framebuffer->get_image(0);
 }
 
 } // namespace Core

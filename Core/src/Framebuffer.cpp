@@ -113,15 +113,14 @@ auto Framebuffer::create_framebuffer() -> void {
         const auto &existing_framebuffer = properties.existing_framebuffer;
         depth_attachment_image = existing_framebuffer->get_depth_image();
       } else if (properties.existing_images.contains(attachment_index)) {
-        Ref<Image> existing_image =
-            properties.existing_images.at(attachment_index);
+        auto &existing_image = properties.existing_images.at(attachment_index);
         depth_attachment_image = existing_image;
       } else {
         if (depth_attachment_image) {
           auto &spec = depth_attachment_image->get_properties();
           spec.format = attachment_specification.format;
           spec.usage = ImageUsage::DepthStencilAttachment;
-          spec.layout = ImageLayout::DepthStencilAttachmentOptimal;
+          spec.layout = ImageLayout::DepthStencilReadOnlyOptimal;
           spec.extent.width = static_cast<u32>(width * properties.scale);
           spec.extent.height = static_cast<u32>(height * properties.scale);
         } else {
@@ -135,7 +134,7 @@ auto Framebuffer::create_framebuffer() -> void {
                       },
                   .format = attachment_specification.format,
                   .usage = ImageUsage::DepthStencilAttachment,
-                  .layout = ImageLayout::DepthStencilAttachmentOptimal,
+                  .layout = ImageLayout::DepthStencilReadOnlyOptimal,
               });
         }
       }
@@ -163,17 +162,18 @@ auto Framebuffer::create_framebuffer() -> void {
       depthAttachmentReference = {
           attachment_index, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
       clear_values[attachment_index].depthStencil = {
-          .depth = properties.depth_clear_value, .stencil = 0};
+          .depth = properties.depth_clear_value,
+          .stencil = 0,
+      };
     } else {
       Ref<Image> color_attachment;
       if (properties.existing_framebuffer) {
         const auto &existing_framebuffer = properties.existing_framebuffer;
-        Ref<Image> existing_image =
+        auto &existing_image =
             existing_framebuffer->get_image(attachment_index);
         color_attachment = attachment_images.emplace_back(existing_image);
       } else if (properties.existing_images.contains(attachment_index)) {
-        Ref<Image> existing_image =
-            properties.existing_images[attachment_index];
+        auto &existing_image = properties.existing_images[attachment_index];
         color_attachment = existing_image;
         attachment_images[attachment_index] = existing_image;
       } else {
@@ -190,7 +190,7 @@ auto Framebuffer::create_framebuffer() -> void {
           color_attachment = attachment_images.emplace_back(
               Image::construct_reference(*device, spec));
         } else {
-          Ref<Image> image = attachment_images[attachment_index];
+          auto &image = attachment_images[attachment_index];
           ImageProperties &spec = image->get_properties();
           spec.layout = ImageLayout::ShaderReadOnlyOptimal;
           spec.extent.width = static_cast<u32>(width * properties.scale);
@@ -231,10 +231,16 @@ auto Framebuffer::create_framebuffer() -> void {
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
       const auto &clear_colour = properties.clear_colour;
-      clear_values[attachment_index].color = {
-          {clear_colour.r, clear_colour.g, clear_colour.b, clear_colour.a}};
+      clear_values[attachment_index].color = {{
+          clear_colour.r,
+          clear_colour.g,
+          clear_colour.b,
+          clear_colour.a,
+      }};
       color_attachment_references.emplace_back(VkAttachmentReference{
-          attachment_index, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
+          attachment_index,
+          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      });
     }
 
     attachment_index++;
@@ -317,12 +323,12 @@ auto Framebuffer::create_framebuffer() -> void {
                                properties.debug_name.c_str());
   std::vector<VkImageView> view_attachments(attachment_images.size());
   for (u32 i = 0; i < attachment_images.size(); i++) {
-    Ref<Image> image = attachment_images[i];
+    auto &image = attachment_images[i];
     view_attachments[i] = image->get_descriptor_info().imageView;
   }
 
   if (depth_attachment_image) {
-    Ref<Image> image = depth_attachment_image;
+    auto &image = depth_attachment_image;
     view_attachments.emplace_back(image->get_descriptor_info().imageView);
   }
 

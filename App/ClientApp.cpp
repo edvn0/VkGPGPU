@@ -55,13 +55,12 @@ template <auto N, float K> auto generate_points() {
   std::array<glm::mat4, N> points{};
 
   // Random device and generator
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
+  std::random_device rd{};
+  std::mt19937_64 gen(rd());
 
   // Uniform distributions for angle and z-coordinate
-  static std::uniform_real_distribution<float> angleDistr(0.0f,
-                                                          2.0f * 3.14159265f);
-  static std::uniform_real_distribution<float> zDistr(-1.0f, 1.0f);
+  std::uniform_real_distribution<float> angleDistr(0.0f, 2.0f * 3.14159265f);
+  std::uniform_real_distribution<float> zDistr(-1.0f, 1.0f);
 
   for (size_t i = 0; i < N; ++i) {
     // Generate random angle and z-coordinate
@@ -81,13 +80,13 @@ template <auto N, float K> auto generate_points() {
 }
 
 auto ClientApp::update_entities(floating ts) -> void {
-  static auto positions = generate_points<3, 3.0F>();
+  static auto positions = generate_points<300, 3.0F>();
 
   for (const auto &pos : positions) {
     scene_renderer.submit_static_mesh(mesh.get(), pos);
   }
-  static auto other_positions = generate_points<3, 7.0F>();
 
+  static auto other_positions = generate_points<300, 7.0F>();
   for (const auto &pos : other_positions) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
@@ -96,6 +95,9 @@ auto ClientApp::update_entities(floating ts) -> void {
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
   scene_renderer.begin_frame(*get_device(), frame(), camera_position);
+  for (const auto &widget : widgets) {
+    widget->on_update(ts);
+  }
 
   update_entities(ts);
   {
@@ -104,10 +106,6 @@ auto ClientApp::on_update(floating ts) -> void {
     graphics_command_buffer->end_and_submit();
   }
   compute(ts);
-
-  for (const auto &widget : widgets) {
-    widget->on_update(ts);
-  }
 
   {
     graphics_command_buffer->begin(frame());
@@ -407,6 +405,9 @@ void ClientApp::perform() {
   mesh->submesh_indices.push_back(0);
 
   cube_mesh = Mesh::cube(*get_device());
+
+  scene = make_scope<ECS::Scene>();
+  auto entity =
 }
 
 void ClientApp::on_interface(InterfaceSystem &system) {
