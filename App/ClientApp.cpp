@@ -10,7 +10,12 @@
 #include "Material.hpp"
 #include "UI.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <imgui.h>
 #include <vulkan/vulkan_core.h>
 
@@ -102,7 +107,7 @@ auto ClientApp::update_entities(floating ts) -> void {
     }
   }
 
-  cube_mesh->is_shadow_caster = false;
+  cube_mesh->is_shadow_caster = true;
   static auto other_positions =
       generate_points<Config::transform_buffer_size / 2, 7.0F>();
   for (const auto &pos : other_positions) {
@@ -120,30 +125,28 @@ auto ClientApp::update_entities(floating ts) -> void {
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
   scene->on_update(ts);
-  static constexpr auto radius = 8.0F;
-  static auto angle = 0.0F;
-  angle += ts * 0.1F;
-
+  static constexpr float radius = 8.0F;
+  static glm::quat camera_orientation{1.0, 0.0, 0.0, 0.0};
   if (Input::pressed(KeyCode::KEY_D)) {
-    angle += ts * 0.3F;
+    glm::quat rotationY = glm::angleAxis(ts * 0.3F, glm::vec3(0, -1, 0));
+    camera_orientation = rotationY * camera_orientation;
   }
   if (Input::pressed(KeyCode::KEY_A)) {
-    angle -= ts * 0.3F;
+    glm::quat rotationY = glm::angleAxis(-ts * 0.3F, glm::vec3(0, -1, 0));
+    camera_orientation = rotationY * camera_orientation;
   }
-  static auto y = camera_position.y;
-
   if (Input::pressed(KeyCode::KEY_W)) {
-    y -= ts * 0.3F;
+    glm::quat rotationX = glm::angleAxis(ts * 0.1F, glm::vec3(1, 0, 0));
+    camera_orientation = rotationX * camera_orientation;
   }
   if (Input::pressed(KeyCode::KEY_S)) {
-    y += ts * 0.3F;
+    glm::quat rotationX = glm::angleAxis(-ts * 0.1F, glm::vec3(1, 0, 0));
+    camera_orientation = rotationX * camera_orientation;
   }
 
-  camera_position = {
-      radius * std::cos(angle),
-      y,
-      radius * std::sin(angle),
-  };
+  camera_orientation = glm::normalize(camera_orientation);
+  glm::vec3 direction = glm::rotate(camera_orientation, glm::vec3(0, 0, -1));
+  camera_position = direction * radius;
 
   scene_renderer.begin_frame(*get_device(), frame(), camera_position);
   for (const auto &widget : widgets) {

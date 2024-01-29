@@ -39,6 +39,7 @@ struct ImageProperties {
   SamplerFilter max_filter{SamplerFilter::Nearest};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
+  CompareOperation compare_op{CompareOperation::Less};
 };
 
 class Image {

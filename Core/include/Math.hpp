@@ -65,6 +65,8 @@ inline auto value_ptr(const SubmitsRowAndColumnTypeStatically auto &type) {
   return glm::value_ptr(type);
 }
 
+inline auto value_ptr(const IsGLM auto &type) { return glm::value_ptr(type); }
+
 inline auto make_infinite_reversed_projection(float fov_radians,
                                               float aspect_ratio, float near)
     -> glm::mat4 {

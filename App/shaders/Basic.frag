@@ -1,11 +1,12 @@
 #version 460
 
 layout(location = 0) in vec2 in_uvs;
-layout(location = 1) in vec4 in_shadow_pos;
-layout(location = 2) in vec4 in_colour;
-layout(location = 3) in vec3 in_normals;
-layout(location = 4) in vec3 in_tangent;
-layout(location = 5) in vec3 in_bitangents;
+layout(location = 1) in vec4 in_fragment_position;
+layout(location = 2) in vec4 in_shadow_pos;
+layout(location = 3) in vec4 in_colour;
+layout(location = 4) in vec3 in_normals;
+layout(location = 5) in vec3 in_tangent;
+layout(location = 6) in vec3 in_bitangents;
 
 layout(location = 0) out vec4 out_colour;
 
@@ -26,6 +27,7 @@ layout(set = 1, binding = 12) uniform sampler2D normal;
 layout(set = 1, binding = 13) uniform sampler2D metallic;
 layout(set = 1, binding = 14) uniform sampler2D roughness;
 layout(set = 1, binding = 15) uniform sampler2D ao;
+layout(set = 1, binding = 16) uniform sampler2D specular_map;
 
 vec3 gamma_correct(vec3 colour) {
   return pow(colour, vec3(1.0 / 2.2));
@@ -33,7 +35,7 @@ vec3 gamma_correct(vec3 colour) {
 
 void main() {
 
-  vec3 albedo = texture(albedo, in_uvs).rgb;
+ vec3 albedo = texture(albedo, in_uvs).rgb;
   vec3 diffuse_value = texture(diffuse_map, in_uvs).rgb;
   vec3 normal = texture(normal, in_uvs).rgb;
   // normal may just be 1,1,1 from the texture (no normal map)

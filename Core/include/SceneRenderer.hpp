@@ -50,6 +50,12 @@ class SceneRenderer {
     glm::vec4 light_direction;
     glm::vec4 camera_position;
   };
+  struct GridUBO {
+    glm::vec4 grid_colour;
+    glm::vec4 plane_colour;
+    glm::vec4 grid_size;
+    glm::vec4 fog_colour; // alpha is fog density
+  };
   struct TransformData {
     std::array<glm::mat4, Config::transform_buffer_size> transforms{};
   };
@@ -57,6 +63,7 @@ class SceneRenderer {
   TransformData transform_data;
   RendererUBO renderer_ubo;
   ShadowUBO shadow_ubo;
+  GridUBO grid_ubo;
 
   Scope<BufferSet<Buffer::Type::Uniform>> ubos;
   Scope<BufferSet<Buffer::Type::Storage>> ssbos;
@@ -127,6 +134,11 @@ private:
   Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
 
+  Scope<Shader> grid_shader;
+  Scope<GraphicsPipeline> grid_pipeline;
+  Scope<Material> grid_material;
+  Scope<Mesh> grid_mesh;
+
   Scope<Image> white_texture;
   Scope<Image> black_texture;
   Scope<Texture> disarray_texture;
@@ -148,6 +160,8 @@ private:
       -> bool {
     return pipeline.hash() == bound_pipeline.hash;
   }
+
+  auto shadow_pass(const CommandBuffer &, u32) -> void;
 };
 
 } // namespace Core

@@ -127,6 +127,17 @@ enum class SamplerBorderColor : std::uint8_t {
   IntOpaqueWhite,
 };
 
+enum class CompareOperation : std::uint8_t {
+  Never,
+  Less,
+  Equal,
+  LessOrEqual,
+  Greater,
+  NotEqual,
+  GreaterOrEqual,
+  Always,
+};
+
 template <class T>
   requires std::is_enum_v<T>
 struct ToFromStringView {

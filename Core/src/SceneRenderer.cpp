@@ -2,6 +2,8 @@
 
 #include "SceneRenderer.hpp"
 
+#include <glm/glm.hpp>
+
 namespace Core {
 
 template <Core::Buffer::Type T>
@@ -15,7 +17,7 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                          std::vector<std::vector<VkWriteDescriptorSet>>>>
       buffer_set_write_descriptor_cache;
 
-  constexpr auto get_descriptor_set_vector =
+  static constexpr const auto get_descriptor_set_vector =
       [](auto &map, auto *key, auto hash) -> auto & { return map[key][hash]; };
 
   const auto &vulkan_shader = material.get_shader();
@@ -28,8 +30,7 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
     }
   }
 
-  if (!vulkan_shader.has_descriptor_set(0) &&
-      !vulkan_shader.has_descriptor_set(1)) {
+  if (!vulkan_shader.has_descriptor_set(0)) {
     return get_descriptor_set_vector(buffer_set_write_descriptor_cache,
                                      buffer_set, shader_hash);
   }
@@ -244,7 +245,7 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
   {
     const auto &ubo = ubos->get(0, frame);
     renderer_ubo.projection = glm::perspective(
-        glm::radians(70.0F), extent.aspect_ratio(), 0.1F, 1000.0F);
+        glm::radians(45.0F), extent.aspect_ratio(), 0.1F, 1000.0F);
     renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
     renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
 
@@ -264,13 +265,12 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
     shadow_ubo.projection =
         glm::ortho(-10.0F, 10.0F, -10.0F, 10.0F, 0.1F, 1000.0F);
 
-    // Suppose the sun is opposite the camera
-    const auto light_pos = -camera_position;
+    const auto light_pos = glm::vec3{3.0F, 3.0F, -3.0F};
     shadow_ubo.view = glm::lookAt(light_pos, {0, 0, 0}, {0, -1, 0});
     shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
-    shadow_ubo.light_position = glm::vec4(light_pos, 1.0F);
-    shadow_ubo.light_direction = glm::vec4(-glm::normalize(light_pos), 1.0F);
-    shadow_ubo.camera_position = glm::vec4(camera_position, 1.0F);
+    shadow_ubo.light_position = {light_pos, 1.0F};
+    shadow_ubo.light_direction = {glm::normalize(-light_pos), 1.0F};
+    shadow_ubo.camera_position = {camera_position, 1.0F};
 
     ubo_shadow->write(shadow_ubo);
 
@@ -280,6 +280,24 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
     shadow_ubo_write.dstSet = active;
     shadow_ubo_write.dstBinding = 2;
     shadow_ubo_write.pBufferInfo = &ubo_shadow->get_descriptor_info();
+  }
+
+  VkWriteDescriptorSet grid_ubo_write = {};
+  {
+    const auto &ubo_grid = ubos->get(3, frame);
+    grid_ubo.grid_colour = glm::vec4{0.2F, 0.2F, 0.2F, 1.0F};
+    grid_ubo.plane_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
+    grid_ubo.grid_size = glm::vec4{1.0F, 1.0F, 0.0F, 0.0F};
+    grid_ubo.fog_colour = glm::vec4{0.8F, 0.9F, 1.0F, 0.02F};
+
+    ubo_grid->write(grid_ubo);
+
+    grid_ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    grid_ubo_write.descriptorCount = 1;
+    grid_ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    grid_ubo_write.dstSet = active;
+    grid_ubo_write.dstBinding = 3;
+    grid_ubo_write.pBufferInfo = &ubo_grid->get_descriptor_info();
   }
 
   VkWriteDescriptorSet ssbo_write = {};
@@ -294,13 +312,18 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
     ssbo_write.pBufferInfo = &ssbo->get_descriptor_info();
   }
 
-  std::array writes{ubo_write, ssbo_write, shadow_ubo_write};
+  std::array writes{
+      ubo_write,
+      ssbo_write,
+      shadow_ubo_write,
+      grid_ubo_write,
+  };
   vkUpdateDescriptorSets(device.get_device(), static_cast<u32>(writes.size()),
                          writes.data(), 0, nullptr);
 }
 
-auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
-
+auto SceneRenderer::shadow_pass(const CommandBuffer &buffer, u32 frame)
+    -> void {
   begin_renderpass(buffer, *shadow_framebuffer);
   bind_pipeline(buffer, *shadow_pipeline);
   update_material_for_rendering(FrameIndex{frame}, *shadow_material, ubos.get(),
@@ -331,8 +354,30 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
                  });
   }
   end_renderpass(buffer);
+}
+
+auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
+
+  shadow_pass(buffer, frame);
 
   begin_renderpass(buffer, *geometry_framebuffer);
+  {
+    bind_pipeline(buffer, *grid_pipeline);
+    update_material_for_rendering(FrameIndex{frame}, *grid_material, ubos.get(),
+                                  ssbos.get());
+    grid_material->bind(buffer, *grid_pipeline, frame);
+    const auto &grid_submesh = grid_mesh->get_submesh(0);
+
+    bind_vertex_buffer(buffer, *grid_mesh->get_vertex_buffer());
+    bind_index_buffer(buffer, *grid_mesh->get_index_buffer());
+
+    draw(buffer, {
+                     .index_count = grid_submesh.index_count,
+                     .instance_count = 1,
+                     .first_index = grid_submesh.base_index,
+                 });
+  }
+
   bind_pipeline(buffer, *geometry_pipeline);
   update_material_for_rendering(FrameIndex{frame}, *geometry_material,
                                 ubos.get(), ssbos.get());
@@ -374,28 +419,34 @@ void SceneRenderer::update_material_for_rendering(
     FrameIndex frame_index, Material &material_for_update,
     BufferSet<Buffer::Type::Uniform> *ubo_set,
     BufferSet<Buffer::Type::Storage> *sbo_set) {
-  if (ubo_set != nullptr) {
-    auto write_descriptors =
-        create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-            Config::frame_count, ubo_set, material_for_update);
-    if (sbo_set != nullptr) {
-      const auto &storage_buffer_write_sets =
-          create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-              Config::frame_count, sbo_set, material_for_update);
 
-      for (u32 frame = 0; frame < Config::frame_count; frame++) {
-        const auto &sbo_ws = storage_buffer_write_sets[frame];
-        const auto reserved_size =
-            write_descriptors[frame].size() + sbo_ws.size();
-        write_descriptors[frame].reserve(reserved_size);
-        write_descriptors[frame].insert(write_descriptors[frame].end(),
-                                        sbo_ws.begin(), sbo_ws.end());
+  if (ubo_set == nullptr) {
+    material_for_update.update_for_rendering(frame_index);
+    return;
+  }
+
+  auto write_descriptors =
+      create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
+          Config::frame_count, ubo_set, material_for_update);
+
+  if (sbo_set != nullptr) {
+    const auto &storage_buffer_write_sets =
+        create_or_get_write_descriptor_for<Buffer::Type::Storage>(
+            Config::frame_count, sbo_set, material_for_update);
+
+    if (!storage_buffer_write_sets.empty()) {
+      for (u32 frame = 0; frame < Config::frame_count; ++frame) {
+        auto &ubo_frame_descriptors = write_descriptors[frame];
+        const auto &sbo_frame_descriptors = storage_buffer_write_sets[frame];
+
+        ubo_frame_descriptors.insert(ubo_frame_descriptors.end(),
+                                     sbo_frame_descriptors.begin(),
+                                     sbo_frame_descriptors.end());
       }
     }
-    material_for_update.update_for_rendering(frame_index, write_descriptors);
-  } else {
-    material_for_update.update_for_rendering(frame_index);
   }
+
+  material_for_update.update_for_rendering(frame_index, write_descriptors);
 }
 
 void SceneRenderer::update_material_for_rendering(
@@ -477,6 +528,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   geometry_material->set("metallic", *white_texture);
   geometry_material->set("roughness", *white_texture);
   geometry_material->set("ao", *white_texture);
+  geometry_material->set("specular_map", *white_texture);
 
   shadow_shader = Shader::construct(device, FS::shader("Shadow.vert.spv"),
                                     FS::shader("Shadow.frag.spv"));
@@ -501,6 +553,30 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   };
   geometry_pipeline = GraphicsPipeline::construct(device, config);
 
+  grid_shader = Shader::construct(device, FS::shader("Grid.vert.spv"),
+                                  FS::shader("Grid.frag.spv"));
+  grid_material = Material::construct(device, *grid_shader);
+  GraphicsPipelineConfiguration grid_config{
+      .name = "GridPipeline",
+      .shader = grid_shader.get(),
+      .framebuffer = geometry_framebuffer.get(),
+      .layout =
+          VertexLayout{
+              LayoutElement{ElementType::Float3, "pos"},
+              LayoutElement{ElementType::Float2, "uvs"},
+              LayoutElement{ElementType::Float4, "colour"},
+              LayoutElement{ElementType::Float3, "normals"},
+              LayoutElement{ElementType::Float3, "tangents"},
+              LayoutElement{ElementType::Float3, "bitangents"},
+          },
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .cull_mode = CullMode::Back,
+      .face_mode = FaceMode::CounterClockwise,
+  };
+  grid_pipeline = GraphicsPipeline::construct(device, grid_config);
+  const auto grid_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
+  grid_mesh = Mesh::cube(device);
+
   GraphicsPipelineConfiguration shadow_config{
       .name = "ShadowGraphicsPipeline",
       .shader = shadow_shader.get(),
@@ -508,6 +584,11 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .layout =
           VertexLayout{
               LayoutElement{ElementType::Float3, "pos"},
+              LayoutElement{ElementType::Float2, "uvs"},
+              LayoutElement{ElementType::Float4, "colour"},
+              LayoutElement{ElementType::Float3, "normals"},
+              LayoutElement{ElementType::Float3, "tangents"},
+              LayoutElement{ElementType::Float3, "bitangents"},
           },
       .depth_comparison_operator = DepthCompareOperator::Greater,
       .cull_mode = CullMode::Back,
@@ -555,10 +636,18 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .stageFlags = VK_SHADER_STAGE_ALL,
   };
 
+  VkDescriptorSetLayoutBinding grid_binding{
+      .binding = 3,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_ALL,
+  };
+
   std::array bindings{
       ubo_binding,
       ssbo_binding,
       shadow_binding,
+      grid_binding,
   };
   VkDescriptorSetLayoutCreateInfo create_info{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -572,6 +661,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(device);
   ubos->create(sizeof(RendererUBO), SetBinding(0));
   ubos->create(sizeof(ShadowUBO), SetBinding(1));
+  ubos->create(sizeof(GridUBO), SetBinding(3));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(device);
   ssbos->create(sizeof(TransformData), SetBinding(2));
 }

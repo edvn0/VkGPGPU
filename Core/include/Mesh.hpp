@@ -58,6 +58,7 @@ struct Mesh {
   }
 
   static auto cube(const Device &) -> Scope<Mesh>;
+  static auto quad(const Device &) -> Scope<Mesh>;
 
   constexpr auto casts_shadows() const -> bool { return is_shadow_caster; }
   bool is_shadow_caster{true};
