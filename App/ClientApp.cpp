@@ -60,7 +60,7 @@ ClientApp::ClientApp(const ApplicationProperties &props)
   scene_renderer.set_extent(get_swapchain()->get_extent());
 };
 
-template <auto N, float K> auto generate_points() {
+template <usize N> auto generate_points(floating K) {
   std::array<glm::mat4, N> points{};
 
   // Random device and generator
@@ -91,7 +91,7 @@ template <auto N, float K> auto generate_points() {
 auto ClientApp::update_entities(floating ts) -> void {
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 2, 3.0F>();
+        generate_points<Config::transform_buffer_size / 2>(3.0F);
 
     for (const auto &pos : positions) {
       scene_renderer.submit_static_mesh(mesh.get(), pos);
@@ -100,7 +100,7 @@ auto ClientApp::update_entities(floating ts) -> void {
 
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 2, 3.0F>();
+        generate_points<Config::transform_buffer_size / 2>(3.0F);
 
     for (const auto &pos : positions) {
       scene_renderer.submit_static_mesh(mesh.get(), pos);
@@ -109,14 +109,14 @@ auto ClientApp::update_entities(floating ts) -> void {
 
   cube_mesh->is_shadow_caster = true;
   static auto other_positions =
-      generate_points<Config::transform_buffer_size / 2, 7.0F>();
+      generate_points<Config::transform_buffer_size / 2>(7.0F);
   for (const auto &pos : other_positions) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
 
   cube_mesh->is_shadow_caster = true;
   static auto other_positions_again =
-      generate_points<Config::transform_buffer_size / 2, 2.0F>();
+      generate_points<Config::transform_buffer_size / 2>(2.0F);
   for (const auto &pos : other_positions_again) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
