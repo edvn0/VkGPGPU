@@ -68,8 +68,10 @@ inline auto make_infinite_reversed_projection(float fov_radians,
     -> glm::mat4 {
   float f = 1.0f / tan(fov_radians / 2.0f);
   constexpr auto left_handedness = -1.0f;
-  return glm::mat4(f / aspect_ratio, 0.0f, 0.0f, 0.0f, 0.0f, f, 0.0f, 0.0f,
-                   0.0f, 0.0f, 0.0f, left_handedness, 0.0f, 0.0f, near, 0.0f);
+  return {
+      f / aspect_ratio, 0.0f, 0.0f, 0.0f, 0.0f, f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+      left_handedness,  0.0f, 0.0f, near, 0.0f,
+  };
 }
 
 } // namespace Core::Math

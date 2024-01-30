@@ -5,6 +5,7 @@
 #include "Verify.hpp"
 
 #include <cstring>
+#include <limits>
 #include <span>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -95,7 +96,7 @@ private:
   void initialise_uniform_buffer();
   void initialise_storage_buffer();
 
-  static constexpr u32 invalid_binding = std::numeric_limits<u32>::max();
+  static constexpr u32 invalid_binding = ~u32();
 
   auto read_raw(size_t offset, size_t data_size) -> std::vector<char>;
 };

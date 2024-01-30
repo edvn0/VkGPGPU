@@ -17,7 +17,7 @@ struct aiString;
 
 namespace Core {
 
-class ImporterImpl;
+struct ImporterImpl;
 
 struct Index {
   u32 zero{0};
@@ -85,6 +85,8 @@ private:
   Scope<Buffer> vertex_buffer;
   Scope<Buffer> index_buffer;
   std::vector<Ref<Material>> materials;
+  std::unordered_map<u32, std::vector<u32>> material_to_submesh_indices;
+  std::unordered_map<u32, u32> submesh_to_material_index;
   std::vector<Submesh> submeshes;
   std::vector<u32> submesh_indices;
 
@@ -109,9 +111,9 @@ private:
   void handle_albedo_map(const Texture &white_texture,
                          const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
-  
+
   struct Deleter {
-    auto operator()(ImporterImpl* pimpl)  -> void;
+    auto operator()(ImporterImpl *pimpl) -> void;
   };
   Scope<ImporterImpl, Deleter> importer;
 

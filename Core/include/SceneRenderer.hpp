@@ -13,12 +13,10 @@
 namespace Core {
 struct CommandKey;
 }
-namespace std {
-template <> struct hash<Core::CommandKey> {
-  auto operator()(const Core::CommandKey &key) const -> Core::usize;
-};
 
-} // namespace std
+template <> struct std::hash<Core::CommandKey> {
+  auto operator()(const Core::CommandKey &key) const noexcept -> Core::usize;
+}; // namespace std
 
 namespace Core {
 
@@ -45,36 +43,49 @@ class SceneRenderer {
     glm::vec4 light_direction;
     glm::vec4 camera_position;
   };
+
   struct ShadowUBO {
     glm::mat4 view;
     glm::mat4 projection;
     glm::mat4 view_projection;
+    glm::vec2 bias_and_default{0.005, 0.1};
   };
+
   struct GridUBO {
     glm::vec4 grid_colour;
     glm::vec4 plane_colour;
     glm::vec4 grid_size;
     glm::vec4 fog_colour; // alpha is fog density
   };
+
+  struct DepthParameters {
+    float value = 9.0F;
+    float near = -10.0F;
+    float far = 21.F;
+    float bias = 0.005F;
+    float default_value = 0.1F;
+  };
+
   struct TransformData {
     std::array<glm::mat4, Config::transform_buffer_size> transforms{};
   };
   static constexpr auto size = sizeof(TransformData);
   TransformData transform_data;
-  RendererUBO renderer_ubo;
-  ShadowUBO shadow_ubo;
-  GridUBO grid_ubo;
+  RendererUBO renderer_ubo{};
+  ShadowUBO shadow_ubo{};
+  GridUBO grid_ubo{};
+  DepthParameters depth_factor{};
 
   Scope<BufferSet<Buffer::Type::Uniform>> ubos;
   Scope<BufferSet<Buffer::Type::Storage>> ssbos;
 
-  VkDescriptorPool pool;
+  VkDescriptorPool pool{};
   VkDescriptorSet active = nullptr;
   VkDescriptorSetLayout layout = nullptr;
 
 public:
   struct DrawParameters {
-    u32 index_count;
+    u32 index_count{};
     u32 instance_count{1};
     u32 first_index{0};
     u32 vertex_offset{0};
@@ -120,6 +131,7 @@ public:
 
   auto set_extent(const Extent<u32> &ext) -> void { extent = ext; }
   auto get_sun_position() -> auto & { return sun_position; }
+  auto get_depth_factors() -> auto & { return depth_factor; }
 
   [[nodiscard]] static auto get_white_texture() -> const Texture & {
     return *white_texture;
@@ -150,6 +162,7 @@ private:
   static inline Scope<Texture> black_texture;
   Scope<Texture> disarray_texture;
   Scope<Mesh> sphere_mesh;
+  Scope<Mesh> cube_mesh;
 
   glm::vec3 sun_position{3, -5, -3};
 
@@ -182,10 +195,10 @@ private:
 namespace std {
 
 inline auto
-hash<Core::CommandKey>::operator()(const Core::CommandKey &key) const
+hash<Core::CommandKey>::operator()(const Core::CommandKey &key) const noexcept
     -> Core::usize {
-  static constexpr std::hash<Core::u32> int_hasher;
-  static constexpr std::hash<const Core::Mesh *> ptr_hasher;
-  return int_hasher(key.submesh_index) ^ 0x9d4df2237 + ptr_hasher(key.mesh_ptr);
+  return std::hash<const Core::Mesh *>()(key.mesh_ptr) ^
+         std::hash<Core::u32>()(key.submesh_index);
 }
+
 } // namespace std

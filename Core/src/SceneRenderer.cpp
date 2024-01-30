@@ -133,13 +133,14 @@ auto SceneRenderer::explicit_clear(const CommandBuffer &buffer,
                                    const Framebuffer &framebuffer) -> void {
   begin_renderpass(buffer, framebuffer);
 
-  std::vector<VkClearValue> fb_clear_values = framebuffer.get_clear_values();
+  const std::vector<VkClearValue> &fb_clear_values =
+      framebuffer.get_clear_values();
 
   const auto color_attachment_count = framebuffer.get_colour_attachment_count();
   const auto total_attachment_count =
       color_attachment_count + (framebuffer.has_depth_attachment() ? 1 : 0);
 
-  VkExtent2D extent_2_d = {
+  const VkExtent2D extent_2_d = {
       .width = framebuffer.get_width(),
       .height = framebuffer.get_height(),
   };
@@ -182,7 +183,8 @@ auto SceneRenderer::draw(const CommandBuffer &buffer,
                          const DrawParameters &params) -> void {
   vkCmdDrawIndexed(buffer.get_command_buffer(), params.index_count,
                    params.instance_count, params.first_index,
-                   params.vertex_offset, params.first_instance);
+                   static_cast<i32>(params.vertex_offset),
+                   params.first_instance);
 }
 
 auto SceneRenderer::bind_pipeline(const CommandBuffer &buffer,
@@ -239,9 +241,20 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   // For now
   const auto position = glm::translate(glm::mat4{1.0F}, sun_position);
-  const auto scale = glm::scale(glm::mat4{1.0F}, glm::vec3{1000.0F});
+  const auto scale = glm::scale(glm::mat4{1.0F}, glm::vec3{10.0F});
   const auto transformation = position * scale;
   submit_static_mesh(sphere_mesh.get(), transformation);
+
+  // Floor
+  const auto floor_position =
+      glm::translate(glm::mat4{1.0F}, {0.0F, 20.0F, 0.0F});
+  const auto floor_scale =
+      glm::scale(glm::mat4{1.0F}, glm::vec3{1000.0F, 1000.0F, 0.1F});
+  const auto floor_rotation = glm::rotate(glm::mat4{1.0F}, glm::radians(90.0F),
+                                          glm::vec3{1.0F, 0.0F, 0.0F});
+  const auto floor_transformation =
+      floor_position * floor_rotation * floor_scale;
+  submit_static_mesh(cube_mesh.get(), floor_transformation);
 
   VkDescriptorSetAllocateInfo allocation_info{};
   allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -275,9 +288,12 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
   {
     const auto &ubo_shadow = ubos->get(1, frame);
     shadow_ubo.projection =
-        glm::ortho(-10.0F, 10.0F, -10.0F, 10.0F, 0.1F, 1000.0F);
+        glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
+                   depth_factor.value, depth_factor.near, depth_factor.far);
     shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, -1, 0});
     shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+    shadow_ubo.bias_and_default = {depth_factor.bias,
+                                   depth_factor.default_value};
 
     ubo_shadow->write(shadow_ubo);
 
@@ -319,7 +335,7 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
     ssbo_write.pBufferInfo = &ssbo->get_descriptor_info();
   }
 
-  std::array writes{
+  const std::array writes{
       ubo_write,
       ssbo_write,
       shadow_ubo_write,
@@ -332,10 +348,6 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 auto SceneRenderer::shadow_pass(const CommandBuffer &buffer, u32 frame)
     -> void {
   bind_pipeline(buffer, *shadow_pipeline);
-  // update_material_for_rendering(FrameIndex{frame}, *shadow_material,
-  // ubos.get(),
-  //                              ssbos.get());
-  // shadow_material->bind(buffer, *shadow_pipeline, frame);
   for (const auto &[mesh_ptr, submesh_index, transforms_and_instances,
                     material] : shadow_draw_commands | std::views::values) {
     const auto &transforms = ssbos->get(2, frame);
@@ -365,9 +377,6 @@ auto SceneRenderer::shadow_pass(const CommandBuffer &buffer, u32 frame)
 auto SceneRenderer::geometry_pass(const CommandBuffer &buffer, u32 frame)
     -> void {
   bind_pipeline(buffer, *geometry_pipeline);
-  // update_material_for_rendering(FrameIndex{frame}, *geometry_material,
-  //                               ubos.get(), ssbos.get());
-  // geometry_material->bind(buffer, *geometry_pipeline, frame);
   for (auto &&[mesh_ptr, submesh_index, transforms_and_instances, material] :
        draw_commands | std::views::values) {
 
@@ -433,7 +442,7 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
 
 auto SceneRenderer::end_frame() -> void {}
 
-void SceneRenderer::push_constants(const Core::CommandBuffer &buffer,
+void SceneRenderer::push_constants(const CommandBuffer &buffer,
                                    const GraphicsPipeline &pipeline,
                                    const Material &material) {
 
@@ -495,6 +504,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
+      .clear_colour = {0.1F, 0.1F, 0.1F, 1.0F},
       .depth_clear_value = 0.0F,
       .blend = true,
       .attachments =
@@ -547,6 +557,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
 
   disarray_texture = Texture::construct(device, FS::texture("D.png"));
   sphere_mesh = Mesh::import_from(device, FS::model("sphere.fbx"));
+  cube_mesh = Mesh::import_from(device, FS::model("cube.fbx"));
 
   shadow_shader = Shader::construct(device, FS::shader("Shadow.vert.spv"),
                                     FS::shader("Shadow.frag.spv"));

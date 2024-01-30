@@ -90,9 +90,10 @@ template <usize N> auto generate_points(floating K) {
 }
 
 auto ClientApp::update_entities(floating ts) -> void {
+#if 0
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 4>(3.0F);
+        generate_points<Config::transform_buffer_size / 8>(3.0F);
 
     for (const auto &pos : positions) {
       scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
@@ -101,7 +102,7 @@ auto ClientApp::update_entities(floating ts) -> void {
 
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 4>(3.0F);
+        generate_points<Config::transform_buffer_size / 8>(3.0F);
 
     for (const auto &pos : positions) {
       scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
@@ -109,16 +110,20 @@ auto ClientApp::update_entities(floating ts) -> void {
   }
 
   static auto other_positions =
-      generate_points<Config::transform_buffer_size / 4>(7.0F);
+      generate_points<Config::transform_buffer_size / 8>(7.0F);
   for (const auto &pos : other_positions) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
 
   static auto other_positions_again =
-      generate_points<Config::transform_buffer_size / 4>(2.0F);
+      generate_points<Config::transform_buffer_size / 8>(2.0F);
   for (const auto &pos : other_positions_again) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
+#else
+  scene_renderer.submit_static_mesh(sponza_mesh.get(),
+                                    glm::scale(glm::mat4{1.0F}, glm::vec3(1)));
+#endif
 }
 
 auto ClientApp::on_update(floating ts) -> void {
@@ -155,7 +160,8 @@ auto ClientApp::on_update(floating ts) -> void {
   }
 
   camera_orientation = glm::normalize(camera_orientation);
-  glm::vec3 direction = glm::rotate(camera_orientation, glm::vec3(0, 0, -1));
+  const glm::vec3 direction =
+      glm::rotate(camera_orientation, glm::vec3(0, 0, -1));
   camera_position = direction * radius;
 
   scene_renderer.begin_frame(*get_device(), frame(), camera_position);
@@ -436,6 +442,9 @@ void ClientApp::perform() {
 
   cube_mesh = Mesh::import_from(*get_device(), FS::model("cube.fbx"));
 
+  sponza_mesh =
+      Mesh::import_from(*get_device(), FS::model("pistol/pistol.fbx"));
+
   scene = make_scope<ECS::Scene>("Default");
   auto entity = scene->create_entity("Test");
 }
@@ -556,6 +565,14 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                         10.0f);
     UI::text("Sun Position: x={}, y={}, z={}", sun_position.x, sun_position.y,
              sun_position.z);
+
+    auto &&[value, near, far, bias, depth_value] =
+        scene_renderer.get_depth_factors();
+    ImGui::SliderFloat("Depth Value", &value, 5.0f, 100.0f);
+    ImGui::SliderFloat("Depth Near", &near, -50.F, 50.F);
+    ImGui::SliderFloat("Depth Far", &far, 0.1f, 100.0f);
+    ImGui::SliderFloat("Depth Bias", &bias, 0.0f, 0.1F);
+    ImGui::SliderFloat("Depth Factor", &depth_value, 0.01f, 1.0f);
   });
 
   for (const auto &widget : widgets)

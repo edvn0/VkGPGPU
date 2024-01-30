@@ -27,7 +27,8 @@ struct TextureProperties {
   Extent<u32> extent{};
   TextureDataStrategy texture_data_strategy{TextureDataStrategy::Delete};
   ImageTiling tiling{ImageTiling::Optimal};
-  ImageUsage usage{ImageUsage::Sampled};
+  ImageUsage usage{ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc};
   ImageLayout layout{ImageLayout::ShaderReadOnlyOptimal};
   SamplerFilter min_filter{SamplerFilter::Nearest};
   SamplerFilter max_filter{SamplerFilter::Nearest};

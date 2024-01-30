@@ -51,7 +51,6 @@ add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
 
-
 function(add_glm)
     set(GLM_BUILD_LIBRARY OFF CACHE BOOL "")
     set(GLM_ENABLE_SIMD_SSE2 ON CACHE BOOL "")
@@ -67,6 +66,19 @@ endfunction()
 add_glm()
 
 function(add_assimp)
+    set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "")
+    set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "")
+
+    set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "")
+    set(ASSIMP_IGNORE_GIT_HASH ON CACHE BOOL "")
+
+    set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_3DS_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_SMD_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_SIB_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "")
+
     add_subdirectory(assimp)
 endfunction()
 

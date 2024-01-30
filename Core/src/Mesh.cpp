@@ -2,6 +2,7 @@
 
 #include "Mesh.hpp"
 
+#include "Logger.hpp"
 #include "Material.hpp"
 #include "SceneRenderer.hpp"
 
@@ -29,8 +30,13 @@ auto Mesh::get_materials_span() const -> std::span<Material *> {
 }
 
 auto Mesh::get_material(u32 index) const -> Material * {
-  if (index < materials.size()) {
-    return materials.at(index).get();
+  // Check if the submesh index has a corresponding material index
+  if (const auto it = submesh_to_material_index.find(index);
+      it != submesh_to_material_index.end()) {
+    if (const u32 material_index = it->second;
+        material_index < materials.size()) {
+      return materials.at(material_index).get();
+    }
   }
   return nullptr;
 }
@@ -106,10 +112,7 @@ struct ImporterImpl {
   const aiScene *scene;
 };
 
-auto Mesh::Deleter::operator()(ImporterImpl* impl)  -> void {
-  delete impl;
-}
-
+auto Mesh::Deleter::operator()(ImporterImpl *impl) -> void { delete impl; }
 
 namespace {
 constexpr auto to_mat4_from_assimp(const aiMatrix4x4 &matrix) -> glm::mat4 {
@@ -159,10 +162,8 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcess_CalcTangentSpace | aiProcess_Triangulate | aiProcess_SortByPType |
-    aiProcess_GenNormals | aiProcess_OptimizeMeshes |
-    aiProcess_JoinIdenticalVertices | aiProcess_LimitBoneWeights |
-    aiProcess_ValidateDataStructure | aiProcess_GlobalScale;
+    aiProcess_Triangulate | aiProcess_GenUVCoords | aiProcess_CalcTangentSpace |
+    aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_FlipUVs;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
@@ -173,8 +174,6 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     : device(&dev), file_path(path) {
   importer = make_scope<ImporterImpl, Mesh::Deleter>();
   importer->importer = make_scope<Assimp::Importer>();
-  // importer->importer->SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS,
-  //                                    false);
 
   default_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
                                      FS::shader("Basic.frag.spv"));
@@ -209,6 +208,9 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh.index_count = mesh->mNumFaces * 3;
     // submesh.mesh_name = mesh->mName.C_Str();
     submesh_indices.push_back(submesh_index);
+    material_to_submesh_indices[submesh.material_index].push_back(
+        submesh_index);
+    submesh_to_material_index[submesh_index] = submesh.material_index;
 
     vertex_count += mesh->mNumVertices;
     index_count += submesh.index_count;
@@ -320,7 +322,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
 
     aiString ai_tex_path;
     glm::vec4 albedo_colour{0.8F, 0.8F, 0.8F, 1.0F};
-    float emission = 0.0F;
+    float emission = 0.2F;
     if (aiColor3D ai_colour;
         ai_material->Get(AI_MATKEY_COLOR_DIFFUSE, ai_colour) == AI_SUCCESS) {
       albedo_colour = {ai_colour.r, ai_colour.g, ai_colour.b, 1.0F};
@@ -335,7 +337,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("pc.emission", emission);
 
     float shininess{};
-    float metalness{};
+    float metalness{0.0F};
     if (ai_material->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS) {
       shininess = 80.0F; // Default value
     }
@@ -376,7 +378,9 @@ void Mesh::handle_albedo_map(const Texture &white_texture,
     }
 
     if (texture) {
-      submesh_material.set("albedo_map", *mesh_owned_textures.at(key));
+      info("{}", key);
+      const auto &texture = mesh_owned_textures.at(key);
+      submesh_material.set("albedo_map", *texture);
       auto albedo_colour = glm::vec3(1.0F);
       submesh_material.set("pc.albedo_colour", albedo_colour);
     } else {
@@ -407,7 +411,7 @@ void Mesh::handle_normal_map(const Texture &white_texture,
 
     if (texture) {
       submesh_material.set("normal_map", *mesh_owned_textures.at(key));
-      submesh_material.set("pc.use_normal_map", 0.0F);
+      submesh_material.set("pc.use_normal_map", 1.0F);
     } else {
       fallback = true;
     }
@@ -495,36 +499,16 @@ void Mesh::handle_metalness_map(const Texture &white_texture,
 
 auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
     -> Scope<Texture> {
-  using namespace std::filesystem;
-  const auto path_to_texture = FS::texture(path{texture_path}.filename());
+  auto path = FS::resolve(file_path.parent_path() / texture_path);
 
-  const auto parent = this->file_path.parent_path();
-
-  path constructed_path{};
-  const auto parent_directory_is_either_model_or_textures_directory =
-      parent == FS::model_directory() || parent == FS::texture_directory();
-  if (FS::exists(parent) &&
-      !parent_directory_is_either_model_or_textures_directory) {
-    // Well we guess that the texture is in the same directory as the mesh
-    const auto requested_file_name = path_to_texture.filename();
-    constructed_path = parent / requested_file_name;
-  } else {
-    constructed_path = path{path_to_texture};
-  }
-
-  if (!FS::exists(constructed_path)) {
-    constructed_path = path_to_texture;
-  }
-
-  if (!FS::exists(constructed_path)) {
-    error("Mesh", "Could not find texture: {0}", constructed_path.string());
-    return nullptr;
+  if (!FS::exists(path)) {
+    path = FS::resolve(file_path.parent_path() / "textures" / texture_path);
   }
 
   return Texture::construct_shader(
       *device, {
                    .format = ImageFormat::UNORM_RGBA8,
-                   .path = constructed_path,
+                   .path = path,
                    .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
                             ImageUsage::TransferSrc,
                    .layout = ImageLayout::ShaderReadOnlyOptimal,

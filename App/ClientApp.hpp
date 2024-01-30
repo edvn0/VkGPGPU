@@ -89,6 +89,7 @@ private:
 
   Scope<Mesh> triangle_mesh;
   Scope<Mesh> cube_mesh;
+  Scope<Mesh> sponza_mesh;
 
   SceneRenderer scene_renderer{};
 

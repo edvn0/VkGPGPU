@@ -20,7 +20,7 @@ using DirectoryIterator = std::filesystem::directory_iterator;
 using RecursiveDirectoryIterator =
     std::filesystem::recursive_directory_iterator;
 
-auto resolve(StringLike auto path) -> std::filesystem::path {
+auto resolve(StringLike auto path) -> FS::Path {
   return std::filesystem::absolute(path);
 }
 

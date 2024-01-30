@@ -2,7 +2,8 @@
 
 layout(location = 0) out vec4 out_colour;
 
-layout(std140, set = 0, binding = 3) uniform GridData {
+layout(std140, set = 0, binding = 3) uniform GridData
+{
   vec4 grid_colour;
   vec4 plane_colour;
   vec4 grid_size;
@@ -10,14 +11,17 @@ layout(std140, set = 0, binding = 3) uniform GridData {
 }
 grid;
 
-layout(std140, set = 0, binding = 1) uniform ShadowData {
+layout(std140, set = 0, binding = 1) uniform ShadowData
+{
   mat4 view;
   mat4 projection;
   mat4 view_projection;
+  vec2 bias_and_default;
 }
 shadow;
 
-layout(std140, set = 0, binding = 0) uniform RendererData {
+layout(std140, set = 0, binding = 0) uniform RendererData
+{
   mat4 view;
   mat4 projection;
   mat4 view_projection;
@@ -27,7 +31,8 @@ layout(std140, set = 0, binding = 0) uniform RendererData {
 }
 renderer;
 
-void main() {
+void main()
+{
   vec4 view_pos = shadow.view * vec4(gl_FragCoord.xyz, 1.0);
 
   vec2 grid_coordinates = mod(view_pos.xz / grid.grid_size.xy, 1.0);
