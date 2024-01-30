@@ -50,6 +50,9 @@ auto Framebuffer::on_resize(const Extent<u32> &new_extent) -> void {
 }
 
 auto Framebuffer::on_resize(u32 w, u32 h, bool should_clean) -> void {
+  if (!properties.resizeable)
+    return;
+
   if (w == properties.width && h == properties.height) {
     return;
   }

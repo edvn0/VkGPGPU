@@ -21,6 +21,11 @@ auto Material::construct(const Device &device, const Shader &shader)
   return Scope<Material>(new Material(device, shader));
 }
 
+auto Material::construct_reference(const Device &device, const Shader &shader)
+    -> Ref<Material> {
+  return Ref<Material>(new Material(device, shader));
+}
+
 Material::Material(const Device &dev, const Shader &input_shader)
     : device(&dev), shader(&input_shader),
       write_descriptors(Config::frame_count),

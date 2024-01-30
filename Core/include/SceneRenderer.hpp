@@ -41,14 +41,14 @@ class SceneRenderer {
     glm::mat4 view;
     glm::mat4 projection;
     glm::mat4 view_projection;
+    glm::vec4 light_position;
+    glm::vec4 light_direction;
+    glm::vec4 camera_position;
   };
   struct ShadowUBO {
     glm::mat4 view;
     glm::mat4 projection;
     glm::mat4 view_projection;
-    glm::vec4 light_position;
-    glm::vec4 light_direction;
-    glm::vec4 camera_position;
   };
   struct GridUBO {
     glm::vec4 grid_colour;
@@ -108,25 +108,30 @@ public:
   auto flush(const CommandBuffer &buffer, u32 frame) -> void;
   auto end_frame() -> void;
 
+  void push_constants(const Core::CommandBuffer &, const GraphicsPipeline &,
+                      const Material &);
   void update_material_for_rendering(FrameIndex frame_index,
                                      Material &material_for_update,
                                      BufferSet<Buffer::Type::Uniform> *ubo_set,
                                      BufferSet<Buffer::Type::Storage> *sbo_set);
 
-  void update_material_for_rendering(FrameIndex frame_index,
-                                     Material &material_for_update);
-
-  auto get_output_image() const -> const Image &;
-  auto get_depth_image() const -> const Image &;
+  [[nodiscard]] auto get_output_image() const -> const Image &;
+  [[nodiscard]] auto get_depth_image() const -> const Image &;
 
   auto set_extent(const Extent<u32> &ext) -> void { extent = ext; }
+  auto get_sun_position() -> auto & { return sun_position; }
+
+  [[nodiscard]] static auto get_white_texture() -> const Texture & {
+    return *white_texture;
+  }
+  [[nodiscard]] static auto get_black_texture() -> const Texture & {
+    return *black_texture;
+  }
 
 private:
   Extent<u32> extent{};
 
   Scope<GraphicsPipeline> geometry_pipeline;
-  Scope<Shader> geometry_shader;
-  Scope<Material> geometry_material;
   Scope<Framebuffer> geometry_framebuffer;
 
   Scope<GraphicsPipeline> shadow_pipeline;
@@ -134,14 +139,20 @@ private:
   Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
 
+  Scope<Shader> geometry_shader;
+
   Scope<Shader> grid_shader;
   Scope<GraphicsPipeline> grid_pipeline;
   Scope<Material> grid_material;
   Scope<Mesh> grid_mesh;
 
-  Scope<Image> white_texture;
-  Scope<Image> black_texture;
+  static inline Scope<Texture> white_texture;
+  static inline Scope<Texture> black_texture;
   Scope<Texture> disarray_texture;
+  Scope<Mesh> sphere_mesh;
+
+  glm::vec3 sun_position{3, -5, -3};
+
   struct PipelineAndHash {
     VkPipeline bound_pipeline{nullptr};
     u64 hash{0};
@@ -162,6 +173,8 @@ private:
   }
 
   auto shadow_pass(const CommandBuffer &, u32) -> void;
+  auto grid_pass(const CommandBuffer &, u32) -> void;
+  auto geometry_pass(const CommandBuffer &, u32) -> void;
 };
 
 } // namespace Core

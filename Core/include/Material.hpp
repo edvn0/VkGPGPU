@@ -18,6 +18,8 @@ namespace Core {
 class Material {
 public:
   static auto construct(const Device &, const Shader &) -> Scope<Material>;
+  static auto construct_reference(const Device &, const Shader &)
+      -> Ref<Material>;
 
   auto on_resize(const Extent<u32> &) -> void;
 
@@ -27,8 +29,7 @@ public:
     return set(identifier, static_cast<const void *>(&copy));
   }
 
-  auto set(const std::string_view identifier, const Math::IsGLM auto &value)
-      -> bool {
+  auto set(const std::string_view identifier, Math::IsGLM auto &value) -> bool {
     const auto &copy = value;
     return set(identifier, Math::value_ptr(copy));
   }
@@ -59,7 +60,7 @@ public:
               pipeline.get_bind_point(), frame, renderer_set);
   }
 
-  auto get_shader() const -> const auto & { return *shader; }
+  [[nodiscard]] auto get_shader() const -> const auto & { return *shader; }
 
 private:
   Material(const Device &, const Shader &);

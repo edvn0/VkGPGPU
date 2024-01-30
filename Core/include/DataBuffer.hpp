@@ -12,6 +12,8 @@
 
 namespace Core {
 
+auto human_readable_size(usize bytes, i32 places = 2) -> std::string;
+
 class WriteRangeException final : public BaseException {
 public:
   using BaseException::BaseException;
@@ -23,6 +25,14 @@ public:
       : buffer_size(static_cast<usize>(input_size)) {
     // Zero is valid here!
   }
+  DataBuffer(const u8 *input_data, std::integral auto input_size)
+      : buffer_size(static_cast<usize>(input_size)) {
+    if (input_size > 0) {
+      allocate_storage(input_size);
+      std::memcpy(data.get(), input_data, input_size);
+    }
+  }
+
   DataBuffer() = default;
   ~DataBuffer() = default;
 

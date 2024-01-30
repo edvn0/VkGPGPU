@@ -36,6 +36,13 @@ void verify(VkResult result, const std::string &function_name,
   }
 }
 
+template <typename T = void> [[noreturn]] auto unreachable_return() {
+  throw BaseException{"Invalidly here!"};
+}
+template <auto T> [[noreturn]] auto unreachable_return() -> decltype(T) {
+  throw BaseException{"Invalidly here!"};
+}
+
 template <typename... Args>
 void ensure(bool condition, fmt::format_string<Args...> message,
             Args &&...args) {
@@ -45,11 +52,8 @@ void ensure(bool condition, fmt::format_string<Args...> message,
     // needed For example, using assert to trigger a debug break
     error("{}", formatted_message);
     assert(false);
+    unreachable_return();
   }
-}
-
-template <auto T> [[noreturn]] auto unreachable_return() -> decltype(T) {
-  throw BaseException{"Invalidly here!"};
 }
 
 } // namespace Core

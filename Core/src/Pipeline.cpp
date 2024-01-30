@@ -229,8 +229,8 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
   pipeline_layout_create_info.pSetLayouts = layouts.data();
   const auto &push_constants = shader.get_push_constant_ranges();
   std::vector<VkPushConstantRange> pc_ranges(push_constants.size());
-  if (push_constants.size()) {
-    for (uint32_t i = 0; i < push_constants.size(); i++) {
+  if (!push_constants.empty()) {
+    for (u32 i = 0; i < push_constants.size(); i++) {
       const auto &range = push_constants[i];
       auto &pc_range = pc_ranges[i];
 
@@ -240,7 +240,7 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
     }
 
     pipeline_layout_create_info.pushConstantRangeCount =
-        (uint32_t)pc_ranges.size();
+        static_cast<Core::u32>(pc_ranges.size());
     pipeline_layout_create_info.pPushConstantRanges = pc_ranges.data();
   }
 
@@ -380,8 +380,7 @@ auto GraphicsPipeline::construct_pipeline(
 
   VkPipelineDynamicStateCreateInfo dynamic_state{};
   dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamic_state.dynamicStateCount =
-      static_cast<std::uint32_t>(dynamic_states.size());
+  dynamic_state.dynamicStateCount = static_cast<u32>(dynamic_states.size());
   dynamic_state.pDynamicStates = dynamic_states.data();
 
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
@@ -397,7 +396,7 @@ auto GraphicsPipeline::construct_pipeline(
                                       : VK_VERTEX_INPUT_RATE_INSTANCE;
 
   std::vector<VkVertexInputAttributeDescription> attribute_descriptions{};
-  std::uint32_t location = 0;
+  u32 location = 0;
   for (const auto &attribute : configuration.layout.elements) {
     auto &[attribute_location, binding, format, offset] =
         attribute_descriptions.emplace_back();
@@ -410,7 +409,7 @@ auto GraphicsPipeline::construct_pipeline(
   vertex_input_info.vertexBindingDescriptionCount = 1;
   vertex_input_info.pVertexBindingDescriptions = &binding_description;
   vertex_input_info.vertexAttributeDescriptionCount =
-      static_cast<std::uint32_t>(attribute_descriptions.size());
+      static_cast<u32>(attribute_descriptions.size());
   vertex_input_info.pVertexAttributeDescriptions =
       attribute_descriptions.data();
 
@@ -422,8 +421,8 @@ auto GraphicsPipeline::construct_pipeline(
   input_assembly.primitiveRestartEnable = static_cast<VkBool32>(false);
 
   // Prefer extent over props (due to resizing API)
-  std::uint32_t width{extent.width};
-  std::uint32_t height{extent.height};
+  u32 width{extent.width};
+  u32 height{extent.height};
 
   VkViewport viewport{};
   viewport.x = 0.0F;
@@ -496,28 +495,26 @@ auto GraphicsPipeline::construct_pipeline(
   color_blending.logicOpEnable =
       static_cast<VkBool32>(configuration.framebuffer->get_properties().blend);
   color_blending.pAttachments = blend_states.data();
-  color_blending.attachmentCount =
-      static_cast<std::uint32_t>(blend_states.size());
+  color_blending.attachmentCount = static_cast<u32>(blend_states.size());
 
   VkPipelineLayoutCreateInfo pipeline_layout_info{};
   pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   std::vector<VkPushConstantRange> result;
 
   const auto &layouts = configuration.shader->get_descriptor_set_layouts();
-  pipeline_layout_info.setLayoutCount =
-      static_cast<std::uint32_t>(layouts.size());
+  pipeline_layout_info.setLayoutCount = static_cast<u32>(layouts.size());
   pipeline_layout_info.pSetLayouts = layouts.data();
   const auto &push_constant_layout =
       configuration.shader->get_push_constant_ranges();
-  for (const auto &pc_layout : push_constant_layout) {
-    auto &out = result.emplace_back();
-    out.offset = pc_layout.offset;
-    out.size = pc_layout.size;
-    out.stageFlags = pc_layout.shader_stage;
+  // We need to hack this for now.
+  if (!push_constant_layout.empty()) {
+    result.clear();
+    VkPushConstantRange &range = result.emplace_back();
+    range.offset = 0;
+    range.size = push_constant_layout.at(0).size;
+    range.stageFlags = push_constant_layout.at(0).shader_stage;
   }
-
-  pipeline_layout_info.pushConstantRangeCount =
-      static_cast<std::uint32_t>(result.size());
+  pipeline_layout_info.pushConstantRangeCount = static_cast<u32>(result.size());
   pipeline_layout_info.pPushConstantRanges = result.data();
 
   verify(vkCreatePipelineLayout(device->get_device(), &pipeline_layout_info,
@@ -555,8 +552,7 @@ auto GraphicsPipeline::construct_pipeline(
   }
 
   pipeline_create_info.pStages = stage_data.data();
-  pipeline_create_info.stageCount =
-      static_cast<std::uint32_t>(stage_data.size());
+  pipeline_create_info.stageCount = static_cast<u32>(stage_data.size());
   pipeline_create_info.pVertexInputState = &vertex_input_info;
   pipeline_create_info.pInputAssemblyState = &input_assembly;
   pipeline_create_info.pViewportState = &viewport_state;

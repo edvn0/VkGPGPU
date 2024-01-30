@@ -138,11 +138,9 @@ auto spir_type_to_shader_uniform_type(const spirv_cross::SPIRType &type)
   return ShaderUniformType::None;
 }
 
-std::unordered_map<std::uint32_t,
-                   std::unordered_map<std::uint32_t, UniformBuffer>>
+std::unordered_map<Core::u32, std::unordered_map<Core::u32, UniformBuffer>>
     global_uniform_buffers{};
-std::unordered_map<std::uint32_t,
-                   std::unordered_map<std::uint32_t, StorageBuffer>>
+std::unordered_map<Core::u32, std::unordered_map<Core::u32, StorageBuffer>>
     global_storage_buffers{};
 
 template <auto Type> struct DescriptorTypeReflector {
@@ -158,16 +156,22 @@ static auto reflect_push_constants(
 
   for (const auto &resource : resources) {
     const auto &buffer_type = compiler.get_type(resource.base_type_id);
-    const auto buffer_size = static_cast<std::uint32_t>(
-        compiler.get_declared_struct_size(buffer_type));
+    const auto buffer_size =
+        static_cast<Core::u32>(compiler.get_declared_struct_size(buffer_type));
     const auto member_count =
-        static_cast<std::uint32_t>(buffer_type.member_types.size());
-    auto &push_constant_range = output.push_constant_ranges.emplace_back();
+        static_cast<Core::u32>(buffer_type.member_types.size());
 
+    Core::u32 buffer_offset = 0;
+    if (!output.push_constant_ranges.empty()) {
+      buffer_offset = output.push_constant_ranges.back().offset +
+                      output.push_constant_ranges.back().size;
+    }
+
+    auto &push_constant_range = output.push_constant_ranges.emplace_back();
     const auto &execution_model = compiler.get_execution_model();
-    push_constant_range.shader_stage = to_stage(execution_model);
+    push_constant_range.shader_stage = VK_SHADER_STAGE_ALL;
     push_constant_range.size = buffer_size;
-    push_constant_range.offset = 0;
+    push_constant_range.offset = buffer_offset;
 
     const auto &buffer_name = resource.name;
     if (buffer_name.empty()) {
@@ -178,10 +182,10 @@ static auto reflect_push_constants(
     buffer.name = buffer_name;
     buffer.size = buffer_size;
 
-    for (std::uint32_t i = 0; i < member_count; i++) {
+    for (Core::u32 i = 0; i < member_count; i++) {
       const auto &type = compiler.get_type(buffer_type.member_types[i]);
       const auto &member_name = compiler.get_member_name(buffer_type.self, i);
-      auto size = static_cast<uint32_t>(
+      auto size = static_cast<Core::u32>(
           compiler.get_declared_struct_member_size(buffer_type, i));
       auto offset = compiler.type_struct_member_offset(buffer_type, i);
 
@@ -204,7 +208,7 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER> {
           compiler.get_decoration(resource.id, spv::DecorationBinding);
       auto descriptor_set =
           compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-      auto size = static_cast<std::uint32_t>(
+      auto size = static_cast<Core::u32>(
           compiler.get_declared_struct_size(buffer_type));
 
       if (descriptor_set >= output.shader_descriptor_sets.size()) {
@@ -245,7 +249,7 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER> {
           compiler.get_decoration(resource.id, spv::DecorationBinding);
       auto descriptor_set =
           compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-      auto size = static_cast<std::uint32_t>(
+      auto size = static_cast<Core::u32>(
           compiler.get_declared_struct_size(buffer_type));
 
       if (descriptor_set >= output.shader_descriptor_sets.size()) {

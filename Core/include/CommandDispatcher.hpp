@@ -21,7 +21,7 @@ public:
   ~CommandDispatcher() = default;
 
   auto set_command_buffer(const CommandBuffer *new_command_buffer) -> void {
-    this->command_buffer = new_command_buffer;
+    command_buffer = new_command_buffer;
   }
 
   template <CommandBufferBindable T, typename... Args>

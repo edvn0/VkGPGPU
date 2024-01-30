@@ -37,6 +37,7 @@ struct FramebufferAttachmentSpecification {
 struct FramebufferProperties {
   u32 width{0};
   u32 height{0};
+  bool resizeable{false};
   floating scale{1.0f};
   Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
   floating depth_clear_value{1.0f};

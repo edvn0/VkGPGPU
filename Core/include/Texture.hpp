@@ -46,7 +46,7 @@ public:
   [[nodiscard]] auto get_image() const noexcept -> const Image &;
   [[nodiscard]] auto valid() const noexcept -> bool;
 
-  auto write_to_file(const FS::Path &) -> bool;
+  [[nodiscard]] auto write_to_file(const FS::Path &) const -> bool;
   [[nodiscard]] auto size_bytes() const -> usize { return cached_size; }
   [[nodiscard]] auto get_extent() const -> const auto & {
     return properties.extent;
@@ -63,10 +63,13 @@ public:
   static auto construct_shader(const Device &, const TextureProperties &)
       -> Scope<Texture>;
   static auto construct(const Device &, const FS::Path &) -> Scope<Texture>;
+  static auto construct_from_buffer(const Device &, const TextureProperties &,
+                                    DataBuffer &&) -> Scope<Texture>;
 
 private:
   Texture(const Device &, const TextureProperties &);
   Texture(const Device &, usize, const Extent<u32> &);
+  Texture(const Device &, const TextureProperties &, DataBuffer &&);
 
   const Device *device{nullptr};
   TextureProperties properties;

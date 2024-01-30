@@ -61,11 +61,7 @@ static constexpr auto for_each(MatrixType &&matrix, auto &&callback) {
   }
 }
 
-inline auto value_ptr(const SubmitsRowAndColumnTypeStatically auto &type) {
-  return glm::value_ptr(type);
-}
-
-inline auto value_ptr(const IsGLM auto &type) { return glm::value_ptr(type); }
+template <class T> inline auto value_ptr(T &t) { return glm::value_ptr(t); }
 
 inline auto make_infinite_reversed_projection(float fov_radians,
                                               float aspect_ratio, float near)

@@ -34,6 +34,16 @@ auto font(StringLike auto path, bool resolve = true) {
   }
 }
 
+inline auto model_directory() { return std::filesystem::path("models"); }
+auto model(StringLike auto path, bool resolve = true) {
+  const auto output = model_directory() / path;
+  if (resolve) {
+    return std::filesystem::absolute(output);
+  } else {
+    return output;
+  }
+}
+
 inline auto icon_directory() { return std::filesystem::path("icons"); }
 auto icon(StringLike auto path, bool resolve = true) {
   const auto output = icon_directory() / path;
@@ -44,9 +54,10 @@ auto icon(StringLike auto path, bool resolve = true) {
   }
 }
 
+inline auto shader_directory() { return std::filesystem::path("shaders"); }
 auto shader(StringLike auto path, bool resolve = true)
     -> std::filesystem::path {
-  const auto output = std::filesystem::path("shaders") / path;
+  const auto output = shader_directory() / path;
   if (resolve) {
     return std::filesystem::absolute(output);
   } else {
@@ -54,9 +65,10 @@ auto shader(StringLike auto path, bool resolve = true)
   }
 }
 
+inline auto texture_directory() { return std::filesystem::path("textures"); }
 auto texture(StringLike auto path, bool resolve = true)
     -> std::filesystem::path {
-  const auto output = std::filesystem::path("textures") / path;
+  const auto output = texture_directory() / path;
   if (resolve) {
     return std::filesystem::absolute(output);
   } else {

@@ -282,7 +282,8 @@ auto Image::recreate() -> void {
   //}
 }
 
-auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
+auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
+    -> void {
   // Create a transfer buffer
   Allocator allocator{"Image"};
   VkBufferCreateInfo buffer_create_info{};
@@ -292,17 +293,17 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
 
   VkBuffer staging_buffer{};
   VmaAllocationInfo staging_allocation_info{};
-  auto allocation = allocator.allocate_buffer(
+  const auto allocation = allocator.allocate_buffer(
       staging_buffer, staging_allocation_info, buffer_create_info,
       {.usage = Usage::AUTO_PREFER_DEVICE,
        .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT});
-  std::span allocation_span{
+  const std::span allocation_span{
       static_cast<u8 *>(staging_allocation_info.pMappedData),
       staging_allocation_info.size};
   data_buffer.read(allocation_span);
 
   {
-    auto buffer = create_immediate(*device, Queue::Type::Graphics);
+    const auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
     transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);

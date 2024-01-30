@@ -54,7 +54,8 @@ public:
   auto recreate() -> void;
 
   auto get_properties() noexcept -> ImageProperties & { return properties; }
-  auto get_properties() const noexcept -> const ImageProperties & {
+  [[nodiscard]] auto get_properties() const noexcept
+      -> const ImageProperties & {
     return properties;
   }
   [[nodiscard]] auto get_descriptor_info() const
@@ -75,7 +76,7 @@ private:
   VkImageAspectFlags aspect_bit{VK_IMAGE_ASPECT_COLOR_BIT};
 
   auto create_mips() -> void;
-  auto load_image_data_from_buffer(const DataBuffer &) -> void;
+  auto load_image_data_from_buffer(const DataBuffer &) const -> void;
   auto initialise_vulkan_image() -> void;
   auto initialise_vulkan_descriptor_info() -> void;
 

@@ -137,8 +137,7 @@ void FilesystemWidget::render_directory_contents() {
   }
 
   if (ImGui::BeginTable("##DirectoryContent", column_count)) {
-    for (const auto &entries =
-             this->get_cached_directory_contents(this->current_path);
+    for (const auto &entries = get_cached_directory_contents(current_path);
          const auto &directory_entry : entries) {
 
       const auto &path = directory_entry.path();

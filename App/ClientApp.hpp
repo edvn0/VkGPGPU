@@ -87,8 +87,9 @@ private:
   Scope<Texture> output_texture;
   Scope<Texture> output_texture_second;
 
-  Scope<Mesh> mesh;
+  Scope<Mesh> triangle_mesh;
   Scope<Mesh> cube_mesh;
+
   SceneRenderer scene_renderer{};
 
   struct PCForMaterial {

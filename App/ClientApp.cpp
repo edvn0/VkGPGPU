@@ -83,7 +83,8 @@ template <usize N> auto generate_points(floating K) {
     const auto point =
         glm::vec3(xyPlaneRadius * cos(angle), xyPlaneRadius * sin(angle), z) *
         K;
-    points[i] = glm::translate(glm::mat4{1.0F}, point);
+    points[i] = glm::translate(glm::mat4{1.0F}, point) *
+                glm::scale(glm::mat4{1.0F}, glm::vec3(10.0F));
   }
   return points;
 }
@@ -91,32 +92,30 @@ template <usize N> auto generate_points(floating K) {
 auto ClientApp::update_entities(floating ts) -> void {
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 2>(3.0F);
+        generate_points<Config::transform_buffer_size / 4>(3.0F);
 
     for (const auto &pos : positions) {
-      scene_renderer.submit_static_mesh(mesh.get(), pos);
+      scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
     }
   }
 
   {
     static auto positions =
-        generate_points<Config::transform_buffer_size / 2>(3.0F);
+        generate_points<Config::transform_buffer_size / 4>(3.0F);
 
     for (const auto &pos : positions) {
-      scene_renderer.submit_static_mesh(mesh.get(), pos);
+      scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
     }
   }
 
-  cube_mesh->is_shadow_caster = true;
   static auto other_positions =
-      generate_points<Config::transform_buffer_size / 2>(7.0F);
+      generate_points<Config::transform_buffer_size / 4>(7.0F);
   for (const auto &pos : other_positions) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
 
-  cube_mesh->is_shadow_caster = true;
   static auto other_positions_again =
-      generate_points<Config::transform_buffer_size / 2>(2.0F);
+      generate_points<Config::transform_buffer_size / 4>(2.0F);
   for (const auto &pos : other_positions_again) {
     scene_renderer.submit_static_mesh(cube_mesh.get(), pos);
   }
@@ -125,7 +124,8 @@ auto ClientApp::update_entities(floating ts) -> void {
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
   scene->on_update(ts);
-  static constexpr float radius = 8.0F;
+  static constexpr float zoom_speed = 1.0F; // Adjust this value for zoom speed
+  static float radius = 17.0F;
   static glm::quat camera_orientation{1.0, 0.0, 0.0, 0.0};
   if (Input::pressed(KeyCode::KEY_D)) {
     glm::quat rotationY = glm::angleAxis(ts * 0.3F, glm::vec3(0, -1, 0));
@@ -136,12 +136,22 @@ auto ClientApp::on_update(floating ts) -> void {
     camera_orientation = rotationY * camera_orientation;
   }
   if (Input::pressed(KeyCode::KEY_W)) {
-    glm::quat rotationX = glm::angleAxis(ts * 0.1F, glm::vec3(1, 0, 0));
+    glm::quat rotationX = glm::angleAxis(ts * 0.3F, glm::vec3(-1, 0, 0));
     camera_orientation = rotationX * camera_orientation;
   }
   if (Input::pressed(KeyCode::KEY_S)) {
-    glm::quat rotationX = glm::angleAxis(-ts * 0.1F, glm::vec3(1, 0, 0));
+    glm::quat rotationX = glm::angleAxis(-ts * 0.3F, glm::vec3(-1, 0, 0));
     camera_orientation = rotationX * camera_orientation;
+  }
+
+  if (Input::pressed(KeyCode::KEY_Q)) {
+    radius -= zoom_speed * ts;
+    if (radius < 1.0F)
+      radius = 1.0F;
+  }
+
+  if (Input::pressed(KeyCode::KEY_E)) {
+    radius += zoom_speed * ts;
   }
 
   camera_orientation = glm::normalize(camera_orientation);
@@ -197,6 +207,7 @@ void ClientApp::on_destroy() {
 }
 
 auto ClientApp::graphics(floating ts) -> void {
+#if 0
   scene_renderer.begin_renderpass(*graphics_command_buffer, *framebuffer);
   scene_renderer.bind_pipeline(*graphics_command_buffer, *graphics_pipeline);
 
@@ -213,9 +224,11 @@ auto ClientApp::graphics(floating ts) -> void {
                                                     .instance_count = 1,
                                                 });
   scene_renderer.end_renderpass(*graphics_command_buffer);
+#endif
 }
 
 auto ClientApp::compute(floating ts) -> void {
+#if 0
   randomize_span_of_matrices(matrices);
   const auto &input_buffer =
       storage_buffer_set.get(DescriptorBinding(0), frame(), DescriptorSet(0));
@@ -294,6 +307,7 @@ auto ClientApp::compute(floating ts) -> void {
   });
 
   command_buffer->end_and_submit();
+#endif
 }
 
 void ClientApp::perform() {
@@ -420,46 +434,7 @@ void ClientApp::perform() {
 
   scene_renderer.create(*get_device(), *get_swapchain());
 
-  mesh = make_scope<Mesh>();
-  mesh->is_shadow_caster = false;
-  const std::array<Mesh::Vertex, 3> triangle_vertices{
-      Mesh::Vertex{
-          .pos = {0.5f, -0.5f, 0.0f},
-          .uvs = {1.0f, 0.0f},
-      },
-      Mesh::Vertex{
-          .pos = {0.5f, 0.5f, 0.0f},
-          .uvs = {1.0f, 1.0f},
-      },
-      Mesh::Vertex{
-          .pos = {-0.5f, -0.5f, 0.0f},
-          .uvs = {0.0f, 0.0f},
-      },
-  };
-  const std::array<u32, 3> triangle_indices{0, 1, 2};
-
-  mesh->vertex_buffer = Buffer::construct(
-      *get_device(), sizeof(Mesh::Vertex) * triangle_vertices.size(),
-      Buffer::Type::Vertex);
-  mesh->vertex_buffer->write(triangle_vertices.data(),
-                             sizeof(Mesh::Vertex) * triangle_vertices.size());
-  mesh->index_buffer =
-      Buffer::construct(*get_device(), triangle_indices.size() * sizeof(u32),
-                        Buffer::Type::Index);
-  mesh->index_buffer->write(triangle_indices.data(),
-                            triangle_indices.size() * sizeof(u32));
-  mesh->submeshes = {
-      Mesh::Submesh{
-          .base_vertex = 0,
-          .base_index = 0,
-          .material_index = 0,
-          .index_count = 3,
-          .vertex_count = 3,
-      },
-  };
-  mesh->submesh_indices.push_back(0);
-
-  cube_mesh = Mesh::cube(*get_device());
+  cube_mesh = Mesh::import_from(*get_device(), FS::model("cube.fbx"));
 
   scene = make_scope<ECS::Scene>("Default");
   auto entity = scene->create_entity("Test");
@@ -575,6 +550,12 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     ImGui::SliderFloat3("Position", &camera_position[0], -10.0f, 10.0f);
     UI::text("Current Position: x={}, y={}, z={}", camera_position.x,
              camera_position.y, camera_position.z);
+
+    auto &sun_position = scene_renderer.get_sun_position();
+    ImGui::SliderFloat3("Sun Position", Math::value_ptr(sun_position), -10.0f,
+                        10.0f);
+    UI::text("Sun Position: x={}, y={}, z={}", sun_position.x, sun_position.y,
+             sun_position.z);
   });
 
   for (const auto &widget : widgets)

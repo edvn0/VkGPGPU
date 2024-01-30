@@ -66,6 +66,12 @@ endfunction()
 
 add_glm()
 
+function(add_assimp)
+    add_subdirectory(assimp)
+endfunction()
+
+add_assimp()
+
 if(ENABLE_TESTING)
     add_subdirectory(Catch2)
 endif()
