@@ -7,8 +7,8 @@
 #include <ranges>
 #include <string>
 #include <type_traits>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 namespace Core::Container {
 
@@ -55,14 +55,21 @@ concept Container = requires(T t) {
   { t.cend() } -> std::convertible_to<typename T::const_iterator>;
   { t.size() } -> std::convertible_to<typename T::size_type>;
   { t.empty() } -> std::convertible_to<bool>;
+  std::end(t);
+  std::cend(t);
+  std::begin(t);
+  std::cbegin(t);
+  std::size(t);
+  std::empty(t);
+  std::data(t);
 };
 
 auto sort(Container auto &container) -> void {
-  std::ranges::sort(container.begin(), container.end());
+  std::ranges::sort(std::begin(container), std::end(container));
 }
 
 auto sort(Container auto &container, auto &&predicate) -> void {
-  std::ranges::sort(container.begin(), container.end(), predicate);
+  std::ranges::sort(std::begin(container), std::end(container), predicate);
 }
 
 template <class T, std::integral IndexType = std::size_t>
@@ -106,6 +113,7 @@ public:
   CircularBuffer &operator=(CircularBuffer &&other) noexcept {
     if (this != &other) {
       storage = std::move(other.storage);
+      other.storage.clear();
       head = other.head;
       tail = other.tail;
       count = other.count;

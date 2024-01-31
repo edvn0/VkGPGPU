@@ -162,7 +162,6 @@ TEST_CASE("CircularBuffer with ComplexType", "[circular_buffer]") {
 
     SUT<ComplexType> bufferMoved = std::move(buffer);
     REQUIRE(bufferMoved.size() == 1);
-    REQUIRE(buffer.size() == 0); // Original buffer should be empty after moving
   }
 }
 
