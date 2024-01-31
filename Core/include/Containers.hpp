@@ -62,6 +62,7 @@ concept Container = requires(T t) {
   std::size(t);
   std::empty(t);
   std::data(t);
+  std::erase(t, std::end(t));
 };
 
 auto sort(Container auto &container) -> void {
@@ -70,6 +71,10 @@ auto sort(Container auto &container) -> void {
 
 auto sort(Container auto &container, auto &&predicate) -> void {
   std::ranges::sort(std::begin(container), std::end(container), predicate);
+}
+
+auto remove_if(Container auto &container, auto &&predicate) -> void {
+  std::erase_if(container, predicate);
 }
 
 template <class T, std::integral IndexType = std::size_t>

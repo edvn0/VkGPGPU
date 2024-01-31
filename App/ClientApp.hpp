@@ -58,54 +58,7 @@ private:
 
   std::vector<Scope<Widget>> widgets{};
 
-  using UniformSet = BufferSet<Buffer::Type::Uniform>;
-  UniformSet uniform_buffer_set;
-  using StorageSet = BufferSet<Buffer::Type::Storage>;
-  StorageSet storage_buffer_set;
-
   Timer timer;
 
-  Scope<CommandBuffer> command_buffer;
-  Scope<CommandBuffer> graphics_command_buffer;
-  Scope<Framebuffer> framebuffer;
-
-  Scope<Material> material;
-  Scope<Pipeline> pipeline;
-  Scope<Shader> shader;
-
-  Scope<Material> second_material;
-  Scope<Pipeline> second_pipeline;
-  Scope<Shader> second_shader;
-
-  Scope<Buffer> vertex_buffer;
-  Scope<Buffer> index_buffer;
-  Scope<Material> graphics_material;
-  Scope<GraphicsPipeline> graphics_pipeline;
-  Scope<Shader> graphics_shader;
-
-  Scope<Texture> texture;
-  Scope<Texture> output_texture;
-  Scope<Texture> output_texture_second;
-
-  Scope<Mesh> triangle_mesh;
-  Scope<Mesh> cube_mesh;
-  Scope<Mesh> sponza_mesh;
-
-  SceneRenderer scene_renderer{};
-
-  struct PCForMaterial {
-    i32 kernel_size{};
-    i32 half_size{};
-    i32 center_value{};
-  };
-  PCForMaterial pc{};
-
-  std::array<Math::Mat4, 10> matrices{};
-
-  auto update_entities(floating ts) -> void;
-  auto scene_drawing(floating ts) -> void;
-  auto compute(floating ts) -> void;
-  auto graphics(floating ts) -> void;
-
-  void perform();
+  SceneRenderer scene_renderer;
 };

@@ -408,11 +408,17 @@ auto GraphicsPipeline::construct_pipeline(
 
   vertex_input_info.vertexBindingDescriptionCount = 1;
   vertex_input_info.pVertexBindingDescriptions = &binding_description;
-  vertex_input_info.vertexAttributeDescriptionCount =
-      static_cast<u32>(attribute_descriptions.size());
-  vertex_input_info.pVertexAttributeDescriptions =
-      attribute_descriptions.data();
-
+  if (configuration.layout.elements.empty()) {
+    vertex_input_info.vertexAttributeDescriptionCount = 0;
+    vertex_input_info.pVertexAttributeDescriptions = nullptr;
+    vertex_input_info.pVertexBindingDescriptions = nullptr;
+    vertex_input_info.vertexBindingDescriptionCount = 0;
+  } else {
+    vertex_input_info.vertexAttributeDescriptionCount =
+        static_cast<u32>(attribute_descriptions.size());
+    vertex_input_info.pVertexAttributeDescriptions =
+        attribute_descriptions.data();
+  }
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   input_assembly.sType =
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

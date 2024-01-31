@@ -2,6 +2,7 @@
 
 #include "ecs/Entity.hpp"
 
+#include "Containers.hpp"
 #include "Logger.hpp"
 
 #include <entt/entt.hpp>
@@ -11,24 +12,13 @@
 
 namespace ECS {
 
-Entity::Entity(Scene *scene, std::string input_name)
-    : scene(scene), handle(scene->registry.create()),
-      name(std::move(input_name)) {
-  scene->registry.emplace<IdentityComponent>(handle, name);
+Entity::Entity(Scene *scene, std::string_view input_name)
+    : scene(scene), handle(scene->registry.create()), name(input_name) {
+  (void)add_component<IdentityComponent>(name);
+  (void)add_component<TransformComponent>();
 }
 
-Entity::~Entity() {
-  for (auto observer : scene->observers) {
-    observer->on_notify(Events::EntityRemovedEvent{
-        .id = get_id(),
-    });
-  }
-  scene->registry.destroy(handle);
-  scene->observers.erase(
-      std::remove_if(scene->observers.begin(), scene->observers.end(),
-                     [this](auto observer) { return observer == this; }),
-      scene->observers.end());
-}
+Entity::~Entity() = default;
 
 auto Entity::get_id() const -> Core::u64 {
   return scene->registry.get<IdentityComponent>(handle).id;
@@ -36,7 +26,7 @@ auto Entity::get_id() const -> Core::u64 {
 
 auto Entity::on_notify(const Message &message) -> void {
   std::visit(
-      [this]<typename Variant>(Variant &&arg) {
+      [this](auto &&arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, Events::EntityAddedEvent>) {
           info("Entity {} with id: {} added to scene {}", name, arg.id,
@@ -51,4 +41,7 @@ auto Entity::on_notify(const Message &message) -> void {
       message);
 }
 
+auto Entity::get_transform() const -> TransformComponent & {
+  return get_component<TransformComponent>();
+}
 } // namespace ECS

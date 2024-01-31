@@ -24,6 +24,20 @@ layout(std140, set = 0, binding = 2) readonly buffer VertexTransforms {
 }
 transforms;
 
+layout(std140, set = 0, binding = 3) uniform GridData
+{
+  vec4 grid_colour;
+  vec4 plane_colour;
+  vec4 grid_size;
+  vec4 fog_colour;
+}
+grid;
+
+layout(std140, set = 0, binding = 4) readonly buffer VertexColours {
+  vec4 matrices[];
+}
+colours;
+
 layout(push_constant) uniform PushConstants {
   vec4 albedo_colour;
   float emission;

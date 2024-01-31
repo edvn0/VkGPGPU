@@ -19,6 +19,8 @@ void main()
 {
   // Ambient light, sampled from the uniform sampler2D ambient_map
   vec3 ambient = texture(albedo_map, in_uvs).rgb;
+  // Also use the pc.albedo_colour
+  ambient *= in_colour.rgb;
 
   // Specular light, sampled from the uniform sampler2D specular_map
   vec3 specular = texture(specular_map, in_uvs).rgb;
@@ -57,7 +59,6 @@ void main()
   }
 
   // Final colour
-  vec3 colour = ambient + 1.0F * (diffuse + specular);
-
+  vec3 colour = ambient;
   out_colour = vec4(gamma_correct(colour), 1.0);
 }

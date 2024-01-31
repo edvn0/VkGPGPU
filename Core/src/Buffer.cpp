@@ -233,6 +233,17 @@ void Buffer::write(const void *data, u64 data_size) {
   }
 }
 
+auto Buffer::get_vulkan_type() const noexcept -> VkDescriptorType {
+  switch (type) {
+  case Type::Uniform:
+    return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  case Type::Storage:
+    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  default:
+    return unreachable_return<VK_DESCRIPTOR_TYPE_MAX_ENUM>();
+  }
+}
+
 void Buffer::write(const void *data, u64 data_size) const {
   assert(data_size <= size); // Ensure we don't write out of bounds
 

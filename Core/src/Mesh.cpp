@@ -169,6 +169,18 @@ auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
   return Scope<Mesh>(new Mesh{device, file_path});
 }
+auto Mesh::reference_import_from(const Device &device,
+                                 const FS::Path &file_path) -> Ref<Mesh> {
+  const std::string key = file_path.string();
+  if (mesh_cache.contains(key)) {
+    return mesh_cache.at(key);
+  }
+
+  auto mesh = Ref<Mesh>(new Mesh{device, key});
+  mesh_cache.try_emplace(key, mesh);
+
+  return mesh_cache.at(key);
+}
 
 Mesh::Mesh(const Device &dev, const FS::Path &path)
     : device(&dev), file_path(path) {

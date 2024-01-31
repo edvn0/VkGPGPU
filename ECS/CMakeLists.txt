@@ -3,6 +3,7 @@ project(ECS)
 
 set(SOURCES
     include/ecs/components/Component.hpp
+    src/ecs/components/Component.cpp
     include/ecs/UUID.hpp
     include/ecs/Entity.hpp
     include/ecs/Scene.hpp
@@ -10,7 +11,7 @@ set(SOURCES
     src/ecs/Scene.cpp
 )
 add_library(ECS STATIC ${SOURCES})
-target_link_libraries(ECS PUBLIC fmt::fmt EnTT::EnTT)
+target_link_libraries(ECS PUBLIC Reflection fmt::fmt EnTT::EnTT Vulkan::Vulkan)
 target_include_directories(ECS PUBLIC
     ${CMAKE_SOURCE_DIR}/ThirdParty
     ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE

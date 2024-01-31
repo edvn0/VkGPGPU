@@ -25,7 +25,7 @@ void main()
   out_shadow_pos = shadow.view_projection * computed;
 
   out_uvs = uvs;
-  out_colour = colour;
+  out_colour = colours.matrices[gl_InstanceIndex] * colour;
   out_fragment_pos = computed;
   // Calculate TBN
   vec3 T = normalize(computed * vec4(tangent, 0.0F)).xyz;

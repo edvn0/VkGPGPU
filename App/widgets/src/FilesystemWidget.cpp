@@ -28,7 +28,10 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
   };
 }
 
-void FilesystemWidget::on_create() { load_icons(); }
+void FilesystemWidget::on_create(const Core::Device &, const Core::Window &,
+                                 const Core::Swapchain &) {
+  load_icons();
+}
 
 void FilesystemWidget::on_update(Core::floating ts) {
   // Handle any updates here, if necessary

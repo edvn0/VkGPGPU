@@ -20,7 +20,8 @@ public:
 
   void on_update(floating ts) override;
   void on_interface(InterfaceSystem &) override;
-  void on_create() override;
+  void on_create(const Core::Device &, const Core::Window &,
+                 const Core::Swapchain &) override;
   void on_destroy() override;
 
 private:

@@ -26,6 +26,7 @@ class Shader;
 class Texture;
 class Timer;
 class Swapchain;
+class SceneRenderer;
 class VulkanResultException;
 struct AllocationProperties;
 struct BufferDataImpl;

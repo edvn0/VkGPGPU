@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Mesh.hpp"
 #include "Types.hpp"
 
 #include <string>
@@ -14,11 +15,22 @@ struct IdentityComponent {
 
   explicit IdentityComponent(std::string name)
       : name(std::move(name)), id(UUID::generate_uuid<64>()) {}
+};
 
-  auto operator==(const IdentityComponent &other) const -> bool {
-    return id == other.id && name == other.name;
-  }
-  auto operator<=>(const IdentityComponent &) const = default;
+struct TransformComponent {
+  glm::vec3 position{0.0f};
+  glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+  glm::vec3 scale{1.0f};
+
+  auto compute() const -> glm::mat4;
+};
+
+struct TextureComponent {
+  glm::vec4 colour{1.0F};
+};
+
+struct MeshComponent {
+  Core::Ref<Core::Mesh> mesh;
 };
 
 } // namespace ECS

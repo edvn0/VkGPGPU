@@ -31,7 +31,9 @@ class SceneRenderer {
   struct DrawCommand {
     const Mesh *mesh_ptr{};
     u32 submesh_index{0};
-    std::vector<glm::mat4> transforms_and_instances{};
+    u32 instance_count{0};
+    std::vector<glm::mat4> transforms{};
+    std::vector<glm::vec4> colours{};
     Material *material{};
   };
 
@@ -69,8 +71,9 @@ class SceneRenderer {
   struct TransformData {
     std::array<glm::mat4, Config::transform_buffer_size> transforms{};
   };
-  static constexpr auto size = sizeof(TransformData);
-  TransformData transform_data;
+  struct ColourData {
+    std::array<glm::vec4, Config::transform_buffer_size> colours{};
+  };
   RendererUBO renderer_ubo{};
   ShadowUBO shadow_ubo{};
   GridUBO grid_ubo{};
@@ -84,43 +87,46 @@ class SceneRenderer {
   VkDescriptorSetLayout layout = nullptr;
 
 public:
+  explicit SceneRenderer(const Device &dev) : device(&dev) {}
+
   struct DrawParameters {
     u32 index_count{};
+    u32 vertex_count{0};
     u32 instance_count{1};
     u32 first_index{0};
     u32 vertex_offset{0};
     u32 first_instance{0};
   };
 
-  auto destroy(const Device &device) -> void;
-  auto begin_renderpass(const CommandBuffer &buffer,
-                        const Framebuffer &framebuffer) -> void;
+  auto destroy() -> void;
+  auto begin_renderpass(const Framebuffer &framebuffer) -> void;
 
   /**
    * @brief Does a full renderpass (begins + ends) which clears!
    */
-  auto explicit_clear(const CommandBuffer &buffer,
-                      const Framebuffer &framebuffer) -> void;
+  auto explicit_clear(const Framebuffer &framebuffer) -> void;
 
-  auto draw(const CommandBuffer &buffer, const DrawParameters &params) -> void;
-  auto bind_pipeline(const CommandBuffer &buffer,
-                     const GraphicsPipeline &pipeline) -> void;
-  auto bind_index_buffer(const CommandBuffer &buffer,
-                         const Buffer &index_buffer) -> void;
-  auto bind_vertex_buffer(const CommandBuffer &buffer,
-                          const Buffer &vertex_buffer) -> void;
-  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
-      -> void;
-  auto end_renderpass(const CommandBuffer &buffer) -> void;
-  auto create(const Device &device, const Swapchain &swapchain) -> void;
-  auto begin_frame(const Device &device, u32 frame,
-                   const glm::vec3 &camera_position) -> void;
+  auto draw(const DrawParameters &params) -> void;
+  auto draw_vertices(const DrawParameters &params) -> void;
+  auto bind_pipeline(const GraphicsPipeline &pipeline) -> void;
+  auto bind_index_buffer(const Buffer &index_buffer) -> void;
+  auto bind_vertex_buffer(const Buffer &vertex_buffer) -> void;
+  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {}) {
+    submit_static_mesh(mesh, transform, glm::vec4{1.0F});
+  }
+  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform,
+                          const glm::vec4 &colour) -> void;
+  auto end_renderpass() -> void;
+  auto create(const Swapchain &swapchain) -> void;
+  auto set_frame_index(FrameIndex frame_index) -> void {
+    current_frame = frame_index;
+  }
+  auto begin_frame(const glm::vec3 &camera_position) -> void;
 
-  auto flush(const CommandBuffer &buffer, u32 frame) -> void;
+  auto flush() -> void;
   auto end_frame() -> void;
 
-  void push_constants(const Core::CommandBuffer &, const GraphicsPipeline &,
-                      const Material &);
+  void push_constants(const GraphicsPipeline &, const Material &);
   void update_material_for_rendering(FrameIndex frame_index,
                                      Material &material_for_update,
                                      BufferSet<Buffer::Type::Uniform> *ubo_set,
@@ -132,6 +138,15 @@ public:
   auto set_extent(const Extent<u32> &ext) -> void { extent = ext; }
   auto get_sun_position() -> auto & { return sun_position; }
   auto get_depth_factors() -> auto & { return depth_factor; }
+  auto create_pool_and_layout() -> void;
+
+  [[nodiscard]] auto get_command_buffer() const -> const auto & {
+    return *command_buffer;
+  }
+
+  [[nodiscard]] auto get_compute_command_buffer() const -> const auto & {
+    return *compute_command_buffer;
+  }
 
   [[nodiscard]] static auto get_white_texture() -> const Texture & {
     return *white_texture;
@@ -141,10 +156,22 @@ public:
   }
 
 private:
+  const Device *device;
+  Scope<CommandBuffer> command_buffer{nullptr};
+  Scope<CommandBuffer> compute_command_buffer{nullptr};
+  FrameIndex current_frame{0};
+
   Extent<u32> extent{};
+
+  Scope<Mesh> grid_mesh;
 
   Scope<GraphicsPipeline> geometry_pipeline;
   Scope<Framebuffer> geometry_framebuffer;
+
+  Scope<GraphicsPipeline> fullscreen_pipeline;
+  Scope<Framebuffer> fullscreen_framebuffer;
+  Scope<Material> fullscreen_material;
+  Scope<Shader> fullscreen_shader;
 
   Scope<GraphicsPipeline> shadow_pipeline;
   Scope<Shader> shadow_shader;
@@ -156,13 +183,10 @@ private:
   Scope<Shader> grid_shader;
   Scope<GraphicsPipeline> grid_pipeline;
   Scope<Material> grid_material;
-  Scope<Mesh> grid_mesh;
 
   static inline Scope<Texture> white_texture;
   static inline Scope<Texture> black_texture;
   Scope<Texture> disarray_texture;
-  Scope<Mesh> sphere_mesh;
-  Scope<Mesh> cube_mesh;
 
   glm::vec3 sun_position{3, -5, -3};
 
@@ -185,9 +209,10 @@ private:
     return pipeline.hash() == bound_pipeline.hash;
   }
 
-  auto shadow_pass(const CommandBuffer &, u32) -> void;
-  auto grid_pass(const CommandBuffer &, u32) -> void;
-  auto geometry_pass(const CommandBuffer &, u32) -> void;
+  auto shadow_pass() -> void;
+  auto grid_pass() -> void;
+  auto geometry_pass() -> void;
+  auto fullscreen_pass() -> void;
 };
 
 } // namespace Core

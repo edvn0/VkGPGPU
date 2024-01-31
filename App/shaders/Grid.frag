@@ -1,35 +1,8 @@
 #version 460
 
+#include <ShaderResources.glsl>
+
 layout(location = 0) out vec4 out_colour;
-
-layout(std140, set = 0, binding = 3) uniform GridData
-{
-  vec4 grid_colour;
-  vec4 plane_colour;
-  vec4 grid_size;
-  vec4 fog_colour;
-}
-grid;
-
-layout(std140, set = 0, binding = 1) uniform ShadowData
-{
-  mat4 view;
-  mat4 projection;
-  mat4 view_projection;
-  vec2 bias_and_default;
-}
-shadow;
-
-layout(std140, set = 0, binding = 0) uniform RendererData
-{
-  mat4 view;
-  mat4 projection;
-  mat4 view_projection;
-  vec4 light_pos;
-  vec4 light_dir;
-  vec4 camera_pos;
-}
-renderer;
 
 void main()
 {

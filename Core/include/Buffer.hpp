@@ -1,14 +1,15 @@
 #pragma once
 
-#include "Device.hpp"
 #include "Types.hpp"
-#include "Verify.hpp"
 
 #include <cstring>
+#include <fmt/core.h>
 #include <limits>
 #include <span>
 #include <vector>
 #include <vulkan/vulkan_core.h>
+
+#include "core/Forward.hpp"
 
 namespace Core {
 
@@ -27,16 +28,7 @@ public:
   // Make movable
 
   [[nodiscard]] auto get_type() const noexcept -> Type { return type; }
-  [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType {
-    switch (type) {
-    case Type::Uniform:
-      return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    case Type::Storage:
-      return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    default:
-      return unreachable_return<VK_DESCRIPTOR_TYPE_MAX_ENUM>();
-    }
-  }
+  [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
   [[nodiscard]] auto get_size() const noexcept -> u64 { return size; }
   [[nodiscard]] auto get_binding() const noexcept -> u32 { return binding; }
   [[nodiscard]] auto get_buffer() const noexcept -> VkBuffer;

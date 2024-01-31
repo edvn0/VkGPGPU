@@ -4,8 +4,11 @@
 #include "Event.hpp"
 #include "Types.hpp"
 
-#include <GLFW/glfw3.h>
 #include <functional>
+
+extern "C" {
+struct GLFWwindow;
+}
 
 namespace Core {
 

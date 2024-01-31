@@ -88,7 +88,7 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                                    buffer_set, shader_hash);
 }
 
-auto SceneRenderer::destroy(const Device &device) -> void {
+auto SceneRenderer::destroy() -> void {
   Destructors::destroy(device, pool);
   Destructors::destroy(device, layout);
 
@@ -96,8 +96,7 @@ auto SceneRenderer::destroy(const Device &device) -> void {
   black_texture.reset();
 }
 
-auto SceneRenderer::begin_renderpass(const CommandBuffer &buffer,
-                                     const Framebuffer &framebuffer) -> void {
+auto SceneRenderer::begin_renderpass(const Framebuffer &framebuffer) -> void {
   VkRenderPassBeginInfo render_pass_begin_info = {};
   render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_begin_info.renderPass = framebuffer.get_render_pass();
@@ -110,8 +109,8 @@ auto SceneRenderer::begin_renderpass(const CommandBuffer &buffer,
   render_pass_begin_info.clearValueCount =
       static_cast<u32>(clear_values.size());
   render_pass_begin_info.pClearValues = clear_values.data();
-  vkCmdBeginRenderPass(buffer.get_command_buffer(), &render_pass_begin_info,
-                       VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBeginRenderPass(command_buffer->get_command_buffer(),
+                       &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
   // Scissors and viewport
   VkViewport viewport = {};
@@ -121,17 +120,16 @@ auto SceneRenderer::begin_renderpass(const CommandBuffer &buffer,
   viewport.height = -static_cast<float>(framebuffer.get_height());
   viewport.minDepth = 1.0F;
   viewport.maxDepth = 0.0F;
-  vkCmdSetViewport(buffer.get_command_buffer(), 0, 1, &viewport);
+  vkCmdSetViewport(command_buffer->get_command_buffer(), 0, 1, &viewport);
 
   VkRect2D scissor = {};
   scissor.extent.width = framebuffer.get_width();
   scissor.extent.height = framebuffer.get_height();
-  vkCmdSetScissor(buffer.get_command_buffer(), 0, 1, &scissor);
+  vkCmdSetScissor(command_buffer->get_command_buffer(), 0, 1, &scissor);
 }
 
-auto SceneRenderer::explicit_clear(const CommandBuffer &buffer,
-                                   const Framebuffer &framebuffer) -> void {
-  begin_renderpass(buffer, framebuffer);
+auto SceneRenderer::explicit_clear(const Framebuffer &framebuffer) -> void {
+  begin_renderpass(framebuffer);
 
   const std::vector<VkClearValue> &fb_clear_values =
       framebuffer.get_clear_values();
@@ -172,100 +170,87 @@ auto SceneRenderer::explicit_clear(const CommandBuffer &buffer,
   }
 
   vkCmdClearAttachments(
-      buffer.get_command_buffer(), static_cast<u32>(total_attachment_count),
-      attachments.data(), static_cast<u32>(total_attachment_count),
-      clear_rects.data());
+      command_buffer->get_command_buffer(),
+      static_cast<u32>(total_attachment_count), attachments.data(),
+      static_cast<u32>(total_attachment_count), clear_rects.data());
 
-  end_renderpass(buffer);
+  end_renderpass();
 }
 
-auto SceneRenderer::draw(const CommandBuffer &buffer,
-                         const DrawParameters &params) -> void {
-  vkCmdDrawIndexed(buffer.get_command_buffer(), params.index_count,
+auto SceneRenderer::draw(const DrawParameters &params) -> void {
+  vkCmdDrawIndexed(command_buffer->get_command_buffer(), params.index_count,
                    params.instance_count, params.first_index,
                    static_cast<i32>(params.vertex_offset),
                    params.first_instance);
 }
 
-auto SceneRenderer::bind_pipeline(const CommandBuffer &buffer,
-                                  const GraphicsPipeline &pipeline) -> void {
-  pipeline.bind(buffer);
+auto SceneRenderer::draw_vertices(const DrawParameters &params) -> void {
+  vkCmdDraw(command_buffer->get_command_buffer(), params.vertex_count,
+            params.instance_count, params.first_index, params.first_instance);
+}
+
+auto SceneRenderer::bind_pipeline(const GraphicsPipeline &pipeline) -> void {
+  pipeline.bind(*command_buffer);
   bound_pipeline = {
       .bound_pipeline = pipeline.get_pipeline(),
       .hash = pipeline.hash(),
   };
 }
 
-auto SceneRenderer::bind_index_buffer(const CommandBuffer &buffer,
-                                      const Buffer &index_buffer) -> void {
-  vkCmdBindIndexBuffer(buffer.get_command_buffer(), index_buffer.get_buffer(),
-                       0, VK_INDEX_TYPE_UINT32);
+auto SceneRenderer::bind_index_buffer(const Buffer &index_buffer) -> void {
+  vkCmdBindIndexBuffer(command_buffer->get_command_buffer(),
+                       index_buffer.get_buffer(), 0, VK_INDEX_TYPE_UINT32);
 }
 
-auto SceneRenderer::bind_vertex_buffer(const CommandBuffer &buffer,
-                                       const Buffer &vertex_buffer) -> void {
+auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer) -> void {
   constexpr std::array<VkDeviceSize, 1> offset = {0};
   const std::array buffers = {vertex_buffer.get_buffer()};
-  vkCmdBindVertexBuffers(buffer.get_command_buffer(), 0, 1, buffers.data(),
-                         offset.data());
+  vkCmdBindVertexBuffers(command_buffer->get_command_buffer(), 0, 1,
+                         buffers.data(), offset.data());
 }
 
 auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
-                                       const glm::mat4 &transform) -> void {
+                                       const glm::mat4 &transform,
+                                       const glm::vec4 &colour) -> void {
   for (const auto &submesh : mesh->get_submeshes()) {
     CommandKey key{mesh, submesh};
 
     auto &command = draw_commands[key];
     command.mesh_ptr = mesh;
     command.submesh_index = submesh;
-    command.transforms_and_instances.push_back(transform);
+    command.instance_count++;
+    command.transforms.push_back(transform);
+    command.colours.push_back(colour);
     command.material = mesh->get_material(submesh);
 
     if (mesh->casts_shadows()) {
       auto &shadow_command = shadow_draw_commands[key];
       shadow_command.mesh_ptr = mesh;
       shadow_command.submesh_index = submesh;
-      shadow_command.transforms_and_instances.push_back(transform);
+      shadow_command.instance_count++;
+      shadow_command.transforms.push_back(transform);
       shadow_command.material = shadow_material.get();
     }
   }
 }
 
-auto SceneRenderer::end_renderpass(const CommandBuffer &buffer) -> void {
-  vkCmdEndRenderPass(buffer.get_command_buffer());
+auto SceneRenderer::end_renderpass() -> void {
+  vkCmdEndRenderPass(command_buffer->get_command_buffer());
 }
 
-auto SceneRenderer::begin_frame(const Device &device, u32 frame,
-                                const glm::vec3 &camera_position) -> void {
-  vkResetDescriptorPool(device.get_device(), pool, 0);
-
-  // For now
-  const auto position = glm::translate(glm::mat4{1.0F}, sun_position);
-  const auto scale = glm::scale(glm::mat4{1.0F}, glm::vec3{10.0F});
-  const auto transformation = position * scale;
-  submit_static_mesh(sphere_mesh.get(), transformation);
-
-  // Floor
-  const auto floor_position =
-      glm::translate(glm::mat4{1.0F}, {0.0F, 20.0F, 0.0F});
-  const auto floor_scale =
-      glm::scale(glm::mat4{1.0F}, glm::vec3{1000.0F, 1000.0F, 0.1F});
-  const auto floor_rotation = glm::rotate(glm::mat4{1.0F}, glm::radians(90.0F),
-                                          glm::vec3{1.0F, 0.0F, 0.0F});
-  const auto floor_transformation =
-      floor_position * floor_rotation * floor_scale;
-  submit_static_mesh(cube_mesh.get(), floor_transformation);
+auto SceneRenderer::begin_frame(const glm::vec3 &camera_position) -> void {
+  vkResetDescriptorPool(device->get_device(), pool, 0);
 
   VkDescriptorSetAllocateInfo allocation_info{};
   allocation_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   allocation_info.descriptorPool = pool;
   allocation_info.descriptorSetCount = 1;
   allocation_info.pSetLayouts = &layout;
-  vkAllocateDescriptorSets(device.get_device(), &allocation_info, &active);
+  vkAllocateDescriptorSets(device->get_device(), &allocation_info, &active);
 
   VkWriteDescriptorSet ubo_write = {};
   {
-    const auto &ubo = ubos->get(0, frame);
+    const auto &ubo = ubos->get(0, current_frame);
     renderer_ubo.projection = glm::perspective(
         glm::radians(45.0F), extent.aspect_ratio(), 0.1F, 1000.0F);
     renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
@@ -286,7 +271,7 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   VkWriteDescriptorSet shadow_ubo_write = {};
   {
-    const auto &ubo_shadow = ubos->get(1, frame);
+    const auto &ubo_shadow = ubos->get(1, current_frame);
     shadow_ubo.projection =
         glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
                    depth_factor.value, depth_factor.near, depth_factor.far);
@@ -307,7 +292,7 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
 
   VkWriteDescriptorSet grid_ubo_write = {};
   {
-    const auto &ubo_grid = ubos->get(3, frame);
+    const auto &ubo_grid = ubos->get(3, current_frame);
     grid_ubo.grid_colour = glm::vec4{0.2F, 0.2F, 0.2F, 1.0F};
     grid_ubo.plane_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
     grid_ubo.grid_size = glm::vec4{1.0F, 1.0F, 0.0F, 0.0F};
@@ -323,118 +308,159 @@ auto SceneRenderer::begin_frame(const Device &device, u32 frame,
     grid_ubo_write.pBufferInfo = &ubo_grid->get_descriptor_info();
   }
 
-  VkWriteDescriptorSet ssbo_write = {};
+  VkWriteDescriptorSet ssbo_transforms_write = {};
   {
-    const auto &ssbo = ssbos->get(2, frame);
+    const auto &ssbo = ssbos->get(2, current_frame);
 
-    ssbo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ssbo_write.descriptorCount = 1;
-    ssbo_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    ssbo_write.dstSet = active;
-    ssbo_write.dstBinding = 1;
-    ssbo_write.pBufferInfo = &ssbo->get_descriptor_info();
+    ssbo_transforms_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    ssbo_transforms_write.descriptorCount = 1;
+    ssbo_transforms_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    ssbo_transforms_write.dstSet = active;
+    ssbo_transforms_write.dstBinding = 1;
+    ssbo_transforms_write.pBufferInfo = &ssbo->get_descriptor_info();
+  }
+
+  VkWriteDescriptorSet ssbo_colours_write = {};
+  {
+    const auto &ssbo = ssbos->get(4, current_frame);
+
+    ssbo_colours_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    ssbo_colours_write.descriptorCount = 1;
+    ssbo_colours_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    ssbo_colours_write.dstSet = active;
+    ssbo_colours_write.dstBinding = 1;
+    ssbo_colours_write.pBufferInfo = &ssbo->get_descriptor_info();
   }
 
   const std::array writes{
-      ubo_write,
-      ssbo_write,
-      shadow_ubo_write,
-      grid_ubo_write,
+      ubo_write,      ssbo_transforms_write, shadow_ubo_write,
+      grid_ubo_write, ssbo_colours_write,
   };
-  vkUpdateDescriptorSets(device.get_device(), static_cast<u32>(writes.size()),
+  vkUpdateDescriptorSets(device->get_device(), static_cast<u32>(writes.size()),
                          writes.data(), 0, nullptr);
 }
 
-auto SceneRenderer::shadow_pass(const CommandBuffer &buffer, u32 frame)
-    -> void {
-  bind_pipeline(buffer, *shadow_pipeline);
-  for (const auto &[mesh_ptr, submesh_index, transforms_and_instances,
-                    material] : shadow_draw_commands | std::views::values) {
-    const auto &transforms = ssbos->get(2, frame);
-    transforms->write(transforms_and_instances.data(),
-                      transforms_and_instances.size() * sizeof(glm::mat4));
+auto SceneRenderer::shadow_pass() -> void {
+  bind_pipeline(*shadow_pipeline);
+  const auto &transforms = ssbos->get(2, current_frame);
+  const auto &colours = ssbos->get(4, current_frame);
+  for (const auto &[mesh_ptr, submesh_index, instance_count, transform_data,
+                    colour_data, material] :
+       shadow_draw_commands | std::views::values) {
+    transforms->write(transform_data.data(),
+                      transform_data.size() * sizeof(glm::mat4));
+    colours->write(colour_data.data(), colour_data.size() * sizeof(glm::vec4));
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
     if (material) {
-      update_material_for_rendering(FrameIndex{frame}, *material, ubos.get(),
+      update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
-      material->bind(buffer, *shadow_pipeline, frame);
+      material->bind(*command_buffer, *shadow_pipeline, current_frame);
     }
 
-    bind_vertex_buffer(buffer, *mesh_ptr->get_vertex_buffer());
-    bind_index_buffer(buffer, *mesh_ptr->get_index_buffer());
+    bind_vertex_buffer(*mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(*mesh_ptr->get_index_buffer());
 
-    draw(buffer, {
-                     .index_count = submesh.index_count,
-                     .instance_count =
-                         static_cast<u32>(transforms_and_instances.size()),
-                     .first_index = submesh.base_index,
-                 });
+    draw({
+        .index_count = submesh.index_count,
+        .instance_count = instance_count,
+        .first_index = submesh.base_index,
+    });
   }
 }
 
-auto SceneRenderer::geometry_pass(const CommandBuffer &buffer, u32 frame)
-    -> void {
-  bind_pipeline(buffer, *geometry_pipeline);
-  for (auto &&[mesh_ptr, submesh_index, transforms_and_instances, material] :
-       draw_commands | std::views::values) {
+auto SceneRenderer::geometry_pass() -> void {
+  bind_pipeline(*geometry_pipeline);
+  const auto &transforms = ssbos->get(2, current_frame);
+  const auto &colours = ssbos->get(4, current_frame);
+  for (auto &&[mesh_ptr, submesh_index, instance_count, transform_data,
+               colour_data, material] : draw_commands | std::views::values) {
 
-    const auto &transforms = ssbos->get(2, frame);
-    transforms->write(transforms_and_instances.data(),
-                      transforms_and_instances.size() * sizeof(glm::mat4));
+    transforms->write(transform_data.data(),
+                      transform_data.size() * sizeof(glm::mat4));
+    colours->write(colour_data.data(), colour_data.size() * sizeof(glm::vec4));
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
     if (material) {
       material->set("shadow_map", *shadow_framebuffer->get_depth_image());
-      update_material_for_rendering(FrameIndex{frame}, *material, ubos.get(),
+      update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
-      material->bind(buffer, *geometry_pipeline, frame);
+      material->bind(*command_buffer, *geometry_pipeline, current_frame);
+      push_constants(*geometry_pipeline, *material);
     }
 
-    bind_vertex_buffer(buffer, *mesh_ptr->get_vertex_buffer());
-    bind_index_buffer(buffer, *mesh_ptr->get_index_buffer());
+    bind_vertex_buffer(*mesh_ptr->get_vertex_buffer());
+    bind_index_buffer(*mesh_ptr->get_index_buffer());
 
-    push_constants(buffer, *geometry_pipeline, *material);
-
-    draw(buffer, {
-                     .index_count = submesh.index_count,
-                     .instance_count =
-                         static_cast<u32>(transforms_and_instances.size()),
-                     .first_index = submesh.base_index,
-                 });
+    draw({
+        .index_count = submesh.index_count,
+        .instance_count = instance_count,
+        .first_index = submesh.base_index,
+    });
   }
 }
 
-auto SceneRenderer::grid_pass(const CommandBuffer &buffer, u32 frame) -> void {
-  bind_pipeline(buffer, *grid_pipeline);
-  update_material_for_rendering(FrameIndex{frame}, *grid_material, ubos.get(),
+auto SceneRenderer::grid_pass() -> void {
+  bind_pipeline(*grid_pipeline);
+  update_material_for_rendering(current_frame, *grid_material, ubos.get(),
                                 ssbos.get());
-  grid_material->bind(buffer, *grid_pipeline, frame);
+  grid_material->bind(*command_buffer, *grid_pipeline, current_frame);
   const auto &grid_submesh = grid_mesh->get_submesh(0);
 
-  bind_vertex_buffer(buffer, *grid_mesh->get_vertex_buffer());
-  bind_index_buffer(buffer, *grid_mesh->get_index_buffer());
+  bind_vertex_buffer(*grid_mesh->get_vertex_buffer());
+  bind_index_buffer(*grid_mesh->get_index_buffer());
 
-  push_constants(buffer, *grid_pipeline, *grid_material);
+  push_constants(*grid_pipeline, *grid_material);
 
-  draw(buffer, {
-                   .index_count = grid_submesh.index_count,
-                   .instance_count = 1,
-                   .first_index = grid_submesh.base_index,
-               });
+  draw({
+      .index_count = grid_submesh.index_count,
+      .instance_count = 1,
+      .first_index = grid_submesh.base_index,
+  });
 }
 
-auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
-  begin_renderpass(buffer, *shadow_framebuffer);
-  shadow_pass(buffer, frame);
-  end_renderpass(buffer);
+auto SceneRenderer::fullscreen_pass() -> void {
+  bind_pipeline(*fullscreen_pipeline);
 
-  begin_renderpass(buffer, *geometry_framebuffer);
-  grid_pass(buffer, frame);
-  geometry_pass(buffer, frame);
-  end_renderpass(buffer);
+  fullscreen_material->set("colour_texture",
+                           *geometry_framebuffer->get_image(0));
+
+  update_material_for_rendering(current_frame, *fullscreen_material, ubos.get(),
+                                ssbos.get());
+  fullscreen_material->bind(*command_buffer, *fullscreen_pipeline,
+                            current_frame);
+  draw_vertices({
+      .vertex_count = 3,
+  });
+}
+
+auto SceneRenderer::flush() -> void {
+  command_buffer->begin(current_frame);
+  {
+    begin_renderpass(*shadow_framebuffer);
+    shadow_pass();
+    end_renderpass();
+  }
+  command_buffer->end_and_submit();
+
+  command_buffer->begin(current_frame);
+  {
+    begin_renderpass(*geometry_framebuffer);
+    grid_pass();
+    geometry_pass();
+    end_renderpass();
+  }
+  command_buffer->end_and_submit();
+
+  command_buffer->begin(current_frame);
+  {
+    begin_renderpass(*fullscreen_framebuffer);
+    fullscreen_pass();
+    end_renderpass();
+  }
+  command_buffer->end_and_submit();
 
   draw_commands.clear();
   shadow_draw_commands.clear();
@@ -442,8 +468,7 @@ auto SceneRenderer::flush(const CommandBuffer &buffer, u32 frame) -> void {
 
 auto SceneRenderer::end_frame() -> void {}
 
-void SceneRenderer::push_constants(const CommandBuffer &buffer,
-                                   const GraphicsPipeline &pipeline,
+void SceneRenderer::push_constants(const GraphicsPipeline &pipeline,
                                    const Material &material) {
 
   const auto &constant_buffer = material.get_constant_buffer();
@@ -451,7 +476,7 @@ void SceneRenderer::push_constants(const CommandBuffer &buffer,
     return;
   }
 
-  vkCmdPushConstants(buffer.get_command_buffer(),
+  vkCmdPushConstants(command_buffer->get_command_buffer(),
                      pipeline.get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
                      constant_buffer.size(), constant_buffer.raw());
 }
@@ -498,8 +523,27 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
   return *shadow_framebuffer->get_depth_image();
 }
 
-auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
-    -> void {
+auto SceneRenderer::create(const Swapchain &swapchain) -> void {
+
+  set_extent(swapchain.get_extent());
+
+  command_buffer =
+      CommandBuffer::construct(*device, CommandBufferProperties{
+                                            .queue_type = Queue::Type::Graphics,
+                                            .count = Config::frame_count,
+                                            .is_primary = true,
+                                            .owned_by_swapchain = false,
+                                            .record_stats = true,
+                                        });
+
+  compute_command_buffer =
+      CommandBuffer::construct(*device, CommandBufferProperties{
+                                            .queue_type = Queue::Type::Compute,
+                                            .count = Config::frame_count,
+                                            .is_primary = true,
+                                            .owned_by_swapchain = false,
+                                            .record_stats = true,
+                                        });
 
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
@@ -519,7 +563,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
           },
       .debug_name = "DefaultFramebuffer",
   };
-  geometry_framebuffer = Framebuffer::construct(device, props);
+  geometry_framebuffer = Framebuffer::construct(*device, props);
 
   FramebufferProperties shadow_props{
       .width = 1024,
@@ -535,13 +579,13 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
           },
       .debug_name = "ShadowFramebuffer",
   };
-  shadow_framebuffer = Framebuffer::construct(device, shadow_props);
+  shadow_framebuffer = Framebuffer::construct(*device, shadow_props);
 
   DataBuffer white_data(sizeof(u32));
   u32 white = 0xFFFFFFFF;
   white_data.write(&white, sizeof(u32));
   white_texture = Texture::construct_from_buffer(
-      device,
+      *device,
       {
           .format = ImageFormat::UNORM_RGBA8,
           .extent =
@@ -555,14 +599,12 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       },
       std::move(white_data));
 
-  disarray_texture = Texture::construct(device, FS::texture("D.png"));
-  sphere_mesh = Mesh::import_from(device, FS::model("sphere.fbx"));
-  cube_mesh = Mesh::import_from(device, FS::model("cube.fbx"));
+  disarray_texture = Texture::construct(*device, FS::texture("D.png"));
 
-  shadow_shader = Shader::construct(device, FS::shader("Shadow.vert.spv"),
+  shadow_shader = Shader::construct(*device, FS::shader("Shadow.vert.spv"),
                                     FS::shader("Shadow.frag.spv"));
-  shadow_material = Material::construct(device, *shadow_shader);
-  geometry_shader = Shader::construct(device, FS::shader("Basic.vert.spv"),
+  shadow_material = Material::construct(*device, *shadow_shader);
+  geometry_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
                                       FS::shader("Basic.frag.spv"));
 
   GraphicsPipelineConfiguration config{
@@ -582,11 +624,11 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
-  geometry_pipeline = GraphicsPipeline::construct(device, config);
+  geometry_pipeline = GraphicsPipeline::construct(*device, config);
 
-  grid_shader = Shader::construct(device, FS::shader("Grid.vert.spv"),
+  grid_shader = Shader::construct(*device, FS::shader("Grid.vert.spv"),
                                   FS::shader("Grid.frag.spv"));
-  grid_material = Material::construct(device, *grid_shader);
+  grid_material = Material::construct(*device, *grid_shader);
   GraphicsPipelineConfiguration grid_config{
       .name = "GridPipeline",
       .shader = grid_shader.get(),
@@ -604,8 +646,8 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
-  grid_pipeline = GraphicsPipeline::construct(device, grid_config);
-  grid_mesh = Mesh::import_from(device, FS::model("cube.fbx"));
+  grid_pipeline = GraphicsPipeline::construct(*device, grid_config);
+  grid_mesh = Mesh::import_from(*device, FS::model("cube.fbx"));
 
   GraphicsPipelineConfiguration shadow_config{
       .name = "ShadowGraphicsPipeline",
@@ -624,8 +666,49 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
-  shadow_pipeline = GraphicsPipeline::construct(device, shadow_config);
+  shadow_pipeline = GraphicsPipeline::construct(*device, shadow_config);
 
+  fullscreen_shader =
+      Shader::construct(*device, FS::shader("Triangle.vert.spv"),
+                        FS::shader("Triangle.frag.spv"));
+  fullscreen_material = Material::construct(*device, *fullscreen_shader);
+  FramebufferProperties fullscreen_props{
+      .width = swapchain.get_extent().width,
+      .height = swapchain.get_extent().height,
+      .clear_colour = {0.1F, 0.1F, 0.1F, 1.0F},
+      .depth_clear_value = 0.0F,
+      .blend = true,
+      .attachments =
+          FramebufferAttachmentSpecification{
+              FramebufferTextureSpecification{
+                  .format = ImageFormat::SRGB_RGBA32,
+              },
+          },
+      .debug_name = "FullscreenFramebuffer",
+  };
+  fullscreen_framebuffer = Framebuffer::construct(*device, fullscreen_props);
+  GraphicsPipelineConfiguration fullscreen_config{
+      .name = "FullscreenPipeline",
+      .shader = fullscreen_shader.get(),
+      .framebuffer = fullscreen_framebuffer.get(),
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .cull_mode = CullMode::Back,
+      .face_mode = FaceMode::CounterClockwise,
+  };
+  fullscreen_pipeline = GraphicsPipeline::construct(*device, fullscreen_config);
+
+  create_pool_and_layout();
+
+  ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(*device);
+  ubos->create(sizeof(RendererUBO), SetBinding(0));
+  ubos->create(sizeof(ShadowUBO), SetBinding(1));
+  ubos->create(sizeof(GridUBO), SetBinding(3));
+  ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(*device);
+  ssbos->create(sizeof(TransformData), SetBinding(2));
+  ssbos->create(sizeof(ColourData), SetBinding(4));
+}
+
+auto SceneRenderer::create_pool_and_layout() -> void {
   std::array<VkDescriptorPoolSize, 4> pool_sizes = {
       VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                            10 * Config::frame_count},
@@ -642,7 +725,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
   pool_info.pPoolSizes = pool_sizes.data();
 
   verify(
-      vkCreateDescriptorPool(device.get_device(), &pool_info, nullptr, &pool),
+      vkCreateDescriptorPool(device->get_device(), &pool_info, nullptr, &pool),
       "vkCreateDescriptorPool", "Failed to create descriptor pool");
 
   VkDescriptorSetLayoutBinding ubo_binding{
@@ -652,7 +735,7 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .stageFlags = VK_SHADER_STAGE_ALL,
   };
 
-  VkDescriptorSetLayoutBinding ssbo_binding{
+  VkDescriptorSetLayoutBinding ssbo_transforms_binding{
       .binding = 1,
       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
       .descriptorCount = 1,
@@ -673,11 +756,16 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .stageFlags = VK_SHADER_STAGE_ALL,
   };
 
+  VkDescriptorSetLayoutBinding ssbo_colours_binding{
+      .binding = 4,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_ALL,
+  };
+
   std::array bindings{
-      ubo_binding,
-      ssbo_binding,
-      shadow_binding,
-      grid_binding,
+      ubo_binding,  ssbo_transforms_binding, shadow_binding,
+      grid_binding, ssbo_colours_binding,
   };
   VkDescriptorSetLayoutCreateInfo create_info{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -685,15 +773,8 @@ auto SceneRenderer::create(const Device &device, const Swapchain &swapchain)
       .pBindings = bindings.data(),
   };
 
-  vkCreateDescriptorSetLayout(device.get_device(), &create_info, nullptr,
+  vkCreateDescriptorSetLayout(device->get_device(), &create_info, nullptr,
                               &layout);
-
-  ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(device);
-  ubos->create(sizeof(RendererUBO), SetBinding(0));
-  ubos->create(sizeof(ShadowUBO), SetBinding(1));
-  ubos->create(sizeof(GridUBO), SetBinding(3));
-  ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(device);
-  ssbos->create(sizeof(TransformData), SetBinding(2));
 }
 
 } // namespace Core

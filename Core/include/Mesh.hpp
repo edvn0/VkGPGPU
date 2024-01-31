@@ -70,9 +70,14 @@ public:
   [[nodiscard]] constexpr auto casts_shadows() const -> bool {
     return is_shadow_caster;
   }
+  [[nodiscard]] auto is_shadow_casting(bool casts) { is_shadow_caster = casts; }
 
   static auto import_from(const Device &device, const FS::Path &file_path)
       -> Scope<Mesh>;
+  static auto reference_import_from(const Device &device,
+                                    const FS::Path &file_path) -> Ref<Mesh>;
+
+  static auto clear_cache() -> void { mesh_cache.clear(); }
 
 private:
   Mesh(const Device &device, const FS::Path &);
@@ -117,7 +122,9 @@ private:
   };
   Scope<ImporterImpl, Deleter> importer;
 
-  bool is_shadow_caster{true};
+  bool is_shadow_caster{false};
+
+  static inline std::unordered_map<std::string, Ref<Mesh>> mesh_cache{};
 };
 
 } // namespace Core

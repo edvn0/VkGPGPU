@@ -5,13 +5,12 @@
 #include "Config.hpp"
 #include "Device.hpp"
 #include "Math.hpp"
-#include "Shader.hpp"
 #include "Texture.hpp"
 
 #include <BufferSet.hpp>
 #include <optional>
 
-#include "reflection/ReflectionData.hpp"
+#include "reflection/Forward.hpp"
 
 namespace Core {
 

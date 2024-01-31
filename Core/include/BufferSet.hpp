@@ -4,6 +4,7 @@
 #include "Config.hpp"
 #include "Device.hpp"
 #include "Types.hpp"
+#include "Verify.hpp"
 
 #include <ranges>
 
