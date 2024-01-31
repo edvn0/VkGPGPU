@@ -11,14 +11,14 @@ constexpr auto GPGPU_BUFFER_SECONDS = 0.5;
 
 namespace Core {
 
+static constexpr auto loops_per_second = 20000;
+const size_t Timer::buffer_size = GPGPU_BUFFER_SECONDS * loops_per_second;
 std::vector<Timer::BufferSize> Timer::buffer(Timer::buffer_size);
 std::chrono::time_point<std::chrono::high_resolution_clock>
     Timer::last_write_time = std::chrono::high_resolution_clock::now();
 size_t Timer::current_index = 0;
 size_t Timer::last_write_index = 0;
 std::mutex Timer::buffer_mutex;
-static constexpr auto loops_per_second = 20000;
-const size_t Timer::buffer_size = GPGPU_BUFFER_SECONDS * loops_per_second;
 
 Timer::Timer(const Bus::MessagingClient &client) : messaging_client(&client) {
   start_time = std::chrono::high_resolution_clock::now();
@@ -35,6 +35,7 @@ void Timer::end() {
                       .count();
   add_duration(duration);
   if (should_write_to_file()) {
+    write_to_file();
   }
 }
 

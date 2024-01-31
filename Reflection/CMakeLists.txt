@@ -8,4 +8,9 @@ set(SOURCES
 )
 add_library(Reflection STATIC ${SOURCES})
 target_link_libraries(Reflection fmt::fmt Vulkan::Vulkan spirv-cross-core spirv-cross-glsl)
-target_include_directories(Reflection PUBLIC ${CMAKE_SOURCE_DIR}/ThirdParty ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${CMAKE_SOURCE_DIR}/Core/include ${CMAKE_SOURCE_DIR}/Core/inline)
+target_include_directories(Reflection PUBLIC 
+    ${CMAKE_SOURCE_DIR}/ThirdParty 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE 
+    ${CMAKE_SOURCE_DIR}/Core/include 
+    ${CMAKE_SOURCE_DIR}/Core/inline 
+    ${CMAKE_SOURCE_DIR}/ThirdParty/glm)

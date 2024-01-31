@@ -4,10 +4,31 @@
 
 #include <fmt/core.h>
 #include <type_traits>
+#include <vulkan/vulkan.h>
 
 namespace Core {
 
-template <std::integral T> struct Extent {
+#define MAKE_BITFIELD(TYPE, BaseType)                                          \
+  constexpr auto operator|(TYPE lhs, TYPE rhs) {                               \
+    return static_cast<TYPE>(static_cast<BaseType>(lhs) |                      \
+                             static_cast<BaseType>(rhs));                      \
+  }                                                                            \
+  constexpr auto operator|=(TYPE &lhs, TYPE rhs) {                             \
+    lhs = static_cast<TYPE>(static_cast<BaseType>(lhs) |                       \
+                            static_cast<BaseType>(rhs));                       \
+    return lhs;                                                                \
+  }                                                                            \
+  constexpr auto operator&(TYPE lhs, TYPE rhs) {                               \
+    return static_cast<TYPE>(static_cast<BaseType>(lhs) &                      \
+                             static_cast<BaseType>(rhs));                      \
+  }                                                                            \
+  constexpr auto operator&=(TYPE &lhs, TYPE rhs) {                             \
+    lhs = static_cast<TYPE>(static_cast<BaseType>(lhs) &                       \
+                            static_cast<BaseType>(rhs));                       \
+    return lhs;                                                                \
+  }
+
+template <IsNumber T> struct Extent {
   T width{0};
   T height{0};
 
@@ -16,9 +37,14 @@ template <std::integral T> struct Extent {
     return static_cast<floating>(width) / static_cast<floating>(height);
   }
 
+  [[nodiscard]] auto valid() const noexcept -> bool {
+    return width > 0 && height > 0;
+  }
+
   // Cast to another type Other, not the same as T
-  template <std::integral Other>
-    requires(!std::is_same_v<Other, T>)
+  template <typename Other>
+    requires(!std::is_same_v<Other, T> &&
+             (std::is_integral_v<Other> || std::is_floating_point_v<Other>))
   auto as() const {
     return Extent<Other>{
         .width = static_cast<Other>(width),
@@ -41,19 +67,12 @@ enum class ImageUsage : std::uint8_t {
   TransferDst = bit(1),
   Sampled = bit(2),
   Storage = bit(3),
-  ColorAttachment = bit(4),
+  ColourAttachment = bit(4),
   DepthStencilAttachment = bit(5),
   TransientAttachment = bit(6),
   InputAttachment = bit(7),
 };
-constexpr auto operator|(ImageUsage lhs, ImageUsage rhs) {
-  return static_cast<ImageUsage>(static_cast<std::byte>(lhs) |
-                                 static_cast<std::byte>(rhs));
-}
-constexpr auto operator&(ImageUsage lhs, ImageUsage rhs) {
-  return static_cast<ImageUsage>(static_cast<std::byte>(lhs) &
-                                 static_cast<std::byte>(rhs));
-}
+MAKE_BITFIELD(ImageUsage, std::uint8_t)
 
 enum class ImageLayout : std::uint16_t {
   Undefined = bit(0),
@@ -73,59 +92,18 @@ enum class ImageLayout : std::uint16_t {
   ShadingRateOptimalNV = bit(14),
   FragmentDensityMapOptimalEXT = bit(15),
 };
+MAKE_BITFIELD(ImageLayout, std::uint16_t)
 
 enum class ImageFormat : std::uint8_t {
   Undefined,
-  R4G4UnormPack8,
-  R4G4B4A4UnormPack16,
-  B4G4R4A4UnormPack16,
-  R5G6B5UnormPack16,
-  B5G6R5UnormPack16,
-  R5G5B5A1UnormPack16,
-  B5G5R5A1UnormPack16,
-  A1R5G5B5UnormPack16,
-  R8Unorm,
-  R8Snorm,
-  R8Uscaled,
-  R8Sscaled,
-  R8Uint,
-  R8Sint,
-  R8Srgb,
-  R8G8Unorm,
-  R8G8Snorm,
-  R8G8Uscaled,
-  R8G8Sscaled,
-  R8G8Uint,
-  R8G8Sint,
-  R8G8Srgb,
-  R8G8B8Unorm,
-  R8G8B8Snorm,
-  R8G8B8Uscaled,
-  R8G8B8Sscaled,
-  R8G8B8Uint,
-  R8G8B8Sint,
-  R8G8B8Srgb,
-  B8G8R8Unorm,
-  B8G8R8Snorm,
-  B8G8R8Uscaled,
-  B8G8R8Sscaled,
-  B8G8R8Uint,
-  B8G8R8Sint,
-  B8G8R8Srgb,
-  R8G8B8A8Unorm,
-  R8G8B8A8Snorm,
-  R8G8B8A8Uscaled,
-  R8G8B8A8Sscaled,
-  R8G8B8A8Uint,
-  R8G8B8A8Sint,
-  R8G8B8A8Srgb,
-  B8G8R8A8Unorm,
-  B8G8R8A8Snorm,
-  B8G8R8A8Uscaled,
-  B8G8R8A8Sscaled,
-  B8G8R8A8Uint,
-  B8G8R8A8Sint
+  SRGB_RGBA8,
+  SRGB_RGBA32,
+  UNORM_RGBA8,
+  DEPTH32F,
+  DEPTH24STENCIL8,
+  DEPTH16
 };
+auto to_vulkan_format(ImageFormat format) -> VkFormat;
 
 enum class SamplerFilter : std::uint8_t {
   Nearest,
@@ -147,6 +125,17 @@ enum class SamplerBorderColor : std::uint8_t {
   IntOpaqueBlack,
   FloatOpaqueWhite,
   IntOpaqueWhite,
+};
+
+enum class CompareOperation : std::uint8_t {
+  Never,
+  Less,
+  Equal,
+  LessOrEqual,
+  Greater,
+  NotEqual,
+  GreaterOrEqual,
+  Always,
 };
 
 template <class T>

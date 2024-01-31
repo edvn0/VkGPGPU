@@ -6,142 +6,120 @@
 #include "Config.hpp"
 #include "DescriptorResource.hpp"
 #include "Formatters.hpp"
+#include "InterfaceSystem.hpp"
 #include "Logger.hpp"
+#include "UI.hpp"
 
 #include <cstddef>
 #include <exception>
 
 #include "rabbitmq/RabbitMQMessagingAPI.hpp"
 
-template <std::size_t N = 10000> struct FPSAverage {
-  std::array<Core::floating, N> frame_times{};
-  Core::floating frame_time_sum = 0.0;
-  Core::i32 frame_time_index = 0;
-  Core::i32 frame_counter = 0;
-
-  std::chrono::high_resolution_clock::time_point last_time;
-  bool initialized = false;
-
-  auto update() -> void {
-    if (!initialized) {
-      last_time = std::chrono::high_resolution_clock::now();
-      initialized = true;
-      return;
-    }
-
-    const auto current_time = std::chrono::high_resolution_clock::now();
-    const auto delta_time_seconds =
-        std::chrono::duration<Core::floating>(current_time - last_time).count();
-    last_time = current_time;
-
-    // Update moving average for frame time
-    frame_time_sum -= frame_times[frame_time_index];
-    frame_times[frame_time_index] = delta_time_seconds;
-    frame_time_sum += delta_time_seconds;
-    frame_time_index = (frame_time_index + 1) % N;
-
-    // Increment frame counter
-    frame_counter++;
-  }
-
-  [[nodiscard]] auto should_print() const -> bool {
-    return (frame_counter + 1) % N == 0;
-  }
-
-  auto print() const -> void {
-    const auto avg_frame_time = frame_time_sum / N;
-    const auto fps = 1.0 / avg_frame_time;
-
-    // Log average frame time and FPS
-    info("Average Frame Time: {:.6f} ms, FPS: {:.0f}", avg_frame_time * 1000.0,
-         fps);
-  }
-};
-
 namespace Core {
+
+auto AppDeleter::operator()(App *app) const noexcept -> void {
+  delete app;
+  info("Everything is cleaned up. Goodbye!");
+}
 
 App::App(const ApplicationProperties &props) : properties(props) {
   // Initialize the instance
-  instance = Instance::construct();
-
-  // Initialize the device
-  device = Device::construct(*instance);
+  instance = Instance::construct(properties.headless);
 
   const auto hostname = "localhost";
   const auto port = 5672;
   message_client = make_scope<Bus::MessagingClient>(
       make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
 
+  window = Window::construct(*instance, {
+                                            .extent = extent,
+                                            .fullscreen = false,
+                                            .vsync = false,
+                                            .headless = properties.headless,
+                                        });
+  // Initialize the device
+  device = Device::construct(*instance, *window);
+  UI::initialise(*device);
+
+  swapchain = Swapchain::construct(*device, *window,
+                                   {
+                                       .extent = extent,
+                                       .headless = properties.headless,
+                                   });
   Allocator::construct(*device, *instance);
 }
 
 App::~App() {
   Allocator::destroy();
+  swapchain.reset();
+  window.reset();
   device.reset();
   instance.reset();
 }
 
-auto App::frame() const -> u32 { return current_frame; }
+auto App::frame() const -> u32 { return swapchain->current_frame(); }
 
 auto App::run() -> void {
   static constexpr auto now = [] {
     return std::chrono::high_resolution_clock::now();
   };
 
-  try {
-    FPSAverage<1000> fps_average; // Object for tracking the frames per second.
-    on_create();                  // Initialize your application.
+  Scope<InterfaceSystem> interface_system =
+      make_scope<InterfaceSystem>(*device, *window, *swapchain);
 
-    auto last_time = now();            // Record the starting time.
-    const auto total_time = last_time; // Store the total time of the app.
+  on_create();
 
-    // Main loop
-    while (running) {
-      device->get_descriptor_resource()->begin_frame(current_frame);
-      const auto current_time =
-          now(); // Get the current time at the start of the loop.
+  auto last_time = now();
+  const auto total_time = last_time;
 
-      // Calculate the time delta since the last frame.
-      const auto delta_time_seconds =
-          std::chrono::duration<floating>(current_time - last_time).count();
-
-      // Update the fps average.
-      fps_average.update();
-
-      // Print the fps if needed.
-      if (fps_average.should_print()) {
-        fps_average.print();
-      }
-
-      // Call the update function with the time delta.
-      on_update(delta_time_seconds);
-
-      // Update the frame count.
-      current_frame = (current_frame + 1) % Config::frame_count;
-
-      // Update the last_time to the current time after the frame update.
-      last_time = current_time;
-
-      device->get_descriptor_resource()->end_frame();
-      frame_counter++;
-
-#ifdef GPGPU_DEBUG
-      // We want to make sure that all of the destruction logic is working :^)
-      if (frame_counter > 5'000) {
-        break;
-      }
-#endif
+  while (!window->should_close()) {
+    if (was_resized()) {
+      on_resize(window->get_extent());
+      window->reset_resize_status();
+      continue;
     }
 
-    // Calculate and log the total runtime.
-    info("Total time: {} seconds.",
-         std::chrono::duration<floating>(now() - total_time).count());
-    on_destroy(); // Clean up resources.
+    if (!swapchain->begin_frame())
+      continue;
 
-  } catch (const std::exception &exc) {
-    error("Main loop exception: {}", exc);
-    throw;
+    fps_average.update();
+
+    if (fps_average.should_print()) {
+      fps_average.print();
+    }
+
+    device->get_descriptor_resource()->begin_frame(swapchain->current_frame());
+    const auto current_time = now();
+
+    const auto delta_time_seconds =
+        std::chrono::duration<floating>(current_time - last_time).count();
+
+    on_update(delta_time_seconds);
+
+    {
+      interface_system->begin_frame();
+      on_interface(*interface_system);
+      interface_system->end_frame();
+    }
+
+    swapchain->end_frame();
+
+    last_time = current_time;
+
+    frame_counter++;
+
+    window->update();
+
+    device->get_descriptor_resource()->end_frame();
+    swapchain->present();
   }
+
+  vkDeviceWaitIdle(device->get_device());
+
+  info("Total time: {} seconds.",
+       std::chrono::duration<floating>(now() - total_time).count());
+
+  on_destroy();
 }
 
 } // namespace Core

@@ -14,11 +14,15 @@ class CommandDispatcher {
   };
 
 public:
-  explicit CommandDispatcher(CommandBuffer *command_buffer)
+  explicit CommandDispatcher(const CommandBuffer *command_buffer)
       : command_buffer(command_buffer) {}
 
   // Non-owning destructor
   ~CommandDispatcher() = default;
+
+  auto set_command_buffer(const CommandBuffer *new_command_buffer) -> void {
+    command_buffer = new_command_buffer;
+  }
 
   template <CommandBufferBindable T, typename... Args>
   void bind(T &object, Args &&...args) {
@@ -31,7 +35,6 @@ public:
     if (!constant_buffer.valid())
       return;
 
-    // TODO: Generalise for other stages
     vkCmdPushConstants(command_buffer->get_command_buffer(),
                        pipeline.get_pipeline_layout(),
                        VK_SHADER_STAGE_COMPUTE_BIT, 0, constant_buffer.size(),
@@ -45,7 +48,7 @@ public:
   }
 
 private:
-  CommandBuffer *command_buffer{nullptr};
+  const CommandBuffer *command_buffer{nullptr};
 };
 
 } // namespace Core

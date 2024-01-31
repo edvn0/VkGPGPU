@@ -8,28 +8,33 @@
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"
 #include "DescriptorResource.hpp"
+#include "Destructors.hpp"
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
+#include "Framebuffer.hpp"
 #include "Image.hpp"
 #include "Instance.hpp"
 #include "Logger.hpp"
 #include "Material.hpp"
 #include "Math.hpp"
+#include "Mesh.hpp"
 #include "Pipeline.hpp"
+#include "SceneRenderer.hpp"
 #include "Shader.hpp"
 #include "Texture.hpp"
 #include "Timer.hpp"
 #include "Types.hpp"
 
+#include <compare>
+#include <glm/gtc/matrix_transform.hpp>
 #include <numbers>
 #include <random>
+#include <unordered_map>
 
 #include "bus/MessagingClient.hpp"
-
-#if !defined(GPGPU_PIPELINE)
-#include <renderdoc_app.h>
-#endif
+#include "ecs/Scene.hpp"
+#include "widgets/Widget.hpp"
 
 using namespace Core;
 
@@ -39,43 +44,68 @@ public:
   ~ClientApp() override = default;
 
   void on_update(floating ts) override;
+  void on_resize(const Extent<u32> &) override;
+  void on_interface(Core::InterfaceSystem &) override;
   void on_create() override;
   void on_destroy() override;
 
 private:
+  Scope<ECS::Scene> scene;
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
 
-  using UniformSet = BufferSet<Buffer::Type::Uniform>;
-  using StorageSet = BufferSet<Buffer::Type::Storage>;
+  glm::vec3 camera_position{-3, -5, 3};
 
+  std::vector<Scope<Widget>> widgets{};
+
+  using UniformSet = BufferSet<Buffer::Type::Uniform>;
   UniformSet uniform_buffer_set;
+  using StorageSet = BufferSet<Buffer::Type::Storage>;
   StorageSet storage_buffer_set;
 
   Timer timer;
 
   Scope<CommandBuffer> command_buffer;
-  Scope<Material> material;
+  Scope<CommandBuffer> graphics_command_buffer;
+  Scope<Framebuffer> framebuffer;
 
+  Scope<Material> material;
   Scope<Pipeline> pipeline;
   Scope<Shader> shader;
+
+  Scope<Material> second_material;
+  Scope<Pipeline> second_pipeline;
+  Scope<Shader> second_shader;
+
+  Scope<Buffer> vertex_buffer;
+  Scope<Buffer> index_buffer;
+  Scope<Material> graphics_material;
+  Scope<GraphicsPipeline> graphics_pipeline;
+  Scope<Shader> graphics_shader;
+
   Scope<Texture> texture;
   Scope<Texture> output_texture;
+  Scope<Texture> output_texture_second;
+
+  Scope<Mesh> triangle_mesh;
+  Scope<Mesh> cube_mesh;
+  Scope<Mesh> sponza_mesh;
+
+  SceneRenderer scene_renderer{};
+
+  struct PCForMaterial {
+    i32 kernel_size{};
+    i32 half_size{};
+    i32 center_value{};
+  };
+  PCForMaterial pc{};
 
   std::array<Math::Mat4, 10> matrices{};
-  std::array<Math::Mat4, 10> output_matrices{};
 
-#if !defined(GPGPU_PIPELINE)
-  RENDERDOC_API_1_6_0 *renderdoc{nullptr};
-#endif
-
+  auto update_entities(floating ts) -> void;
+  auto scene_drawing(floating ts) -> void;
   auto compute(floating ts) -> void;
   auto graphics(floating ts) -> void;
 
   void perform();
-  auto update_material_for_rendering(FrameIndex frame_index,
-                                     Material &material_for_update,
-                                     BufferSet<Buffer::Type::Uniform> *ubo_set,
-                                     BufferSet<Buffer::Type::Storage> *sbo_set)
-      -> void;
 };

@@ -8,6 +8,7 @@
 #include "Logger.hpp"
 #include "Types.hpp"
 #include "Verify.hpp"
+#include "Window.hpp"
 
 #include <fmt/format.h>
 #include <fmt/std.h>
@@ -21,8 +22,8 @@ public:
   using BaseException::BaseException;
 };
 
-Device::Device(const Instance &inst) : instance(inst) {
-  construct_vulkan_device();
+Device::Device(const Instance &inst, const Window &window) : instance(inst) {
+  construct_vulkan_device(window);
   descriptor_resource = DescriptorResource::construct(*this);
 }
 
@@ -53,8 +54,9 @@ auto Device::check_support(const Feature feature, Queue::Type queue) const
   return false;
 }
 
-auto Device::construct(const Instance &instance) -> Scope<Device> {
-  return make_scope<Device>(instance);
+auto Device::construct(const Instance &instance, const Window &window)
+    -> Scope<Device> {
+  return Scope<Device>{new Device(instance, window)};
 }
 
 auto Device::enumerate_physical_devices(VkInstance inst)
@@ -117,16 +119,16 @@ auto Device::select_physical_device(
     }
 
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-      return dev;
       info("Selected device: {}", properties.deviceName);
-      break;
+      return dev;
     }
   }
 
   return devices[0];
 }
 
-auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
+auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev,
+                                           VkSurfaceKHR surface)
     -> std::vector<IndexQueueTypePair> {
   u32 queue_family_count = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(dev, &queue_family_count, nullptr);
@@ -138,6 +140,7 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
 
   int dedicated_compute_queue_index = -1;
   int dedicated_transfer_queue_index = -1;
+  int dedicated_present_queue_index = -1;
 
   // First pass: Look for dedicated compute and transfer queues
   for (auto i = 0ULL; i < queue_families.size(); ++i) {
@@ -146,6 +149,8 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
     bool is_graphics_queue = queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT;
     bool is_compute_queue = queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT;
     bool is_transfer_queue = queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT;
+    VkBool32 is_present_queue = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &is_present_queue);
 
     if (is_compute_queue && !is_graphics_queue) { // Dedicated compute queue
       dedicated_compute_queue_index = static_cast<i32>(i);
@@ -154,6 +159,10 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
     if (is_transfer_queue && !is_graphics_queue &&
         !is_compute_queue) { // Dedicated transfer queue
       dedicated_transfer_queue_index = static_cast<i32>(i);
+    }
+
+    if (is_present_queue) { // Dedicated present queue
+      dedicated_present_queue_index = static_cast<i32>(i);
     }
   }
 
@@ -182,7 +191,23 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev)
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
+      const auto disabled = true;
+
       queue_infos.emplace_back(Queue::Type::Transfer, queue_info,
+                               !disabled &&
+                                   queue_family.timestampValidBits > 0);
+      continue;
+    }
+
+    if (i == dedicated_present_queue_index) {
+      auto priority = 1.0F;
+      VkDeviceQueueCreateInfo queue_info{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .queueFamilyIndex = i,
+          .queueCount = 1,
+          .pQueuePriorities = &priority,
+      };
+      queue_infos.emplace_back(Queue::Type::Present, queue_info,
                                queue_family.timestampValidBits > 0);
       continue;
     }
@@ -209,6 +234,7 @@ auto Device::create_vulkan_device(
 
   VkPhysicalDeviceFeatures device_features{};
   device_features.pipelineStatisticsQuery = VK_TRUE;
+  device_features.logicOp = VK_TRUE;
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
   for (auto &&[type, queue_info, supports_timestamping] :
@@ -219,11 +245,16 @@ auto Device::create_vulkan_device(
     queue_support[type] = {supports_timestamping};
   }
 
+  auto swapchain_extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+  std::vector<const char *> extensions = {swapchain_extension};
+
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = nullptr,
       .queueCreateInfoCount = static_cast<u32>(queue_infos.size()),
       .pQueueCreateInfos = queue_infos.data(),
+      .enabledExtensionCount = static_cast<u32>(extensions.size()),
+      .ppEnabledExtensionNames = extensions.data(),
       .pEnabledFeatures = &device_features,
   };
 
@@ -248,13 +279,14 @@ auto Device::initialize_queues(
   }
 }
 
-auto Device::construct_vulkan_device() -> void {
+auto Device::construct_vulkan_device(const Window &window) -> void {
 
   auto vk_instance = instance.get_instance();
   auto devices = enumerate_physical_devices(vk_instance);
   physical_device = select_physical_device(devices);
 
-  auto index_queue_type_pairs = find_all_possible_queue_infos(physical_device);
+  auto index_queue_type_pairs =
+      find_all_possible_queue_infos(physical_device, window.get_surface());
   device = create_vulkan_device(physical_device, index_queue_type_pairs);
   initialize_queues(index_queue_type_pairs);
 
@@ -281,6 +313,29 @@ auto Device::construct_vulkan_device() -> void {
     info("{} queue: family index {}, queue {}", type_string, v.family_index,
          fmt::ptr(v.queue));
   }
+}
+auto Device::get_physical_device_surface_formats(VkSurfaceKHR surface) const
+    -> std::vector<VkSurfaceFormatKHR> {
+  auto surface_formats = std::vector<VkSurfaceFormatKHR>{};
+  u32 surface_format_count = 0;
+  vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface,
+                                       &surface_format_count, nullptr);
+  surface_formats.resize(surface_format_count);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(
+      physical_device, surface, &surface_format_count, surface_formats.data());
+  return surface_formats;
+}
+
+auto Device::get_physical_device_surface_present_modes(
+    VkSurfaceKHR surface) const -> std::vector<VkPresentModeKHR> {
+  auto present_modes = std::vector<VkPresentModeKHR>{};
+  u32 present_mode_count = 0;
+  vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface,
+                                            &present_mode_count, nullptr);
+  present_modes.resize(present_mode_count);
+  vkGetPhysicalDeviceSurfacePresentModesKHR(
+      physical_device, surface, &present_mode_count, present_modes.data());
+  return present_modes;
 }
 
 } // namespace Core

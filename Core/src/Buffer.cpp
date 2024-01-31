@@ -38,7 +38,7 @@ struct BufferDataImpl {
 
 Buffer::Buffer(const Device &dev, u64 input_size, Type buffer_type,
                u32 input_binding)
-    : device(dev), buffer_data(make_scope<BufferDataImpl>()), size(input_size),
+    : device(&dev), buffer_data(make_scope<BufferDataImpl>()), size(input_size),
       type(buffer_type), binding(input_binding) {
   initialise_vulkan_buffer();
   initialise_descriptor_info();
@@ -47,6 +47,11 @@ Buffer::Buffer(const Device &dev, u64 input_size, Type buffer_type,
 auto Buffer::construct(const Device &device, u64 input_size, Type buffer_type,
                        u32 binding) -> Scope<Buffer> {
   return make_scope<Buffer>(device, input_size, buffer_type, binding);
+}
+
+auto Buffer::construct(const Device &device, u64 input_size, Type buffer_type)
+    -> Scope<Buffer> {
+  return make_scope<Buffer>(device, input_size, buffer_type, invalid_binding);
 }
 
 auto Buffer::initialise_descriptor_info() -> void {
@@ -75,14 +80,58 @@ void Buffer::initialise_vulkan_buffer() {
     break;
   }
 
-  DebugMarker::set_object_name(device, buffer_data->buffer,
+  DebugMarker::set_object_name(*device, buffer_data->buffer,
                                VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT,
                                fmt::format("Buffer-{}", type).data());
 }
 
-void Buffer::initialise_vertex_buffer() {}
+void Buffer::initialise_vertex_buffer() {
+  Allocator allocator{"Vertex Buffer"};
 
-void Buffer::initialise_index_buffer() {}
+  VkBufferCreateInfo buffer_create_info{};
+  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_create_info.size = get_size();
+  buffer_create_info.usage = to_vulkan_usage(type);
+
+  const auto is_vertex = type == Buffer::Type::Vertex;
+
+  auto usage = is_vertex ? Usage::AUTO_PREFER_HOST : Usage::AUTO_PREFER_DEVICE;
+  auto creation = Creation::MAPPED_BIT;
+  if (is_vertex) {
+    creation |= Creation::HOST_ACCESS_RANDOM_BIT;
+  }
+
+  buffer_data->allocation = allocator.allocate_buffer(
+      buffer_data->buffer, buffer_data->allocation_info, buffer_create_info,
+      {
+          .usage = usage,
+          .creation = creation,
+      });
+}
+
+void Buffer::initialise_index_buffer() {
+  Allocator allocator{"Index Buffer"};
+
+  VkBufferCreateInfo buffer_create_info{};
+  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_create_info.size = get_size();
+  buffer_create_info.usage = to_vulkan_usage(type);
+
+  const auto is_index = type == Buffer::Type::Index;
+
+  auto usage = is_index ? Usage::AUTO_PREFER_HOST : Usage::AUTO_PREFER_DEVICE;
+  auto creation = Creation::MAPPED_BIT;
+  if (is_index) {
+    creation |= Creation::HOST_ACCESS_RANDOM_BIT;
+  }
+
+  buffer_data->allocation = allocator.allocate_buffer(
+      buffer_data->buffer, buffer_data->allocation_info, buffer_create_info,
+      {
+          .usage = usage,
+          .creation = creation,
+      });
+}
 
 void Buffer::initialise_uniform_buffer() {
   Allocator allocator{"Uniform Buffer"};
@@ -161,7 +210,7 @@ auto Buffer::read_raw(size_t offset, size_t data_size) -> std::vector<char> {
 Buffer::~Buffer() {
   Allocator allocator{"Buffer"};
   allocator.deallocate_buffer(buffer_data->allocation, buffer_data->buffer);
-  info("Destroyed Buffer! (type: {})", type);
+  debug("Destroyed Buffer (type: {})", type);
 }
 
 auto Buffer::get_buffer() const noexcept -> VkBuffer {
@@ -169,6 +218,22 @@ auto Buffer::get_buffer() const noexcept -> VkBuffer {
 }
 
 void Buffer::write(const void *data, u64 data_size) {
+  assert(data_size <= size); // Ensure we don't write out of bounds
+
+  const auto is_always_mapped = buffer_data->allocation_info.pMappedData;
+  if (is_always_mapped) {
+    std::memcpy(buffer_data->allocation_info.pMappedData, data, data_size);
+  } else {
+    void *mapped_data{};
+    verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
+                        &mapped_data),
+           "vmaMapMemory", "Failed to map memory");
+    std::memcpy(mapped_data, data, data_size);
+    vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
+  }
+}
+
+void Buffer::write(const void *data, u64 data_size) const {
   assert(data_size <= size); // Ensure we don't write out of bounds
 
   const auto is_always_mapped = buffer_data->allocation_info.pMappedData;

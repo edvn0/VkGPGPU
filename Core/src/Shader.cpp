@@ -10,6 +10,7 @@
 
 #include <bit>
 #include <fstream>
+#include <sstream>
 #include <vulkan/vulkan.h>
 
 #include "reflection/ReflectionData.hpp"
@@ -42,38 +43,57 @@ auto read_file(const std::filesystem::path &path) -> std::string {
   return buffer.str();
 }
 
-Shader::Shader(const Device &dev, const std::filesystem::path &path)
-    : device(dev), name(path.stem().string()) {
-  parsed_spirv_per_stage[Type::Compute] = read_file(path);
-  const auto &shader_code = parsed_spirv_per_stage.at(Type::Compute);
-  VkShaderModuleCreateInfo create_info{};
-  create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  create_info.codeSize = shader_code.size();
-  create_info.pCode = std::bit_cast<const u32 *>(shader_code.data());
+Shader::Shader(
+    const Device &dev,
+    const std::unordered_set<PathShaderType, Hasher, std::equal_to<>> &types)
+    : device(dev) {
+  std::stringstream name_stream;
+  if (types.size() > 1) {
+    name_stream << "Combined-";
+  }
+  for (const auto &[path, type] : types) {
+    parsed_spirv_per_stage[type] = read_file(path);
+    VkShaderModuleCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    create_info.codeSize = parsed_spirv_per_stage[type].size();
+    create_info.pCode =
+        std::bit_cast<const u32 *>(parsed_spirv_per_stage[type].data());
 
-  verify(vkCreateShaderModule(device.get_device(), &create_info, nullptr,
-                              &shader_module),
-         "vkCreateShaderModule", "Failed to create shader module");
+    verify(vkCreateShaderModule(device.get_device(), &create_info, nullptr,
+                                &shader_modules[type]),
+           "vkCreateShaderModule", "Failed to create shader module");
 
+    name_stream << path.stem().string() << "-";
+  }
   const Reflection::Reflector reflector{*this};
   reflector.reflect(descriptor_set_layouts, reflection_data);
+  name = name_stream.str();
   create_descriptor_set_layouts();
-  create_push_constant_ranges();
 }
 
 Shader::~Shader() {
-  vkDestroyShaderModule(device.get_device(), shader_module, nullptr);
-  info("Destroyed shader module!");
-  for (const auto &descriptor_set_layout : descriptor_set_layouts) {
-    vkDestroyDescriptorSetLayout(device.get_device(), descriptor_set_layout,
-                                 nullptr);
+  for (const auto &[type, shader_module] : shader_modules) {
+    vkDestroyShaderModule(device.get_device(), shader_module, nullptr);
   }
+  for (const auto &layout : descriptor_set_layouts) {
+    vkDestroyDescriptorSetLayout(device.get_device(), layout, nullptr);
+  }
+  debug("Destroyed Shader '{}'", name);
 }
 
 auto Shader::hash() const -> usize {
   static constexpr std::hash<std::string> string_hasher;
-  return string_hasher(name) ^
-         string_hasher(parsed_spirv_per_stage.at(Type::Compute));
+  auto name_hash = string_hasher(name);
+  if (parsed_spirv_per_stage.contains(Type::Compute)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Compute));
+  }
+  if (parsed_spirv_per_stage.contains(Type::Vertex)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Vertex));
+  }
+  if (parsed_spirv_per_stage.contains(Type::Fragment)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Fragment));
+  }
+  return name_hash;
 }
 
 auto Shader::has_descriptor_set(u32 set) const -> bool {
@@ -121,13 +141,13 @@ auto Shader::allocate_descriptor_set(u32 set) const
 
 auto Shader::create_descriptor_set_layouts() -> void {
   auto *vk_device = device.get_device();
+  auto &descriptor_sets = reflection_data.shader_descriptor_sets;
 
-  for (u32 set = 0; set < reflection_data.shader_descriptor_sets.size();
-       set++) {
-    auto &shader_descriptor_set = reflection_data.shader_descriptor_sets[set];
+  for (u32 set = 0; set < descriptor_sets.size(); set++) {
+    auto &shader_descriptor_set = descriptor_sets[set];
 
     std::vector<VkDescriptorSetLayoutBinding> layout_bindings{};
-    for (auto &[binding, uniform_buffer] :
+    for (const auto &[binding, uniform_buffer] :
          shader_descriptor_set.uniform_buffers) {
       VkDescriptorSetLayoutBinding &layout_binding =
           layout_bindings.emplace_back();
@@ -146,7 +166,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, storage_buffer] :
+    for (const auto &[binding, storage_buffer] :
          shader_descriptor_set.storage_buffers) {
       VkDescriptorSetLayoutBinding &layout_binding =
           layout_bindings.emplace_back();
@@ -167,7 +187,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.sampled_images) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -190,10 +210,10 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.separate_textures) {
       auto &layout_binding = layout_bindings.emplace_back();
-      layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
       layout_binding.descriptorCount = image_sampler.array_size;
       layout_binding.stageFlags = image_sampler.shader_stage;
       layout_binding.pImmutableSamplers = nullptr;
@@ -215,7 +235,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[binding, image_sampler] :
+    for (const auto &[binding, image_sampler] :
          shader_descriptor_set.separate_samplers) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -242,19 +262,18 @@ auto Shader::create_descriptor_set_layouts() -> void {
       write_set.dstBinding = layout_binding.binding;
     }
 
-    for (auto &[bindingAndSet, imageSampler] :
+    for (const auto &[binding_and_set, image_sampler] :
          shader_descriptor_set.storage_images) {
       auto &layout_binding = layout_bindings.emplace_back();
       layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-      layout_binding.descriptorCount = imageSampler.array_size;
-      layout_binding.stageFlags = imageSampler.shader_stage;
+      layout_binding.descriptorCount = image_sampler.array_size;
+      layout_binding.stageFlags = image_sampler.shader_stage;
       layout_binding.pImmutableSamplers = nullptr;
 
       // Name a variable which has the value 0xFFFFFFFF
       static constexpr auto max_set = std::numeric_limits<Core::u32>::max();
 
-      Core::u32 binding = bindingAndSet & max_set;
-      // uint32_t descriptorSet = (bindingAndSet >> 32);
+      Core::u32 binding = binding_and_set & max_set;
       layout_binding.binding = binding;
 
       ensure(!shader_descriptor_set.uniform_buffers.contains(binding),
@@ -269,7 +288,7 @@ auto Shader::create_descriptor_set_layouts() -> void {
              "Binding is already present!");
 
       VkWriteDescriptorSet &write_set =
-          shader_descriptor_set.write_descriptor_sets[imageSampler.name];
+          shader_descriptor_set.write_descriptor_sets[image_sampler.name];
       write_set = {};
       write_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       write_set.descriptorType = layout_binding.descriptorType;
@@ -290,10 +309,11 @@ auto Shader::create_descriptor_set_layouts() -> void {
         static_cast<Core::u32>(layout_bindings.size());
     descriptor_layout.pBindings = layout_bindings.data();
 
-    info("Shader: Creating descriptor set ['{0}'] with {1} ubo's, {2} ssbo's, "
-         "{3} samplers, {4} separate textures, {5} separate samplers and {6} "
+    info("Shader {0}: Creating descriptor set ['{1}'] with {2} ubo's, {3} "
+         "ssbo's, "
+         "{4} samplers, {5} separate textures, {6} separate samplers and {7} "
          "storage images.",
-         set, shader_descriptor_set.uniform_buffers.size(),
+         name, set, shader_descriptor_set.uniform_buffers.size(),
          shader_descriptor_set.storage_buffers.size(),
          shader_descriptor_set.sampled_images.size(),
          shader_descriptor_set.separate_textures.size(),
@@ -310,15 +330,59 @@ auto Shader::create_descriptor_set_layouts() -> void {
   }
 }
 
-void Shader::create_push_constant_ranges() {
-  const auto &pc_ranges = reflection_data.push_constant_ranges;
-  for (const auto &[offset, size, shader_stage] : pc_ranges) {
-    VkPushConstantRange push_constant_range{};
-    push_constant_range.stageFlags = shader_stage;
-    push_constant_range.offset = offset;
-    push_constant_range.size = size;
-    push_constant_ranges.push_back(push_constant_range);
+auto to_shader_type(const std::filesystem::path &path) {
+  Shader::Type from_extension;
+  // Path can end in .spv, since it is compiled. The naming scheme is
+  // filename.vert.spv, filename.frag.spv or filename.comp.spv
+  if (path.extension() != ".spv") {
+    error("Shader file {} does not have the .spv extension!", path.string());
+    throw FileCouldNotBeOpened("Shader file " + path.string() +
+                               " does not have the .spv extension!");
   }
+
+  auto remove_extension = path;
+  remove_extension.replace_extension();
+
+  if (remove_extension.extension() == ".vert") {
+    from_extension = Shader::Type::Vertex;
+  } else if (remove_extension.extension() == ".frag") {
+    from_extension = Shader::Type::Fragment;
+  } else if (remove_extension.extension() == ".comp") {
+    from_extension = Shader::Type::Compute;
+  } else {
+    error("Shader file {} does not have the .vert, .frag or .comp extension!",
+          path.string());
+    throw FileCouldNotBeOpened(
+        "Shader file " + path.string() +
+        " does not have the .vert, .frag or .comp extension!");
+  }
+
+  return from_extension;
+}
+
+auto Shader::construct(const Device &device, const std::filesystem::path &path)
+    -> Scope<Shader> {
+  PathShaderType shader_type{
+      .path = path,
+      .type = to_shader_type(path),
+  };
+  return Scope<Shader>{new Shader{device, {shader_type}}};
+}
+
+auto Shader::construct(const Device &device,
+                       const std::filesystem::path &vertex_path,
+                       const std::filesystem::path &fragment_path)
+    -> Scope<Shader> {
+  std::unordered_set<PathShaderType, Hasher, std::equal_to<>> loaded{
+      {
+          .path = vertex_path,
+          .type = Shader::Type::Vertex,
+      },
+      {
+          .path = fragment_path,
+          .type = Shader::Type::Fragment,
+      }};
+  return Scope<Shader>{new Shader{device, loaded}};
 }
 
 } // namespace Core

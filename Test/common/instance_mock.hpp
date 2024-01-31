@@ -4,6 +4,6 @@
 
 class MockInstance : public Core::Instance {
 public:
-  using Core::Instance::Instance;
+  MockInstance() : Core::Instance(true){};
   ~MockInstance() override = default;
 };

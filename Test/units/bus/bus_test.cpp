@@ -1,3 +1,5 @@
+#include "Types.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <numeric>
 
@@ -34,7 +36,7 @@ TEST_CASE("Test MessagingClient") {
 
   SECTION("Test MessagingClient::send_message") {
     Core::Scope<IMessagingAPI> api =
-        std::make_unique<MockClient>("localhost", 5672);
+        Core::make_scope<MockClient>("localhost", 5672);
     auto client = MessagingClient(std::move(api));
     client.send_message("test_queue", "test_message");
 
@@ -47,7 +49,7 @@ TEST_CASE("Test MessagingClient") {
 
   SECTION("Test MessagingClient::MessagingClient") {
     Core::Scope<IMessagingAPI> api =
-        std::make_unique<MockClient>("localhost", 5672);
+        Core::make_scope<MockClient>("localhost", 5672);
     auto client = MessagingClient(std::move(api));
     const auto &mock_client =
         dynamic_cast<const MockClient &>(client.get_api());

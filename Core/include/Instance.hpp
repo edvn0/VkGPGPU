@@ -8,17 +8,22 @@ namespace Core {
 
 class Instance {
 public:
-  Instance();
   virtual ~Instance();
 
   [[nodiscard]] auto get_instance() const -> VkInstance { return instance; }
 
-  static auto construct() -> Scope<Instance>;
+  static auto construct(bool) -> Scope<Instance>;
+
+protected:
+  explicit Instance(bool);
 
 private:
   VkInstance instance{nullptr};
+  VkDebugUtilsMessengerEXT debug_messenger{nullptr};
 
-  auto construct_vulkan_instance() -> void;
+  auto construct_vulkan_instance(bool) -> void;
+  auto setup_debug_messenger() -> void;
+  bool enable_validation_layers{false};
 };
 
 } // namespace Core

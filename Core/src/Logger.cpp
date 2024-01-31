@@ -59,11 +59,11 @@ void Logger::process_queue(const std::stop_token &stop_token) {
 namespace AnsiColor {
 using namespace std::string_view_literals;
 static constexpr auto Reset = "\033[0m"sv;
-static constexpr auto Red = "\033[31m"sv;    // Error
-static constexpr auto Green = "\033[32m"sv;  // Info
-static constexpr auto Yellow = "\033[33m"sv; // Debug
-static constexpr auto Blue = "\033[34m"sv;   // Trace
-static constexpr auto Magenta = "\033[95m"sv;   // Warn
+static constexpr auto Red = "\033[31m"sv;     // Error
+static constexpr auto Green = "\033[32m"sv;   // Info
+static constexpr auto Yellow = "\033[33m"sv;  // Debug
+static constexpr auto Blue = "\033[34m"sv;    // Trace
+static constexpr auto Magenta = "\033[95m"sv; // Warn
 } // namespace AnsiColor
 
 void Logger::process_single(const BackgroundLogMessage &message) {
@@ -82,7 +82,7 @@ void Logger::process_single(const BackgroundLogMessage &message) {
               << AnsiColor::Reset << std::endl;
     break;
   case Warn:
-     std::cout << AnsiColor::Magenta << "[WARN] " << message.message
+    std::cout << AnsiColor::Magenta << "[WARN] " << message.message
               << AnsiColor::Reset << std::endl;
     break;
   case Error:

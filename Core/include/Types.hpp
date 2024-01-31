@@ -16,6 +16,8 @@ using i8 = std::int8_t;
 using i16 = std::int16_t;
 using i32 = std::int32_t;
 using i64 = std::int64_t;
+using f32 = float;
+using f64 = double;
 
 #ifdef GPGPU_DOUBLE_PRECISION
 using floating = std::double_t;
@@ -23,13 +25,22 @@ using floating = std::double_t;
 using floating = std::float_t;
 #endif
 
-template <class T> using Scope = std::unique_ptr<T>;
+namespace Detail {
+struct DefaultDelete {
+  template <class T> auto operator()(T *ptr) const noexcept -> void {
+    delete ptr;
+  }
+};
+} // namespace Detail
+
+template <class T, class Deleter = Detail::DefaultDelete>
+using Scope = std::unique_ptr<T, Deleter>;
 template <class T> using Ref = std::shared_ptr<T>;
 template <class T> using Weak = std::weak_ptr<T>;
 
-template <class T, typename... Args>
-auto make_scope(Args &&...args) -> Scope<T> {
-  return std::make_unique<T>(std::forward<Args>(args)...);
+template <class T, class Deleter = Detail::DefaultDelete, typename... Args>
+auto make_scope(Args &&...args) -> Scope<T, Deleter> {
+  return Scope<T, Deleter>(new T{std::forward<Args>(args)...});
 }
 
 template <class T, typename... Args> auto make_ref(Args &&...args) -> Ref<T> {

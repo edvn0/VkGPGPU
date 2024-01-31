@@ -3,9 +3,13 @@
   "C_Cpp.default.compileCommands": "${workspaceFolder}\\compile_commands.json",
   "C_Cpp.codeAnalysis.clangTidy.useBuildPath": true,
   "cSpell.words": [
+    "blit",
     "databuffer",
     "librenderdoc",
-    "rdoc"
+    "rdoc",
+    "renderpass",
+    "SUBPASS",
+    "subresource"
   ],
   "files.associations": {
     "*.frag": "hlsl",
@@ -86,6 +90,29 @@
     "cinttypes": "cpp",
     "typeindex": "cpp",
     "typeinfo": "cpp",
-    "variant": "cpp"
+    "variant": "cpp",
+    "xstring": "cpp",
+    "filesystem": "cpp",
+    "forward_list": "cpp",
+    "ios": "cpp",
+    "locale": "cpp",
+    "queue": "cpp",
+    "stack": "cpp",
+    "xfacet": "cpp",
+    "xhash": "cpp",
+    "xiosbase": "cpp",
+    "xlocale": "cpp",
+    "xlocbuf": "cpp",
+    "xlocinfo": "cpp",
+    "xlocmes": "cpp",
+    "xlocmon": "cpp",
+    "xlocnum": "cpp",
+    "xloctime": "cpp",
+    "xmemory": "cpp",
+    "xtr1common": "cpp",
+    "xtree": "cpp",
+    "xutility": "cpp",
+    "coroutine": "cpp",
+    "resumable": "cpp"
   }
 }

@@ -28,8 +28,8 @@ private:
   static std::chrono::time_point<std::chrono::high_resolution_clock>
       last_write_time;
 
-  void add_duration(BufferSize duration);
-  bool should_write_to_file();
+  static void add_duration(BufferSize duration);
+  static bool should_write_to_file();
   void write_to_file();
 
   const Bus::MessagingClient *messaging_client;

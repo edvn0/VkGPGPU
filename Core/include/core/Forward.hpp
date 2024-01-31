@@ -1,6 +1,6 @@
 #pragma once
 
-#include <concepts>
+#include "Concepts.hpp"
 
 namespace Core {
 
@@ -10,31 +10,30 @@ class Buffer;
 class CommandBuffer;
 class CommandDispatcher;
 class DebugMarker;
-class DescriptorMap;
 class Device;
 class DynamicLibraryLoader;
 class Environment;
 class FileCouldNotBeOpened;
+class InterfaceSystem;
 class Image;
 class Instance;
 class Logger;
+class Material;
 class Pipeline;
+class Window;
 class QueueUnknownException;
 class Shader;
+class Texture;
 class Timer;
+class Swapchain;
 class VulkanResultException;
 struct AllocationProperties;
 struct BufferDataImpl;
 struct Colour;
-struct FrameCommandBuffer;
-struct GroupSize;
-struct Image;
 struct ImageProperties;
 struct ImageStorageImpl;
-struct IndexedQueue;
 struct PipelineConfiguration;
-struct QueueFeatureSupport;
 
-template <std::integral T> struct Extent;
+template <IsNumber T> struct Extent;
 
 } // namespace Core

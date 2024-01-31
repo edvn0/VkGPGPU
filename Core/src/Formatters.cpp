@@ -80,3 +80,10 @@ auto fmt::formatter<Core::Extent<Core::u32>>::format(
   auto formatted = fmt::format("extent={},{}", extent.width, extent.height);
   return formatter<const char *>::format(formatted.data(), ctx);
 }
+
+auto fmt::formatter<VkResult>::format(const VkResult &result,
+                                      format_context &ctx) const
+    -> decltype(ctx.out()) {
+  auto formatted = fmt::format("Result:{}", static_cast<Core::i32>(result));
+  return formatter<const char *>::format(formatted.data(), ctx);
+}

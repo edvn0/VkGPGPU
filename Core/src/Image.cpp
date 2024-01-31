@@ -15,40 +15,159 @@
 
 namespace Core {
 
+auto to_vulkan_format(ImageFormat format) -> VkFormat {
+  switch (format) {
+    using enum Core::ImageFormat;
+  case UNORM_RGBA8:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  case SRGB_RGBA8:
+    return VK_FORMAT_R8G8B8A8_SRGB;
+  case SRGB_RGBA32:
+    return VK_FORMAT_R32G32B32A32_SFLOAT;
+  case Undefined:
+    return VK_FORMAT_UNDEFINED;
+  case DEPTH32F:
+    return VK_FORMAT_D32_SFLOAT;
+  case DEPTH24STENCIL8:
+    return VK_FORMAT_D24_UNORM_S8_UINT;
+  case DEPTH16:
+    return VK_FORMAT_D16_UNORM;
+  default:
+    assert(false);
+    return VK_FORMAT_MAX_ENUM;
+  }
+}
+
+bool transition_image(
+    const ImmediateCommandBuffer &buffer, VkImage &to_transition,
+    VkImageLayout from, VkImageLayout to,
+    VkImageAspectFlags aspect_bit = VK_IMAGE_ASPECT_COLOR_BIT) {
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = from;
+  barrier.newLayout = to;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = to_transition;
+  barrier.subresourceRange.aspectMask = aspect_bit;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  VkPipelineStageFlags sourceStage;
+  VkPipelineStageFlags destinationStage;
+
+  if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+      to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             to == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             to == VK_IMAGE_LAYOUT_GENERAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+             to == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+             to == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+             to == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+             to == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+             to == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else {
+    ensure(false, "Unsupported layout transition");
+  }
+
+  VkDependencyFlags flags = VK_DEPENDENCY_BY_REGION_BIT;
+  vkCmdPipelineBarrier(buffer.get_command_buffer(), sourceStage,
+                       destinationStage,
+                       flags,      // Dependency flags
+                       0, nullptr, // Memory barrier count and data
+                       0, nullptr, // Buffer memory barrier count and data
+                       1, &barrier // Image memory barrier count and data
+  );
+
+  return true;
+}
+
 namespace {
 auto to_vulkan_layout(ImageLayout layout) -> VkImageLayout {
   switch (layout) {
-  case ImageLayout::Undefined:
+    using enum Core::ImageLayout;
+  case Undefined:
     return VK_IMAGE_LAYOUT_UNDEFINED;
-  case ImageLayout::General:
+  case General:
     return VK_IMAGE_LAYOUT_GENERAL;
-  case ImageLayout::ColorAttachmentOptimal:
+  case ColorAttachmentOptimal:
     return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  case ImageLayout::DepthStencilAttachmentOptimal:
+  case DepthStencilAttachmentOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  case ImageLayout::DepthStencilReadOnlyOptimal:
+  case DepthStencilReadOnlyOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-  case ImageLayout::ShaderReadOnlyOptimal:
+  case ShaderReadOnlyOptimal:
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  case ImageLayout::TransferSrcOptimal:
+  case TransferSrcOptimal:
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-  case ImageLayout::TransferDstOptimal:
+  case TransferDstOptimal:
     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  case ImageLayout::Preinitialized:
+  case Preinitialized:
     return VK_IMAGE_LAYOUT_PREINITIALIZED;
-  case ImageLayout::PresentSrcKHR:
+  case PresentSrcKHR:
     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  case ImageLayout::SharedPresentKHR:
+  case SharedPresentKHR:
     return VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
-  case ImageLayout::ShadingRateOptimalNV:
+  case ShadingRateOptimalNV:
     return VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
-  case ImageLayout::FragmentDensityMapOptimalEXT:
+  case FragmentDensityMapOptimalEXT:
     return VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
-  case ImageLayout::DepthReadOnlyStencilAttachmentOptimal:
+  case DepthReadOnlyStencilAttachmentOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-  case ImageLayout::DepthAttachmentStencilReadOnlyOptimal:
+  case DepthAttachmentStencilReadOnlyOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-  case ImageLayout::DepthAttachmentOptimal:
+  case DepthAttachmentOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
   default:
     assert(false);
@@ -120,8 +239,16 @@ struct Image::ImageStorageImpl {
   }
 };
 
+auto to_aspect_bit(const ImageFormat &format) -> VkImageAspectFlags {
+  if (format == ImageFormat::DEPTH16 ||
+      format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
+    return VK_IMAGE_ASPECT_DEPTH_BIT;
+  return VK_IMAGE_ASPECT_COLOR_BIT;
+}
+
 Image::Image(const Device &dev, ImageProperties props)
-    : device(&dev), properties(props) {
+    : device(&dev), properties(props),
+      aspect_bit(to_aspect_bit(properties.format)) {
   ensure(device != nullptr, "Device cannot be null. This class name: {}",
          "Image");
   ensure(properties.extent.width > 0, "Extent width must be greater than 0");
@@ -131,16 +258,32 @@ Image::Image(const Device &dev, ImageProperties props)
   ensure(properties.layout != ImageLayout::Undefined,
          "Layout cannot be undefined");
 
-  impl = make_scope<ImageStorageImpl>(device);
+  recreate();
+  if (aspect_bit == VK_IMAGE_ASPECT_DEPTH_BIT) {
+    transition_image(create_immediate(*device, Queue::Type::Graphics),
+                     impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                     to_vulkan_layout(properties.layout), aspect_bit);
+  }
+}
+
+auto Image::construct_reference(const Device &device,
+                                const ImageProperties &properties)
+    -> Ref<Image> {
+  return make_ref<Image>(device, properties);
+}
+
+auto Image::recreate() -> void {
+  impl.reset(new ImageStorageImpl(device));
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
+  // if (properties.mip_info.valid()) {
+  //  create_mips();
+  //}
 }
 
-Image::Image(const Device &dev, ImageProperties properties,
-             const DataBuffer &data_buffer)
-    : Image(dev, properties) {
-
+auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
+    -> void {
   // Create a transfer buffer
   Allocator allocator{"Image"};
   VkBufferCreateInfo buffer_create_info{};
@@ -150,69 +293,55 @@ Image::Image(const Device &dev, ImageProperties properties,
 
   VkBuffer staging_buffer{};
   VmaAllocationInfo staging_allocation_info{};
-  auto allocation = allocator.allocate_buffer(
+  const auto allocation = allocator.allocate_buffer(
       staging_buffer, staging_allocation_info, buffer_create_info,
       {.usage = Usage::AUTO_PREFER_DEVICE,
        .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT});
-  std::span allocation_span{
+  const std::span allocation_span{
       static_cast<u8 *>(staging_allocation_info.pMappedData),
       staging_allocation_info.size};
   data_buffer.read(allocation_span);
 
   {
-    auto buffer = create_immediate(*device, Queue::Type::Transfer);
+    const auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
-    // Transition the image to transfer dst optimal
-    auto command_buffer = buffer.get_command_buffer();
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout =
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; // TODO: Make this a parameter
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = impl->image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0; // TODO: Make this a parameter
-    barrier.subresourceRange.levelCount = 1;   // TODO: Make this a parameter
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &barrier);
-
+    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask =
-        VK_IMAGE_ASPECT_COLOR_BIT;        // TODO: Make this a parameter
-    region.imageSubresource.mipLevel = 0; // TODO: Make this a parameter
+    region.imageSubresource.aspectMask = aspect_bit;
+    region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
+    region.imageOffset = {
+        0,
+        0,
+        0,
+    };
     region.imageExtent = {
         properties.extent.width,
         properties.extent.height,
         1,
-    }; // TODO: Make this a parameter
+    };
 
-    vkCmdCopyBufferToImage(command_buffer, staging_buffer, impl->image,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(buffer.get_command_buffer(), staging_buffer,
+                           impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &region);
 
-    // Transition the image to chosen layout
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = to_vulkan_layout(properties.layout);
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &barrier);
+    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     to_vulkan_layout(properties.layout), aspect_bit);
   }
 
   allocator.deallocate_buffer(allocation, staging_buffer);
+}
+
+Image::Image(const Device &dev, ImageProperties properties,
+             const DataBuffer &data_buffer)
+    : Image(dev, properties) {
+  load_image_data_from_buffer(data_buffer);
+  create_mips();
 }
 
 auto Image::initialise_vulkan_descriptor_info() -> void {
@@ -248,43 +377,157 @@ auto Image::get_extent() const noexcept -> const Extent<u32> & {
   return properties.extent;
 }
 
+namespace {
+auto hash_combine(usize &seed, const void *value) noexcept -> void {
+  static constexpr auto hasher = std::hash<const void *>{};
+  seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+} // namespace
+
+auto Image::hash() const noexcept -> usize {
+  usize hash = 0;
+  hash_combine(hash, impl->image);
+  hash_combine(hash, impl->image_view);
+  hash_combine(hash, impl->sampler);
+  return hash;
+}
+
 Image::~Image() = default;
+
+void Image::create_mips() {
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.image = impl->image;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.subresourceRange.aspectMask = aspect_bit;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.subresourceRange.levelCount = 1;
+  auto &&[mip_width, mip_height] = properties.extent.as<i32>();
+
+  auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
+  transition_image(command_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  for (u32 i = 1; i < properties.mip_info.mips; i++) {
+    barrier.subresourceRange.baseMipLevel = i - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+    vkCmdPipelineBarrier(
+        command_buffer.get_command_buffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkImageBlit blit{};
+    blit.srcOffsets[0] = {
+        0,
+        0,
+        0,
+    };
+    blit.srcOffsets[1] = {
+        mip_width,
+        mip_height,
+        1,
+    };
+    blit.srcSubresource.aspectMask = aspect_bit;
+    blit.srcSubresource.mipLevel = i - 1;
+    blit.srcSubresource.baseArrayLayer = 0;
+    blit.srcSubresource.layerCount = 1;
+    blit.dstOffsets[0] = {
+        0,
+        0,
+        0,
+    };
+    blit.dstOffsets[1] = {
+        mip_width > 1 ? mip_width / 2 : 1,
+        mip_height > 1 ? mip_height / 2 : 1,
+        1,
+    };
+    blit.dstSubresource.aspectMask = aspect_bit;
+    blit.dstSubresource.mipLevel = i;
+    blit.dstSubresource.baseArrayLayer = 0;
+    blit.dstSubresource.layerCount = 1;
+
+    vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                   VK_FILTER_LINEAR);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &barrier);
+
+    if (mip_width > 1) {
+      mip_width /= 2;
+    }
+    if (mip_height > 1) {
+      mip_height /= 2;
+    }
+  }
+
+  barrier.subresourceRange.baseMipLevel = properties.mip_info.mips - 1;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.newLayout = to_vulkan_layout(properties.layout);
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+  vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+}
 
 auto Image::initialise_vulkan_image() -> void {
   Allocator allocator{"Image"};
   VkImageCreateInfo image_create_info{};
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_create_info.imageType = VK_IMAGE_TYPE_2D;
-  image_create_info.format = static_cast<VkFormat>(properties.format);
+  image_create_info.format = to_vulkan_format(properties.format);
   image_create_info.extent.width = properties.extent.width;
   image_create_info.extent.height = properties.extent.height;
   image_create_info.extent.depth = 1;
-  image_create_info.mipLevels = 1;
+  image_create_info.mipLevels =
+      properties.mip_info.valid() ? properties.mip_info.mips : 1;
   image_create_info.arrayLayers = 1;
   image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
   image_create_info.tiling = static_cast<VkImageTiling>(properties.tiling);
-  image_create_info.usage = static_cast<VkImageUsageFlags>(properties.usage) |
-                            VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  image_create_info.usage = static_cast<VkImageUsageFlags>(properties.usage);
   image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  Creation creation{0};
+
+  static auto is_storage = [&] {
+    return (properties.usage & ImageUsage::Storage) != ImageUsage{0};
+  };
+  if (is_storage()) {
+    creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT;
+  }
 
   impl->allocation = allocator.allocate_image(
       impl->image, impl->allocation_info, image_create_info,
       {
           .usage = Usage::AUTO_PREFER_DEVICE,
-          .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT,
+          .creation = creation,
       });
 
   VkImageViewCreateInfo image_view_create_info{};
   image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   image_view_create_info.image = impl->image;
   image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  image_view_create_info.format = static_cast<VkFormat>(properties.format);
-  image_view_create_info.subresourceRange.aspectMask =
-      VK_IMAGE_ASPECT_COLOR_BIT;
+  image_view_create_info.format = to_vulkan_format(properties.format);
+  image_view_create_info.subresourceRange.aspectMask = aspect_bit;
   image_view_create_info.subresourceRange.baseMipLevel = 0;
-  image_view_create_info.subresourceRange.levelCount = 1;
+  image_view_create_info.subresourceRange.levelCount =
+      properties.mip_info.valid() ? properties.mip_info.mips : 1;
   image_view_create_info.subresourceRange.baseArrayLayer = 0;
   image_view_create_info.subresourceRange.layerCount = 1;
 
@@ -309,11 +552,16 @@ auto Image::initialise_vulkan_image() -> void {
       static_cast<VkBorderColor>(properties.border_color);
   sampler_create_info.unnormalizedCoordinates = VK_FALSE;
   sampler_create_info.compareEnable = VK_FALSE;
-  sampler_create_info.compareOp = VK_COMPARE_OP_ALWAYS;
-  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  sampler_create_info.compareOp =
+      static_cast<VkCompareOp>(properties.compare_op);
   sampler_create_info.mipLodBias = 0.0f;
+  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   sampler_create_info.minLod = 0.0f;
-  sampler_create_info.maxLod = 1.0f;
+  sampler_create_info.maxLod =
+      properties.mip_info.valid() ? static_cast<float>(properties.mip_info.mips)
+                                  : 1.0f;
+  sampler_create_info.compareEnable = VK_TRUE;
+  sampler_create_info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
   verify(vkCreateSampler(device->get_device(), &sampler_create_info, nullptr,
                          &impl->sampler),

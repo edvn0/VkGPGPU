@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Containers.hpp"
 #include "Filesystem.hpp"
 #include "Types.hpp"
 
@@ -11,37 +12,6 @@
 #include <vulkan/vulkan.h>
 
 namespace Reflection {
-
-namespace Detail {
-struct StringLikeHasher {
-  using is_transparent = void; // This enables heterogeneous lookup
-
-  size_t operator()(const std::string &s) const {
-    return std::hash<std::string>{}(s);
-  }
-
-  size_t operator()(const std::string_view sv) const {
-    return std::hash<std::string_view>{}(sv);
-  }
-};
-
-struct StringLikeEqual {
-  using is_transparent = void; // This enables heterogeneous lookup
-
-  bool operator()(const std::string &lhs, const std::string &rhs) const {
-    return lhs == rhs;
-  }
-
-  bool operator()(const std::string_view lhs,
-                  const std::string_view rhs) const {
-    return lhs == rhs;
-  }
-};
-
-template <class Value>
-using StringLikeMap =
-    std::unordered_map<std::string, Value, StringLikeHasher, StringLikeEqual>;
-} // namespace Detail
 
 struct Uniform {
   Core::u32 binding{0};
@@ -102,7 +72,7 @@ struct ShaderStorageBuffer {
 struct ShaderBuffer {
   std::string name;
   Core::u32 size{0};
-  Detail::StringLikeMap<ShaderUniform> uniforms;
+  Core::Container::StringLikeMap<ShaderUniform> uniforms;
 };
 
 struct UniformBuffer {
@@ -143,7 +113,7 @@ struct ShaderDescriptorSet {
   std::unordered_map<Core::u32, ImageSampler> separate_textures{};
   std::unordered_map<Core::u32, ImageSampler> separate_samplers{};
 
-  Detail::StringLikeMap<VkWriteDescriptorSet> write_descriptor_sets{};
+  Core::Container::StringLikeMap<VkWriteDescriptorSet> write_descriptor_sets{};
 };
 
 class ShaderResourceDeclaration final {
@@ -180,8 +150,8 @@ struct ShaderInOut {
 struct ReflectionData {
   std::vector<ShaderDescriptorSet> shader_descriptor_sets{};
   std::vector<PushConstantRange> push_constant_ranges{};
-  Detail::StringLikeMap<ShaderBuffer> constant_buffers{};
-  Detail::StringLikeMap<ShaderResourceDeclaration> resources{};
+  Core::Container::StringLikeMap<ShaderBuffer> constant_buffers{};
+  Core::Container::StringLikeMap<ShaderResourceDeclaration> resources{};
 };
 
 struct MaterialDescriptorSet {

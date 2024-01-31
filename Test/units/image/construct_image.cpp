@@ -7,17 +7,19 @@
 
 #include "common/device_mock.hpp"
 #include "common/instance_mock.hpp"
+#include "common/window_mock.hpp"
 
 TEST_CASE("Construct image", "[image]") {
   MockInstance instance{};
-  MockDevice device{instance};
+  MockWindow window{instance};
+  MockDevice device{instance, window};
   Core::Allocator::construct(device, instance);
 
   SECTION("Image with correct layout") {
     Core::Image image(device,
                       Core::ImageProperties{
                           .extent = {10, 10},
-                          .format = Core::ImageFormat::R8G8B8A8Unorm,
+                          .format = Core::ImageFormat::UNORM_RGBA8,
                           .layout = Core::ImageLayout::ShaderReadOnlyOptimal,
                       });
 
@@ -29,7 +31,7 @@ TEST_CASE("Construct image", "[image]") {
     Core::Image image(device,
                       Core::ImageProperties{
                           .extent = {10, 10},
-                          .format = Core::ImageFormat::R8G8B8A8Unorm,
+                          .format = Core::ImageFormat::UNORM_RGBA8,
                           .layout = Core::ImageLayout::ShaderReadOnlyOptimal,
                       });
 

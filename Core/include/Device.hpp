@@ -11,6 +11,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+#include "core/Forward.hpp"
+
 namespace Core {
 
 namespace Queue {
@@ -29,7 +31,6 @@ enum class Feature : u8 {
 
 class Device {
 public:
-  explicit Device(const Instance &);
   virtual ~Device();
 
   auto get_device() const -> VkDevice { return device; }
@@ -37,7 +38,12 @@ public:
     return physical_device;
   }
 
-  [[nodiscard]] auto get_family_index(Queue::Type type) const -> u32 {
+  [[nodiscard]] auto get_family_index(Queue::Type type) const
+      -> std::optional<u32> {
+    if (!queues.contains(type)) {
+      return std::nullopt;
+    }
+
     return queues.at(type).family_index;
   }
 
@@ -58,7 +64,15 @@ public:
     return descriptor_resource;
   }
 
-  static auto construct(const Instance &) -> Scope<Device>;
+  auto get_physical_device_surface_formats(VkSurfaceKHR) const
+      -> std::vector<VkSurfaceFormatKHR>;
+  auto get_physical_device_surface_present_modes(VkSurfaceKHR) const
+      -> std::vector<VkPresentModeKHR>;
+
+  static auto construct(const Instance &, const Window &) -> Scope<Device>;
+
+protected:
+  explicit Device(const Instance &, const Window &);
 
 private:
   const Instance &instance;
@@ -66,7 +80,7 @@ private:
   VkPhysicalDevice physical_device{nullptr};
   Scope<DescriptorResource> descriptor_resource;
 
-  auto construct_vulkan_device() -> void;
+  auto construct_vulkan_device(const Window &) -> void;
 
   struct IndexedQueue {
     u32 family_index{};
@@ -85,7 +99,7 @@ private:
       -> VkPhysicalDevice;
   using IndexQueueTypePair =
       std::tuple<Queue::Type, VkDeviceQueueCreateInfo, bool>;
-  static auto find_all_possible_queue_infos(VkPhysicalDevice)
+  static auto find_all_possible_queue_infos(VkPhysicalDevice, VkSurfaceKHR)
       -> std::vector<IndexQueueTypePair>;
   auto create_vulkan_device(VkPhysicalDevice, std::vector<IndexQueueTypePair> &)
       -> VkDevice;
@@ -96,5 +110,10 @@ private:
 
 template <> struct fmt::formatter<Core::Queue::Type> : formatter<const char *> {
   auto format(const Core::Queue::Type &type, format_context &ctx) const
+      -> decltype(ctx.out());
+};
+
+template <> struct fmt::formatter<VkResult> : formatter<const char *> {
+  auto format(const VkResult &type, format_context &ctx) const
       -> decltype(ctx.out());
 };

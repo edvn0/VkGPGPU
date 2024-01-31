@@ -1,0 +1,70 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(push_constant) uniform PushConstants {
+  int kernelSize;
+  int precomputedCenterValue;
+  int halfSize;
+}
+pc;
+
+struct Mat4 {
+  mat4 matrix;
+};
+
+layout(std140, set = 0, binding = 0) readonly buffer InputBufferA {
+  Mat4 inputMatrix[];
+}
+input_buffer_a;
+
+layout(std140, set = 0, binding = 1) readonly buffer InputBufferB {
+  Mat4 inputMatrix[];
+}
+input_buffer_b;
+
+layout(std140, set = 0, binding = 2) writeonly buffer OutputBufferA {
+  Mat4 outputMatrix[];
+}
+output_buffer_a;
+
+layout(std140, set = 0, binding = 3) uniform UniformBuffer { float angle; }
+ubo;
+
+layout(set = 1, binding = 0, rgba8) readonly uniform image2D input_image;
+layout(set = 1, binding = 1, rgba8) writeonly uniform image2D output_image;
+
+float getKernelWeight(int x, int y) {
+  return 1.0 / (1.0 + float(x * x + y * y));
+}
+
+void main() {
+  ivec2 imageSize = imageSize(input_image);
+  ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+
+  // Ensure we don't read or write outside the image bounds
+  if (pos.x >= imageSize.x || pos.y >= imageSize.y) {
+    return;
+  }
+
+  // need to use the buffers somehow
+  int invocation = int(gl_GlobalInvocationID.x);
+  mat4 matrixA = input_buffer_a.inputMatrix[invocation].matrix;
+  mat4 matrixB = input_buffer_b.inputMatrix[invocation].matrix;
+  mat4 matrixC = matrixA * matrixB;
+  output_buffer_a.outputMatrix[invocation].matrix = ubo.angle * matrixC;
+
+  float edge = 0.0;
+  for (int y = -pc.halfSize; y <= pc.halfSize; ++y) {
+    for (int x = -pc.halfSize; x <= pc.halfSize; ++x) {
+      vec4 texColor = imageLoad(input_image, pos + ivec2(x, y));
+      float intensity = (texColor.r + texColor.g + texColor.b) / 3.0;
+
+      edge += getKernelWeight(x, y) * intensity;
+    }
+  }
+
+  // Normalize and write the edge value to the output image
+  edge = clamp(edge, 0.0, 1.0);
+  imageStore(output_image, pos, vec4(edge, edge, edge, 1.0));
+}
