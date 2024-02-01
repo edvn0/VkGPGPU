@@ -30,4 +30,10 @@ static constexpr u32 transform_buffer_size = GPGPU_TRANSFORM_BUFFER_SIZE;
 static constexpr u32 transform_buffer_size = 1000;
 #endif
 
+#ifdef GPGPU_SHADOW_MAP_SIZE
+static constexpr u32 shadow_map_size = GPGPU_SHADOW_MAP_SIZE;
+#else
+static constexpr u32 shadow_map_size = 4096;
+#endif
+
 } // namespace Core::Config

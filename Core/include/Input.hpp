@@ -3,6 +3,7 @@
 #include "Types.hpp"
 
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 namespace Core {
 
@@ -156,7 +157,7 @@ public:
   template <KeyCode K> static auto pressed() -> bool { return pressed(K); }
 
   static auto pressed(MouseCode code) -> bool {
-    return glfwGetKey(window, static_cast<int>(code)) == GLFW_PRESS;
+    return glfwGetMouseButton(window, static_cast<int>(code)) == GLFW_PRESS;
   }
   template <MouseCode M> static auto pressed() -> bool { return pressed(M); }
 
@@ -166,9 +167,15 @@ public:
   template <KeyCode K> static auto released() -> bool { return released(K); }
 
   static auto released(MouseCode code) -> bool {
-    return glfwGetKey(window, static_cast<int>(code)) == GLFW_RELEASE;
+    return glfwGetMouseButton(window, static_cast<int>(code)) == GLFW_RELEASE;
   }
   template <MouseCode M> static auto released() -> bool { return released(M); }
+
+  static auto mouse_position() -> glm::vec2 {
+    glm::dvec2 pos;
+    glfwGetCursorPos(window, &pos.x, &pos.y);
+    return pos;
+  }
 
   static auto initialise(GLFWwindow *win) { window = win; }
 

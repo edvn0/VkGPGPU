@@ -3,6 +3,7 @@
 
 #include "Device.hpp"
 #include "Logger.hpp"
+#include "Types.hpp"
 
 #include <vk_mem_alloc.h>
 
@@ -10,7 +11,7 @@
 
 namespace Core {
 
-enum class Usage : std::uint32_t {
+enum class Usage : u32 {
   UNKNOWN = 0,
   GPU_ONLY = 1,
   CPU_ONLY = 2,
@@ -22,7 +23,7 @@ enum class Usage : std::uint32_t {
   AUTO_PREFER_DEVICE = 8,
   AUTO_PREFER_HOST = 9,
 };
-enum class Creation : std::uint32_t {
+enum class Creation : u32 {
   DEDICATED_MEMORY_BIT = 0x00000001,
   NEVER_ALLOCATE_BIT = 0x00000002,
   MAPPED_BIT = 0x00000004,
@@ -44,8 +45,8 @@ enum class Creation : std::uint32_t {
 };
 
 constexpr auto operator|(Creation left, Creation right) -> Creation {
-  return static_cast<Creation>(static_cast<std::uint32_t>(left) |
-                               static_cast<std::uint32_t>(right));
+  return static_cast<Creation>(static_cast<u32>(left) |
+                               static_cast<u32>(right));
 }
 
 constexpr auto operator|=(Creation &left, Creation right) -> Creation & {

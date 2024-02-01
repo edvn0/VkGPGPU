@@ -391,8 +391,8 @@ void Mesh::handle_albedo_map(const Texture &white_texture,
 
     if (texture) {
       info("{}", key);
-      const auto &texture = mesh_owned_textures.at(key);
-      submesh_material.set("albedo_map", *texture);
+      const auto &text = mesh_owned_textures.at(key);
+      submesh_material.set("albedo_map", *text);
       auto albedo_colour = glm::vec3(1.0F);
       submesh_material.set("pc.albedo_colour", albedo_colour);
     } else {
@@ -451,6 +451,7 @@ void Mesh::handle_roughness_map(const Texture &white_texture,
 
     } else {
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
+      texture = true;
     }
 
     if (texture) {
@@ -509,14 +510,39 @@ void Mesh::handle_metalness_map(const Texture &white_texture,
   }
 }
 
-auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
-    -> Scope<Texture> {
-  auto path = FS::resolve(file_path.parent_path() / texture_path);
+auto load_path_from_texture_path(const std::string &texture_path) {
+  static constexpr auto paths = std::array{"textures", "models"};
+  using recursive_iterator = std::filesystem::recursive_directory_iterator;
+  static constexpr std::hash<std::string_view> hasher{};
+  static std::unordered_map<std::size_t, std::filesystem::path> cache{};
 
-  if (!FS::exists(path)) {
-    path = FS::resolve(file_path.parent_path() / "textures" / texture_path);
+  // Remove everything before and including App in texture_path
+  const auto actual_path = texture_path.substr(texture_path.find("App") + 4);
+
+  const auto texture_path_hash = hasher(actual_path);
+  if (cache.contains(texture_path_hash)) {
+    return cache.at(texture_path_hash);
   }
 
+  for (const auto &path : paths) {
+    for (const auto &entry : recursive_iterator(path)) {
+      if (entry.is_regular_file()) {
+        const auto hash = hasher(entry.path().string());
+        cache.try_emplace(hash, entry.path());
+
+        if (hash == texture_path_hash) {
+          return entry.path();
+        }
+      }
+    }
+  }
+
+  return FS::Path{};
+}
+
+auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
+    -> Scope<Texture> {
+  const auto path = load_path_from_texture_path(texture_path);
   return Texture::construct_shader(
       *device, {
                    .format = ImageFormat::UNORM_RGBA8,

@@ -39,11 +39,12 @@ public:
   }
 
   template <typename T> void write(std::span<T> data) {
-    write(data.data(), data.size() * sizeof(T));
+    write(data.data(), data.size_bytes());
   }
   template <typename T> void write(const T &data) { write(&data, sizeof(T)); }
 
   void write(const void *data, u64 data_size);
+  void write(const void *data, u64 data_size, u64 offset);
 
   template <typename T> auto read(std::vector<T> &output, size_t offset = 0) {
     auto data_size = output.size() * sizeof(T);
@@ -58,7 +59,7 @@ public:
     write(&data, sizeof(T));
   }
 
-  void write(const void *data, u64 data_size) const;
+  void write(const void *data, u64 data_size, u64 offset) const;
 
   template <typename T>
   auto read(std::vector<T> &output, size_t offset = 0) const {

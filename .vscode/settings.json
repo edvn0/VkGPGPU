@@ -8,6 +8,7 @@
     "librenderdoc",
     "rdoc",
     "renderpass",
+    "Serialiser",
     "SUBPASS",
     "subresource"
   ],
@@ -113,6 +114,7 @@
     "xtree": "cpp",
     "xutility": "cpp",
     "coroutine": "cpp",
-    "resumable": "cpp"
+    "resumable": "cpp",
+    "execution": "cpp"
   }
 }

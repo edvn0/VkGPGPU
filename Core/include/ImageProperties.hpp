@@ -58,9 +58,7 @@ enum class ImageTiling : std::uint8_t {
   Linear,
 };
 
-static constexpr auto bit(std::size_t i) {
-  return static_cast<std::uint32_t>(1) << i;
-}
+static constexpr auto bit(std::size_t i) { return static_cast<u32>(1) << i; }
 
 enum class ImageUsage : std::uint8_t {
   TransferSrc = bit(0),

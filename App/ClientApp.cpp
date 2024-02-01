@@ -20,17 +20,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "ecs/Entity.hpp"
-
-auto randomize_span_of_matrices(std::span<Math::Mat4> matrices) -> void {
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  static std::uniform_real_distribution<float> dis(-1.0F, 1.0F);
-
-  // Randomize span of glm::mat4
-  for (auto &mat : matrices) {
-    Math::for_each(mat, [&](floating &value) { value = dis(gen); });
-  }
-}
+#include "ecs/serialisation/SceneSerialiser.hpp"
 
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), timer(*get_messaging_client()),
@@ -39,76 +29,10 @@ ClientApp::ClientApp(const ApplicationProperties &props)
       *get_device(), std::filesystem::current_path()));
 };
 
-template <usize N> auto generate_points(floating K) {
-  std::array<glm::mat4, N> points{};
-
-  // Random device and generator
-  std::random_device rd{};
-  std::mt19937_64 gen(rd());
-
-  // Uniform distributions for angle and z-coordinate
-  std::uniform_real_distribution<float> angleDistr(0.0f, 2.0f * 3.14159265f);
-  std::uniform_real_distribution<float> zDistr(-1.0f, 1.0f);
-
-  for (size_t i = 0; i < N; ++i) {
-    // Generate random angle and z-coordinate
-    float angle = angleDistr(gen);
-    float z = zDistr(gen);
-
-    // Calculate the radius in the XY-plane for this z value
-    float xyPlaneRadius = sqrt(1.0f - z * z);
-
-    // Calculate the point position and scale it to a sphere of radius 3
-    const auto point =
-        glm::vec3(xyPlaneRadius * cos(angle), xyPlaneRadius * sin(angle), z) *
-        K;
-    points[i] = glm::translate(glm::mat4{1.0F}, point) *
-                glm::scale(glm::mat4{1.0F}, glm::vec3(10.0F));
-  }
-  return points;
-}
-
-auto update_camera(auto &camera_position, const auto ts) {
-  static constexpr float zoom_speed = 1.0F; // Adjust this value for zoom speed
-  static float radius = 17.0F;
-  static glm::quat camera_orientation{1.0, 0.0, 0.0, 0.0};
-  if (Input::pressed(KeyCode::KEY_D)) {
-    glm::quat rotationY = glm::angleAxis(ts * 0.3F, glm::vec3(0, -1, 0));
-    camera_orientation = rotationY * camera_orientation;
-  }
-  if (Input::pressed(KeyCode::KEY_A)) {
-    glm::quat rotationY = glm::angleAxis(-ts * 0.3F, glm::vec3(0, -1, 0));
-    camera_orientation = rotationY * camera_orientation;
-  }
-  if (Input::pressed(KeyCode::KEY_W)) {
-    glm::quat rotationX = glm::angleAxis(ts * 0.3F, glm::vec3(-1, 0, 0));
-    camera_orientation = rotationX * camera_orientation;
-  }
-  if (Input::pressed(KeyCode::KEY_S)) {
-    glm::quat rotationX = glm::angleAxis(-ts * 0.3F, glm::vec3(-1, 0, 0));
-    camera_orientation = rotationX * camera_orientation;
-  }
-
-  if (Input::pressed(KeyCode::KEY_Q)) {
-    radius -= zoom_speed * ts;
-    if (radius < 1.0F)
-      radius = 1.0F;
-  }
-
-  if (Input::pressed(KeyCode::KEY_E)) {
-    radius += zoom_speed * ts;
-  }
-
-  camera_orientation = glm::normalize(camera_orientation);
-  const glm::vec3 direction =
-      glm::rotate(camera_orientation, glm::vec3(0, 0, -1));
-  camera_position = direction * radius;
-}
-
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
 
-  update_camera(camera_position, ts);
+  camera.update_camera(ts);
   scene_renderer.set_frame_index(frame());
   for (const auto &widget : widgets) {
     widget->on_update(ts);
@@ -116,7 +40,8 @@ auto ClientApp::on_update(floating ts) -> void {
 
   scene->on_update(scene_renderer, ts);
 
-  scene->on_render(scene_renderer, ts, camera_position);
+  scene->on_render(scene_renderer, ts, camera.get_projection_matrix(),
+                   camera.get_view_matrix());
   timer.end();
 }
 
@@ -126,7 +51,13 @@ void ClientApp::on_create() {
   scene = make_scope<ECS::Scene>("Default");
   auto entity = scene->create_entity("Test");
 
-  scene->on_create(*get_device(), *get_window(), *get_swapchain());
+  // scene->on_create(*get_device(), *get_window(), *get_swapchain());
+
+  ECS::SceneSerialiser serialiser;
+  serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});
+
+  scene->temp_on_create(*get_device(), *get_window(), *get_swapchain());
+
   for (const auto &widget : widgets) {
     widget->on_create(*get_device(), *get_window(), *get_swapchain());
   }
@@ -167,18 +98,21 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     ImGui::PopStyleVar(3);
 
     // DockSpace
-    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+    const auto dockspace_id = ImGui::GetID("MyDockSpace");
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
     ImGui::End();
   }
 
   static constexpr auto draw_stats =
       [](const auto &average,
-         const auto &command_buffer_with_compute_stats_available) {
+         const auto &command_buffer_with_compute_stats_available,
+         const auto &other_command_buffer_with_compute_stats_available) {
         // Retrieve statistics from the timer and command buffer
         auto &&[frametime, fps] = average.get_statistics();
         auto &&[compute_times] =
             command_buffer_with_compute_stats_available.get_statistics();
+        auto &&[other_compute_times] =
+            other_command_buffer_with_compute_stats_available.get_statistics();
 
         // Start a new ImGui table
         if (ImGui::BeginTable("StatsTable", 2)) {
@@ -201,12 +135,17 @@ void ClientApp::on_interface(InterfaceSystem &system) {
           ImGui::TableSetColumnIndex(1);
           UI::text("{}", fps);
 
-          // Row for Compute Time
           ImGui::TableNextRow();
           ImGui::TableSetColumnIndex(0);
-          UI::text("Compute Time");
+          UI::text("Compute command buffer (ms)");
           ImGui::TableSetColumnIndex(1);
           UI::text("{} ms", compute_times);
+
+          ImGui::TableNextRow();
+          ImGui::TableSetColumnIndex(0);
+          UI::text("Graphics command buffer (ms)");
+          ImGui::TableSetColumnIndex(1);
+          UI::text("{} ms", other_compute_times);
 
           // End the table
           ImGui::EndTable();
@@ -214,8 +153,8 @@ void ClientApp::on_interface(InterfaceSystem &system) {
       };
 
   UI::widget("FPS/Frametime", [&]() {
-    draw_stats(get_timer(), scene_renderer.get_command_buffer());
-    draw_stats(get_timer(), scene_renderer.get_compute_command_buffer());
+    draw_stats(get_timer(), scene_renderer.get_command_buffer(),
+               scene_renderer.get_compute_command_buffer());
   });
 
   /*UI::widget("Image", [&]() {
@@ -227,6 +166,37 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   });*/
 
   UI::widget("Scene", [&](const auto &extent) {
+    if (Input::pressed(MouseCode::MOUSE_BUTTON_LEFT)) {
+
+      const auto mouse_position = Input::mouse_position();
+
+      // Get the widget's screen position and size
+      const ImVec2 widget_pos = ImGui::GetCursorScreenPos();
+      ImVec2 widget_size =
+          ImGui::GetContentRegionAvail(); // or another method to get the size
+
+      // Calculate mouse position relative to the widget
+      ImVec2 mouse_pos_relative_to_widget;
+      mouse_pos_relative_to_widget.x = mouse_position.x - widget_pos.x;
+      mouse_pos_relative_to_widget.y = mouse_position.y - widget_pos.y;
+
+      glm::vec2 ndc;
+      ndc.x = (2.0f * mouse_pos_relative_to_widget.x) / widget_size.x - 1.0f;
+      ndc.y = 1.0f - (2.0f * mouse_pos_relative_to_widget.y) / widget_size.y;
+
+      ndc.x *= extent.aspect_ratio();
+
+      const auto ray_clip = glm::vec4{ndc.x, ndc.y, -1.0F, 1.0F};
+      auto ray_eye = glm::inverse(camera.get_projection_matrix()) * ray_clip;
+      ray_eye = glm::vec4{ray_eye.x, ray_eye.y, -1.0F, 0.0F};
+
+      auto ray_world = glm::inverse(camera.get_view_matrix()) * ray_eye;
+      ray_world = glm::normalize(
+          glm::vec4{ray_world.x, ray_world.y, ray_world.z, 0.0F});
+
+      const auto ray_origin = camera.get_camera_position();
+    }
+
     UI::image(scene_renderer.get_output_image(), {extent.width, extent.height});
   });
 
@@ -235,6 +205,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   });
 
   UI::widget("Push constant", [&]() {
+    auto &camera_position = camera.get_camera_position();
     ImGui::SliderFloat3("Position", &camera_position[0], -10.0f, 10.0f);
     UI::text("Current Position: x={}, y={}, z={}", camera_position.x,
              camera_position.y, camera_position.z);

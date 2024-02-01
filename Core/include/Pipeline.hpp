@@ -67,7 +67,7 @@ static constexpr auto to_size(ElementType type) -> std::size_t {
   case ElementType::Float4:
     return sizeof(float) * 4;
   case ElementType::Uint:
-    return sizeof(std::uint32_t);
+    return sizeof(u32);
   default:
     assert(false && "Could not map to size.");
   }
@@ -82,15 +82,15 @@ struct LayoutElement {
 
   ElementType type;
   std::string debug_name;
-  std::uint32_t size{0};
-  std::uint32_t offset{0};
+  u32 size{0};
+  u32 offset{0};
 };
 
 enum class InputRate : std::uint8_t { Vertex, Instance };
 
 struct VertexBinding {
-  std::uint32_t binding{0};
-  std::uint32_t stride{0};
+  u32 binding{0};
+  u32 stride{0};
   InputRate input_rate{InputRate::Vertex};
 };
 
@@ -102,7 +102,9 @@ struct VertexLayout {
       element.offset = total_size;
       total_size += element.size;
     }
-    binding.stride = total_size;
+    if (binding.stride == 0) {
+      binding.stride = total_size;
+    }
   }
 
   template <usize N>
@@ -116,11 +118,13 @@ struct VertexLayout {
     binding.stride = total_size;
   }
 
+  [[nodiscard]] auto empty() const noexcept -> bool { return elements.empty(); }
+
   [[nodiscard]] auto construct_binding() const -> const VertexBinding & {
     return binding;
   }
 
-  std::uint32_t total_size{0};
+  u32 total_size{0};
   std::vector<LayoutElement> elements;
   VertexBinding binding;
 };
@@ -183,6 +187,7 @@ struct GraphicsPipelineConfiguration {
   const Shader *shader{nullptr};
   const Framebuffer *framebuffer{nullptr};
   VertexLayout layout{};
+  VertexLayout instance_layout{};
   PolygonMode polygon_mode{PolygonMode::Fill};
   float line_width{1.0F};
   DepthCompareOperator depth_comparison_operator{DepthCompareOperator::Less};

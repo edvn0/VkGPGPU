@@ -4,6 +4,7 @@
 #include "App.hpp"
 #include "Buffer.hpp"
 #include "BufferSet.hpp"
+#include "Camera.hpp"
 #include "CommandBuffer.hpp"
 #include "CommandDispatcher.hpp"
 #include "DebugMarker.hpp"
@@ -54,7 +55,7 @@ private:
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
 
-  glm::vec3 camera_position{-3, -5, 3};
+  Camera camera;
 
   std::vector<Scope<Widget>> widgets{};
 

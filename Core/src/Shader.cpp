@@ -101,8 +101,7 @@ auto Shader::has_descriptor_set(u32 set) const -> bool {
          descriptor_set_layouts[set] != nullptr;
 }
 
-auto Shader::get_descriptor_set(std::string_view descriptor_name,
-                                std::uint32_t set) const
+auto Shader::get_descriptor_set(std::string_view descriptor_name, u32 set) const
     -> const VkWriteDescriptorSet * {
   if (set >= reflection_data.shader_descriptor_sets.size()) {
     return nullptr;

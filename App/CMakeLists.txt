@@ -7,6 +7,10 @@ target_include_directories(App PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMA
 target_sources(App PRIVATE version.rc)
 target_precompile_headers(App REUSE_FROM Core)
 
+if(GPGPU_CUSTOM_BASE_PATH)
+    target_compile_definitions(App PRIVATE -DGPGPU_CUSTOM_BASE_PATH="${GPGPU_CUSTOM_BASE_PATH}")
+endif()
+
 # Only if Vulkan_GLSLC_EXECUTABLE is set
 if(Vulkan_GLSLC_EXECUTABLE)
     file(GLOB_RECURSE VERTEX_SHADERS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert")

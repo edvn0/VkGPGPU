@@ -121,10 +121,9 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
       .pApplicationInfo = &application_info,
-      .enabledLayerCount = static_cast<std::uint32_t>(enabled_layers.size()),
+      .enabledLayerCount = static_cast<u32>(enabled_layers.size()),
       .ppEnabledLayerNames = enabled_layers.data(),
-      .enabledExtensionCount =
-          static_cast<std::uint32_t>(enabled_extensions.size()),
+      .enabledExtensionCount = static_cast<u32>(enabled_extensions.size()),
       .ppEnabledExtensionNames = enabled_extensions.data(),
   };
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};

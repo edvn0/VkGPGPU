@@ -6,6 +6,7 @@ set(SOURCES
     include/App.hpp
     include/Buffer.hpp
     include/BufferSet.hpp
+    include/Camera.hpp
     include/Colours.hpp
     include/CommandBuffer.hpp
     include/CommandDispatcher.hpp

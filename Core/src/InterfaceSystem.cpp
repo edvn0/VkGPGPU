@@ -24,7 +24,7 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 
   command_executor =
       CommandBuffer::construct(*device, {
-                                            .count = 3,
+                                            .count = Config::frame_count,
                                             .is_primary = false,
                                             .owned_by_swapchain = false,
                                             .record_stats = false,
@@ -46,8 +46,8 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
   VkDescriptorPoolCreateInfo pool_info = {};
   pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pool_info.maxSets = static_cast<std::uint32_t>(pool_sizes.size()) * 11ul;
-  pool_info.poolSizeCount = static_cast<std::uint32_t>(std::size(pool_sizes));
+  pool_info.maxSets = static_cast<u32>(pool_sizes.size()) * 11ul;
+  pool_info.poolSizeCount = static_cast<u32>(std::size(pool_sizes));
   pool_info.pPoolSizes = pool_sizes.data();
 
   verify(
@@ -159,7 +159,7 @@ auto InterfaceSystem::end_frame() -> void {
   render_pass_begin_info.renderArea.extent.width = width;
   render_pass_begin_info.renderArea.extent.height = height;
   render_pass_begin_info.clearValueCount =
-      static_cast<std::uint32_t>(clear_values.size());
+      static_cast<u32>(clear_values.size());
   render_pass_begin_info.pClearValues = clear_values.data();
   render_pass_begin_info.framebuffer = vk_framebuffer;
 

@@ -61,9 +61,11 @@ concept Container = requires(T t) {
   std::cbegin(t);
   std::size(t);
   std::empty(t);
-  std::data(t);
-  std::erase(t, std::end(t));
 };
+
+auto for_each(Container auto &container, auto &&func) -> void {
+  std::ranges::for_each(std::begin(container), std::end(container), func);
+}
 
 auto sort(Container auto &container) -> void {
   std::ranges::sort(std::begin(container), std::end(container));
@@ -75,6 +77,30 @@ auto sort(Container auto &container, auto &&predicate) -> void {
 
 auto remove_if(Container auto &container, auto &&predicate) -> void {
   std::erase_if(container, predicate);
+}
+
+template <Container C, Container... Cs>
+auto combine_into_one(const C &first, const Cs &...rest)
+    -> std::vector<typename C::value_type> {
+  using ValueType = typename C::value_type;
+
+  static_assert(
+      (std::is_same_v<typename C::value_type, typename Cs::value_type> && ...),
+      "All containers must be of the same type");
+
+  std::vector<ValueType> result;
+
+  // Reserve enough space for all elements
+  size_t totalSize = first.size() + (rest.size() + ...);
+  result.reserve(totalSize);
+
+  // Insert elements from the first container
+  std::copy(first.begin(), first.end(), std::back_inserter(result));
+
+  // Insert elements from the rest of the containers
+  (std::copy(rest.begin(), rest.end(), std::back_inserter(result)), ...);
+
+  return result;
 }
 
 template <class T, std::integral IndexType = std::size_t>

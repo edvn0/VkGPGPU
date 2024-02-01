@@ -32,7 +32,6 @@ class SceneRenderer {
     const Mesh *mesh_ptr{};
     u32 submesh_index{0};
     u32 instance_count{0};
-    std::vector<glm::mat4> transforms{};
     std::vector<glm::vec4> colours{};
     Material *material{};
   };
@@ -69,11 +68,22 @@ class SceneRenderer {
   };
 
   struct TransformData {
-    std::array<glm::mat4, Config::transform_buffer_size> transforms{};
+    std::vector<glm::mat4> transforms{};
+
+    [[nodiscard]] auto size() const -> usize {
+      return transforms.size() * sizeof(glm::mat4);
+    }
   };
   struct ColourData {
-    std::array<glm::vec4, Config::transform_buffer_size> colours{};
+    std::vector<glm::vec4> colours{};
+
+    [[nodiscard]] auto size() const -> usize {
+      return colours.size() * sizeof(glm::vec4);
+    }
   };
+  TransformData buffer_for_transform_data{};
+  ColourData buffer_for_colour_data{};
+
   RendererUBO renderer_ubo{};
   ShadowUBO shadow_ubo{};
   GridUBO grid_ubo{};
@@ -106,11 +116,13 @@ public:
    */
   auto explicit_clear(const Framebuffer &framebuffer) -> void;
 
-  auto draw(const DrawParameters &params) -> void;
-  auto draw_vertices(const DrawParameters &params) -> void;
+  auto draw(const DrawParameters &params) const -> void;
+  auto draw_vertices(const DrawParameters &params) const -> void;
   auto bind_pipeline(const GraphicsPipeline &pipeline) -> void;
-  auto bind_index_buffer(const Buffer &index_buffer) -> void;
-  auto bind_vertex_buffer(const Buffer &vertex_buffer) -> void;
+  auto bind_index_buffer(const Buffer &index_buffer) const -> void;
+  auto bind_vertex_buffer(const Buffer &vertex_buffer) const -> void;
+  auto bind_vertex_buffer(const Buffer &vertex_buffer, u32 offset,
+                          u32 index) const -> void;
   auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {}) {
     submit_static_mesh(mesh, transform, glm::vec4{1.0F});
   }
@@ -121,7 +133,8 @@ public:
   auto set_frame_index(FrameIndex frame_index) -> void {
     current_frame = frame_index;
   }
-  auto begin_frame(const glm::vec3 &camera_position) -> void;
+  auto begin_frame(const Math::Mat4 &projection, const Math::Mat4 &view)
+      -> void;
 
   auto flush() -> void;
   auto end_frame() -> void;
@@ -203,6 +216,20 @@ private:
 
   std::unordered_map<CommandKey, DrawCommand> draw_commands;
   std::unordered_map<CommandKey, DrawCommand> shadow_draw_commands;
+
+  struct SubmeshTransformBuffer {
+    Scope<Buffer> vertex_buffer;
+    Scope<DataBuffer> transform_buffer;
+  };
+  std::vector<SubmeshTransformBuffer> transform_buffers;
+  struct TransformVertexData {
+    std::array<glm::vec4, 3> transform_rows{};
+  };
+  struct TransformMapData {
+    std::vector<TransformVertexData> transforms;
+    u32 offset = 0;
+  };
+  std::unordered_map<CommandKey, TransformMapData> mesh_transform_map;
 
   [[nodiscard]] auto is_already_bound(const GraphicsPipeline &pipeline) const
       -> bool {

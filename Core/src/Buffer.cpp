@@ -217,20 +217,26 @@ auto Buffer::get_buffer() const noexcept -> VkBuffer {
   return buffer_data->buffer;
 }
 
-void Buffer::write(const void *data, u64 data_size) {
-  assert(data_size <= size); // Ensure we don't write out of bounds
+void Buffer::write(const void *data, u64 data_size, u64 offset) {
+  assert(offset + data_size <= size); // Ensure we don't write out of bounds
 
   const auto is_always_mapped = buffer_data->allocation_info.pMappedData;
   if (is_always_mapped) {
-    std::memcpy(buffer_data->allocation_info.pMappedData, data, data_size);
+    std::memcpy(static_cast<char *>(buffer_data->allocation_info.pMappedData) +
+                    offset,
+                data, data_size);
   } else {
     void *mapped_data{};
     verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
                         &mapped_data),
            "vmaMapMemory", "Failed to map memory");
-    std::memcpy(mapped_data, data, data_size);
+    std::memcpy(static_cast<u8 *>(mapped_data) + offset, data, data_size);
     vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
   }
+}
+
+void Buffer::write(const void *data, u64 data_size) {
+  write(data, data_size, 0);
 }
 
 auto Buffer::get_vulkan_type() const noexcept -> VkDescriptorType {
@@ -244,18 +250,20 @@ auto Buffer::get_vulkan_type() const noexcept -> VkDescriptorType {
   }
 }
 
-void Buffer::write(const void *data, u64 data_size) const {
+void Buffer::write(const void *data, u64 data_size, u64 offset) const {
   assert(data_size <= size); // Ensure we don't write out of bounds
 
   const auto is_always_mapped = buffer_data->allocation_info.pMappedData;
   if (is_always_mapped) {
-    std::memcpy(buffer_data->allocation_info.pMappedData, data, data_size);
+    std::memcpy(static_cast<u8 *>(buffer_data->allocation_info.pMappedData) +
+                    offset,
+                data, data_size);
   } else {
     void *mapped_data{};
     verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
                         &mapped_data),
            "vmaMapMemory", "Failed to map memory");
-    std::memcpy(mapped_data, data, data_size);
+    std::memcpy(static_cast<u8 *>(mapped_data) + offset, data, data_size);
     vmaUnmapMemory(Allocator::get_allocator(), buffer_data->allocation);
   }
 }

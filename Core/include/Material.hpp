@@ -93,8 +93,8 @@ private:
 
   struct PendingDescriptor {
     PendingDescriptorType type = PendingDescriptorType::None;
-    VkWriteDescriptorSet write_set;
-    VkDescriptorImageInfo image_info;
+    VkWriteDescriptorSet write_set{};
+    VkDescriptorImageInfo image_info{};
     const Texture *texture{nullptr};
     const Image *image{nullptr};
     VkDescriptorImageInfo descriptor_image_info{};

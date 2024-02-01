@@ -13,8 +13,12 @@ struct IdentityComponent {
   std::string name{"Empty"};
   Core::u64 id{0};
 
+  explicit IdentityComponent(std::string name, Core::u64 identifier)
+      : name(std::move(name)), id(identifier) {}
   explicit IdentityComponent(std::string name)
-      : name(std::move(name)), id(UUID::generate_uuid<64>()) {}
+      : IdentityComponent(std::move(name), UUID::generate_uuid<64>()) {}
+
+  IdentityComponent() = default;
 };
 
 struct TransformComponent {
@@ -22,7 +26,7 @@ struct TransformComponent {
   glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
   glm::vec3 scale{1.0f};
 
-  auto compute() const -> glm::mat4;
+  [[nodiscard]] auto compute() const -> glm::mat4;
 };
 
 struct TextureComponent {
@@ -31,6 +35,11 @@ struct TextureComponent {
 
 struct MeshComponent {
   Core::Ref<Core::Mesh> mesh;
+  std::filesystem::path path;
+};
+
+struct CameraComponent {
+  float field_of_view{glm::radians(90.0F)};
 };
 
 } // namespace ECS

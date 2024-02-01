@@ -9,6 +9,8 @@ set(SOURCES
     include/ecs/Scene.hpp
     src/ecs/Entity.cpp
     src/ecs/Scene.cpp
+    include/ecs/serialisation/SceneSerialiser.hpp
+    src/ecs/serialisation/SceneSerialiser.cpp
 )
 add_library(ECS STATIC ${SOURCES})
 target_link_libraries(ECS PUBLIC Reflection fmt::fmt EnTT::EnTT Vulkan::Vulkan)

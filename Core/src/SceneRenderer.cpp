@@ -177,14 +177,14 @@ auto SceneRenderer::explicit_clear(const Framebuffer &framebuffer) -> void {
   end_renderpass();
 }
 
-auto SceneRenderer::draw(const DrawParameters &params) -> void {
+auto SceneRenderer::draw(const DrawParameters &params) const -> void {
   vkCmdDrawIndexed(command_buffer->get_command_buffer(), params.index_count,
                    params.instance_count, params.first_index,
                    static_cast<i32>(params.vertex_offset),
                    params.first_instance);
 }
 
-auto SceneRenderer::draw_vertices(const DrawParameters &params) -> void {
+auto SceneRenderer::draw_vertices(const DrawParameters &params) const -> void {
   vkCmdDraw(command_buffer->get_command_buffer(), params.vertex_count,
             params.instance_count, params.first_index, params.first_instance);
 }
@@ -197,15 +197,23 @@ auto SceneRenderer::bind_pipeline(const GraphicsPipeline &pipeline) -> void {
   };
 }
 
-auto SceneRenderer::bind_index_buffer(const Buffer &index_buffer) -> void {
+auto SceneRenderer::bind_index_buffer(const Buffer &index_buffer) const
+    -> void {
   vkCmdBindIndexBuffer(command_buffer->get_command_buffer(),
                        index_buffer.get_buffer(), 0, VK_INDEX_TYPE_UINT32);
 }
 
-auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer) -> void {
-  constexpr std::array<VkDeviceSize, 1> offset = {0};
+auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer) const
+    -> void {
+  bind_vertex_buffer(vertex_buffer, 0, 0);
+}
+
+auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer,
+                                       u32 vertex_offset, u32 index) const
+    -> void {
+  const std::array<VkDeviceSize, 1> offset = {vertex_offset};
   const std::array buffers = {vertex_buffer.get_buffer()};
-  vkCmdBindVertexBuffers(command_buffer->get_command_buffer(), 0, 1,
+  vkCmdBindVertexBuffers(command_buffer->get_command_buffer(), index, 1,
                          buffers.data(), offset.data());
 }
 
@@ -215,20 +223,26 @@ auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
   for (const auto &submesh : mesh->get_submeshes()) {
     CommandKey key{mesh, submesh};
 
+    auto &mesh_transform = mesh_transform_map[key].transforms.emplace_back();
+    mesh_transform.transform_rows[0] = {transform[0][0], transform[1][0],
+                                        transform[2][0], transform[3][0]};
+    mesh_transform.transform_rows[1] = {transform[0][1], transform[1][1],
+                                        transform[2][1], transform[3][1]};
+    mesh_transform.transform_rows[2] = {transform[0][2], transform[1][2],
+                                        transform[2][2], transform[3][2]};
+
     auto &command = draw_commands[key];
     command.mesh_ptr = mesh;
     command.submesh_index = submesh;
     command.instance_count++;
-    command.transforms.push_back(transform);
-    command.colours.push_back(colour);
     command.material = mesh->get_material(submesh);
+    command.colours.push_back(colour);
 
     if (mesh->casts_shadows()) {
       auto &shadow_command = shadow_draw_commands[key];
       shadow_command.mesh_ptr = mesh;
       shadow_command.submesh_index = submesh;
       shadow_command.instance_count++;
-      shadow_command.transforms.push_back(transform);
       shadow_command.material = shadow_material.get();
     }
   }
@@ -238,7 +252,37 @@ auto SceneRenderer::end_renderpass() -> void {
   vkCmdEndRenderPass(command_buffer->get_command_buffer());
 }
 
-auto SceneRenderer::begin_frame(const glm::vec3 &camera_position) -> void {
+auto SceneRenderer::begin_frame(const glm::mat4 &projection,
+                                const glm::mat4 &view) -> void {
+  const auto &ubo = ubos->get(0, current_frame);
+  renderer_ubo.projection = projection;
+  renderer_ubo.view = view;
+  renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
+  renderer_ubo.light_position = {sun_position, 1.0F};
+  renderer_ubo.light_direction = {glm::normalize(sun_position), 1.0F};
+  const auto &position = view[3];
+  renderer_ubo.camera_position = position;
+
+  ubo->write(renderer_ubo);
+
+  const auto &ubo_shadow = ubos->get(1, current_frame);
+  shadow_ubo.projection =
+      glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
+                 depth_factor.value, depth_factor.near, depth_factor.far);
+  shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, -1, 0});
+  shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+  shadow_ubo.bias_and_default = {depth_factor.bias, depth_factor.default_value};
+
+  ubo_shadow->write(shadow_ubo);
+
+  const auto &ubo_grid = ubos->get(3, current_frame);
+  grid_ubo.grid_colour = glm::vec4{0.2F, 0.2F, 0.2F, 1.0F};
+  grid_ubo.plane_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
+  grid_ubo.grid_size = glm::vec4{1.0F, 1.0F, 0.0F, 0.0F};
+  grid_ubo.fog_colour = glm::vec4{0.8F, 0.9F, 1.0F, 0.02F};
+
+  ubo_grid->write(grid_ubo);
+
   vkResetDescriptorPool(device->get_device(), pool, 0);
 
   VkDescriptorSetAllocateInfo allocation_info{};
@@ -248,108 +292,26 @@ auto SceneRenderer::begin_frame(const glm::vec3 &camera_position) -> void {
   allocation_info.pSetLayouts = &layout;
   vkAllocateDescriptorSets(device->get_device(), &allocation_info, &active);
 
-  VkWriteDescriptorSet ubo_write = {};
-  {
-    const auto &ubo = ubos->get(0, current_frame);
-    renderer_ubo.projection = glm::perspective(
-        glm::radians(45.0F), extent.aspect_ratio(), 0.1F, 1000.0F);
-    renderer_ubo.view = glm::lookAt(camera_position, {0, 0, 0}, {0, -1, 0});
-    renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
-    renderer_ubo.light_position = {sun_position, 1.0F};
-    renderer_ubo.light_direction = {glm::normalize(-sun_position), 1.0F};
-    renderer_ubo.camera_position = {camera_position, 1.0F};
+  const auto ubo_write_descriptors = ubos->get_write_descriptors(current_frame);
+  const auto sbo_write_descriptors =
+      ssbos->get_write_descriptors(current_frame);
+  auto combined =
+      Container::combine_into_one(ubo_write_descriptors, sbo_write_descriptors);
 
-    ubo->write(renderer_ubo);
+  Container::for_each(combined,
+                      [s = active](auto &write) { write.dstSet = s; });
 
-    ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ubo_write.descriptorCount = 1;
-    ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ubo_write.dstSet = active;
-    ubo_write.dstBinding = 0;
-    ubo_write.pBufferInfo = &ubo->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet shadow_ubo_write = {};
-  {
-    const auto &ubo_shadow = ubos->get(1, current_frame);
-    shadow_ubo.projection =
-        glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
-                   depth_factor.value, depth_factor.near, depth_factor.far);
-    shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, -1, 0});
-    shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
-    shadow_ubo.bias_and_default = {depth_factor.bias,
-                                   depth_factor.default_value};
-
-    ubo_shadow->write(shadow_ubo);
-
-    shadow_ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    shadow_ubo_write.descriptorCount = 1;
-    shadow_ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    shadow_ubo_write.dstSet = active;
-    shadow_ubo_write.dstBinding = 2;
-    shadow_ubo_write.pBufferInfo = &ubo_shadow->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet grid_ubo_write = {};
-  {
-    const auto &ubo_grid = ubos->get(3, current_frame);
-    grid_ubo.grid_colour = glm::vec4{0.2F, 0.2F, 0.2F, 1.0F};
-    grid_ubo.plane_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
-    grid_ubo.grid_size = glm::vec4{1.0F, 1.0F, 0.0F, 0.0F};
-    grid_ubo.fog_colour = glm::vec4{0.8F, 0.9F, 1.0F, 0.02F};
-
-    ubo_grid->write(grid_ubo);
-
-    grid_ubo_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    grid_ubo_write.descriptorCount = 1;
-    grid_ubo_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    grid_ubo_write.dstSet = active;
-    grid_ubo_write.dstBinding = 3;
-    grid_ubo_write.pBufferInfo = &ubo_grid->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet ssbo_transforms_write = {};
-  {
-    const auto &ssbo = ssbos->get(2, current_frame);
-
-    ssbo_transforms_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ssbo_transforms_write.descriptorCount = 1;
-    ssbo_transforms_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    ssbo_transforms_write.dstSet = active;
-    ssbo_transforms_write.dstBinding = 1;
-    ssbo_transforms_write.pBufferInfo = &ssbo->get_descriptor_info();
-  }
-
-  VkWriteDescriptorSet ssbo_colours_write = {};
-  {
-    const auto &ssbo = ssbos->get(4, current_frame);
-
-    ssbo_colours_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    ssbo_colours_write.descriptorCount = 1;
-    ssbo_colours_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    ssbo_colours_write.dstSet = active;
-    ssbo_colours_write.dstBinding = 1;
-    ssbo_colours_write.pBufferInfo = &ssbo->get_descriptor_info();
-  }
-
-  const std::array writes{
-      ubo_write,      ssbo_transforms_write, shadow_ubo_write,
-      grid_ubo_write, ssbo_colours_write,
-  };
-  vkUpdateDescriptorSets(device->get_device(), static_cast<u32>(writes.size()),
-                         writes.data(), 0, nullptr);
+  vkUpdateDescriptorSets(device->get_device(),
+                         static_cast<u32>(combined.size()), combined.data(), 0,
+                         nullptr);
 }
 
 auto SceneRenderer::shadow_pass() -> void {
   bind_pipeline(*shadow_pipeline);
   const auto &transforms = ssbos->get(2, current_frame);
-  const auto &colours = ssbos->get(4, current_frame);
-  for (const auto &[mesh_ptr, submesh_index, instance_count, transform_data,
-                    colour_data, material] :
-       shadow_draw_commands | std::views::values) {
-    transforms->write(transform_data.data(),
-                      transform_data.size() * sizeof(glm::mat4));
-    colours->write(colour_data.data(), colour_data.size() * sizeof(glm::vec4));
+  for (const auto &[key, value] : shadow_draw_commands) {
+    auto &&[mesh_ptr, submesh_index, instance_count, colour_data, material] =
+        value;
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
@@ -359,26 +321,30 @@ auto SceneRenderer::shadow_pass() -> void {
       material->bind(*command_buffer, *shadow_pipeline, current_frame);
     }
 
-    bind_vertex_buffer(*mesh_ptr->get_vertex_buffer());
+    const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
+    const auto &transform_vertex_buffer =
+        *transform_buffers[current_frame].vertex_buffer;
+
+    bind_vertex_buffer(mesh_vertex_buffer);
+    bind_vertex_buffer(transform_vertex_buffer,
+                       mesh_transform_map.at(key).offset, 1);
     bind_index_buffer(*mesh_ptr->get_index_buffer());
 
     draw({
         .index_count = submesh.index_count,
         .instance_count = instance_count,
         .first_index = submesh.base_index,
+        .vertex_offset = submesh.base_vertex,
     });
   }
 }
 
 auto SceneRenderer::geometry_pass() -> void {
   bind_pipeline(*geometry_pipeline);
-  const auto &transforms = ssbos->get(2, current_frame);
   const auto &colours = ssbos->get(4, current_frame);
-  for (auto &&[mesh_ptr, submesh_index, instance_count, transform_data,
-               colour_data, material] : draw_commands | std::views::values) {
-
-    transforms->write(transform_data.data(),
-                      transform_data.size() * sizeof(glm::mat4));
+  for (auto &&[key, value] : draw_commands) {
+    auto &&[mesh_ptr, submesh_index, instance_count, colour_data, material] =
+        value;
     colours->write(colour_data.data(), colour_data.size() * sizeof(glm::vec4));
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
@@ -391,13 +357,20 @@ auto SceneRenderer::geometry_pass() -> void {
       push_constants(*geometry_pipeline, *material);
     }
 
-    bind_vertex_buffer(*mesh_ptr->get_vertex_buffer());
+    const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
+    const auto &transform_vertex_buffer =
+        *transform_buffers[current_frame].vertex_buffer;
+
+    bind_vertex_buffer(mesh_vertex_buffer);
+    bind_vertex_buffer(transform_vertex_buffer,
+                       mesh_transform_map.at(key).offset, 1);
     bind_index_buffer(*mesh_ptr->get_index_buffer());
 
     draw({
         .index_count = submesh.index_count,
         .instance_count = instance_count,
         .first_index = submesh.base_index,
+        .vertex_offset = submesh.base_vertex,
     });
   }
 }
@@ -437,24 +410,35 @@ auto SceneRenderer::fullscreen_pass() -> void {
 }
 
 auto SceneRenderer::flush() -> void {
+  u32 offset = 0;
+  auto &&[vb, tb] = transform_buffers.at(current_frame);
+
+  for (auto &transform_data : mesh_transform_map | std::views::values) {
+    transform_data.offset = offset * sizeof(TransformVertexData);
+    for (const auto &transform : transform_data.transforms) {
+      tb->write(&transform, sizeof(TransformVertexData),
+                offset * sizeof(TransformVertexData));
+      offset++;
+    }
+  }
+  std::vector<TransformVertexData> output;
+  output.resize(offset);
+
+  tb->read(std::span{output});
+  vb->write(std::span{output});
+
   command_buffer->begin(current_frame);
   {
     begin_renderpass(*shadow_framebuffer);
     shadow_pass();
     end_renderpass();
   }
-  command_buffer->end_and_submit();
-
-  command_buffer->begin(current_frame);
   {
     begin_renderpass(*geometry_framebuffer);
     grid_pass();
     geometry_pass();
     end_renderpass();
   }
-  command_buffer->end_and_submit();
-
-  command_buffer->begin(current_frame);
   {
     begin_renderpass(*fullscreen_framebuffer);
     fullscreen_pass();
@@ -464,6 +448,7 @@ auto SceneRenderer::flush() -> void {
 
   draw_commands.clear();
   shadow_draw_commands.clear();
+  mesh_transform_map.clear();
 }
 
 auto SceneRenderer::end_frame() -> void {}
@@ -516,7 +501,7 @@ void SceneRenderer::update_material_for_rendering(
 }
 
 auto SceneRenderer::get_output_image() const -> const Image & {
-  return *geometry_framebuffer->get_image(0);
+  return *fullscreen_framebuffer->get_image(0);
 }
 
 auto SceneRenderer::get_depth_image() const -> const Image & {
@@ -524,6 +509,30 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 }
 
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
+  const VertexLayout default_vertex_layout = VertexLayout{
+      {
+          LayoutElement{ElementType::Float3, "pos"},
+          LayoutElement{ElementType::Float2, "uvs"},
+          LayoutElement{ElementType::Float4, "colour"},
+          LayoutElement{ElementType::Float3, "normals"},
+          LayoutElement{ElementType::Float3, "tangents"},
+          LayoutElement{ElementType::Float3, "bitangents"},
+      },
+      VertexBinding{0},
+  };
+
+  const VertexLayout default_instance_layout = VertexLayout{
+      {
+          LayoutElement{ElementType::Float4, "row_zero"},
+          LayoutElement{ElementType::Float4, "row_one"},
+          LayoutElement{ElementType::Float4, "row_two"},
+      },
+      VertexBinding{1, sizeof(TransformVertexData)},
+  };
+
+  buffer_for_transform_data.transforms.resize(100 *
+                                              Config::transform_buffer_size);
+  buffer_for_colour_data.colours.resize(100 * Config::transform_buffer_size);
 
   set_extent(swapchain.get_extent());
 
@@ -566,8 +575,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   geometry_framebuffer = Framebuffer::construct(*device, props);
 
   FramebufferProperties shadow_props{
-      .width = 1024,
-      .height = 1024,
+      .width = Config::shadow_map_size,
+      .height = Config::shadow_map_size,
       .resizeable = false,
       .depth_clear_value = 0.0F,
       .blend = false,
@@ -611,15 +620,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .name = "DefaultGraphicsPipeline",
       .shader = geometry_shader.get(),
       .framebuffer = geometry_framebuffer.get(),
-      .layout =
-          VertexLayout{
-              LayoutElement{ElementType::Float3, "pos"},
-              LayoutElement{ElementType::Float2, "uvs"},
-              LayoutElement{ElementType::Float4, "colour"},
-              LayoutElement{ElementType::Float3, "normals"},
-              LayoutElement{ElementType::Float3, "tangents"},
-              LayoutElement{ElementType::Float3, "bitangents"},
-          },
+      .layout = default_vertex_layout,
+      .instance_layout = default_instance_layout,
       .depth_comparison_operator = DepthCompareOperator::Greater,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
@@ -633,15 +635,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .name = "GridPipeline",
       .shader = grid_shader.get(),
       .framebuffer = geometry_framebuffer.get(),
-      .layout =
-          VertexLayout{
-              LayoutElement{ElementType::Float3, "pos"},
-              LayoutElement{ElementType::Float2, "uvs"},
-              LayoutElement{ElementType::Float4, "colour"},
-              LayoutElement{ElementType::Float3, "normals"},
-              LayoutElement{ElementType::Float3, "tangents"},
-              LayoutElement{ElementType::Float3, "bitangents"},
-          },
+      .layout = default_vertex_layout,
       .depth_comparison_operator = DepthCompareOperator::Greater,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
@@ -653,15 +647,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .name = "ShadowGraphicsPipeline",
       .shader = shadow_shader.get(),
       .framebuffer = shadow_framebuffer.get(),
-      .layout =
-          VertexLayout{
-              LayoutElement{ElementType::Float3, "pos"},
-              LayoutElement{ElementType::Float2, "uvs"},
-              LayoutElement{ElementType::Float4, "colour"},
-              LayoutElement{ElementType::Float3, "normals"},
-              LayoutElement{ElementType::Float3, "tangents"},
-              LayoutElement{ElementType::Float3, "bitangents"},
-          },
+      .layout = default_vertex_layout,
+      .instance_layout = default_instance_layout,
       .depth_comparison_operator = DepthCompareOperator::Greater,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
@@ -697,15 +684,25 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   fullscreen_pipeline = GraphicsPipeline::construct(*device, fullscreen_config);
 
-  create_pool_and_layout();
-
   ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(*device);
   ubos->create(sizeof(RendererUBO), SetBinding(0));
   ubos->create(sizeof(ShadowUBO), SetBinding(1));
   ubos->create(sizeof(GridUBO), SetBinding(3));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(*device);
-  ssbos->create(sizeof(TransformData), SetBinding(2));
-  ssbos->create(sizeof(ColourData), SetBinding(4));
+  ssbos->create(buffer_for_transform_data.size(), SetBinding(2));
+  ssbos->create(buffer_for_colour_data.size(), SetBinding(4));
+
+  transform_buffers.resize(Config::frame_count);
+  static constexpr auto total_size =
+      100 * Config::transform_buffer_size * sizeof(TransformVertexData);
+  for (auto &[vertex_buffer, transform_buffer] : transform_buffers) {
+    vertex_buffer =
+        Buffer::construct(*device, total_size, Buffer::Type::Vertex);
+    transform_buffer = make_scope<DataBuffer>(total_size);
+    transform_buffer->fill_zero();
+  }
+
+  create_pool_and_layout();
 }
 
 auto SceneRenderer::create_pool_and_layout() -> void {
@@ -728,49 +725,15 @@ auto SceneRenderer::create_pool_and_layout() -> void {
       vkCreateDescriptorPool(device->get_device(), &pool_info, nullptr, &pool),
       "vkCreateDescriptorPool", "Failed to create descriptor pool");
 
-  VkDescriptorSetLayoutBinding ubo_binding{
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-  };
+  const auto ubo_bindings = ubos->get_bindings();
+  const auto sbo_bindings = ssbos->get_bindings();
 
-  VkDescriptorSetLayoutBinding ssbo_transforms_binding{
-      .binding = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-  };
+  auto combined = Container::combine_into_one(ubo_bindings, sbo_bindings);
 
-  VkDescriptorSetLayoutBinding shadow_binding{
-      .binding = 2,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-  };
-
-  VkDescriptorSetLayoutBinding grid_binding{
-      .binding = 3,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-  };
-
-  VkDescriptorSetLayoutBinding ssbo_colours_binding{
-      .binding = 4,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-  };
-
-  std::array bindings{
-      ubo_binding,  ssbo_transforms_binding, shadow_binding,
-      grid_binding, ssbo_colours_binding,
-  };
-  VkDescriptorSetLayoutCreateInfo create_info{
+  const VkDescriptorSetLayoutCreateInfo create_info{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<u32>(bindings.size()),
-      .pBindings = bindings.data(),
+      .bindingCount = static_cast<u32>(combined.size()),
+      .pBindings = combined.data(),
   };
 
   vkCreateDescriptorSetLayout(device->get_device(), &create_info, nullptr,

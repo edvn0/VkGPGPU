@@ -245,8 +245,9 @@ auto Device::create_vulkan_device(
     queue_support[type] = {supports_timestamping};
   }
 
-  auto swapchain_extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-  std::vector<const char *> extensions = {swapchain_extension};
+  std::array extensions = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
 
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,

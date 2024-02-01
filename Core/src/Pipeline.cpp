@@ -391,34 +391,54 @@ auto GraphicsPipeline::construct_pipeline(
   VkVertexInputBindingDescription binding_description{};
   binding_description.binding = bindings.binding;
   binding_description.stride = bindings.stride;
-  binding_description.inputRate = bindings.input_rate == InputRate::Vertex
-                                      ? VK_VERTEX_INPUT_RATE_VERTEX
-                                      : VK_VERTEX_INPUT_RATE_INSTANCE;
+  binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-  std::vector<VkVertexInputAttributeDescription> attribute_descriptions{};
+  std::vector<VkVertexInputBindingDescription> binding_descriptions{};
+  binding_descriptions.push_back(binding_description);
+
+  if (!configuration.instance_layout.elements.empty()) {
+    const auto &instance_bindings =
+        configuration.instance_layout.construct_binding();
+    VkVertexInputBindingDescription instance_binding_description{};
+    instance_binding_description.binding = instance_bindings.binding;
+    instance_binding_description.stride = instance_bindings.stride;
+    instance_binding_description.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+    binding_descriptions.push_back(instance_binding_description);
+  }
+
+  std::vector<VkVertexInputAttributeDescription> attribute_descriptions;
+  attribute_descriptions.resize(configuration.layout.elements.size() +
+                                configuration.instance_layout.elements.size());
+  u32 binding = 0;
   u32 location = 0;
-  for (const auto &attribute : configuration.layout.elements) {
-    auto &[attribute_location, binding, format, offset] =
-        attribute_descriptions.emplace_back();
-    binding = 0;
-    format = PipelineHelpers::to_vulkan_format(attribute.type);
-    offset = attribute.offset;
-    attribute_location = location++;
+  for (const auto &layout : {configuration.layout.elements,
+                             configuration.instance_layout.elements}) {
+    for (const auto &element : layout) {
+      attribute_descriptions[location].binding = binding;
+      attribute_descriptions[location].location = location;
+      attribute_descriptions[location].format =
+          PipelineHelpers::to_vulkan_format(element.type);
+      attribute_descriptions[location].offset = element.offset;
+      location++;
+    }
+    binding++;
   }
 
-  vertex_input_info.vertexBindingDescriptionCount = 1;
-  vertex_input_info.pVertexBindingDescriptions = &binding_description;
-  if (configuration.layout.elements.empty()) {
-    vertex_input_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_info.pVertexAttributeDescriptions = nullptr;
-    vertex_input_info.pVertexBindingDescriptions = nullptr;
+  vertex_input_info.pVertexBindingDescriptions = binding_descriptions.data();
+  vertex_input_info.vertexBindingDescriptionCount =
+      static_cast<u32>(binding_descriptions.size());
+  vertex_input_info.pVertexAttributeDescriptions =
+      attribute_descriptions.data();
+  vertex_input_info.vertexAttributeDescriptionCount =
+      static_cast<u32>(attribute_descriptions.size());
+
+  if (configuration.layout.empty() && configuration.instance_layout.empty()) {
     vertex_input_info.vertexBindingDescriptionCount = 0;
-  } else {
-    vertex_input_info.vertexAttributeDescriptionCount =
-        static_cast<u32>(attribute_descriptions.size());
-    vertex_input_info.pVertexAttributeDescriptions =
-        attribute_descriptions.data();
+    vertex_input_info.vertexAttributeDescriptionCount = 0;
+    vertex_input_info.pVertexBindingDescriptions = nullptr;
+    vertex_input_info.pVertexAttributeDescriptions = nullptr;
   }
+
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   input_assembly.sType =
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

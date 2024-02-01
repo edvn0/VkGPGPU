@@ -50,8 +50,7 @@ public:
 
   [[nodiscard]] auto allocate_descriptor_set(u32 set) const
       -> Reflection::MaterialDescriptorSet;
-  [[nodiscard]] auto get_descriptor_set(std::string_view descriptor_name,
-                                        std::uint32_t set) const
+  [[nodiscard]] auto get_descriptor_set(std::string_view, u32) const
       -> const VkWriteDescriptorSet *;
 
   [[nodiscard]] auto hash() const -> usize;

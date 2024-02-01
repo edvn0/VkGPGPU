@@ -21,6 +21,10 @@ int main(int argc, char **argv) {
     FS::set_current_path(*wd);
   }
 
+#ifdef GPGPU_CUSTOM_BASE_PATH
+  FS::set_current_path(FS::Path{GPGPU_CUSTOM_BASE_PATH});
+#endif
+
   std::array<std::string, 2> keys{"LOG_LEVEL", "ENABLE_VALIDATION_LAYERS"};
   Environment::initialize(keys);
 

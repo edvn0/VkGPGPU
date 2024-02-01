@@ -4,9 +4,8 @@ namespace Reflection {
 
 class Reflector;
 
-class ShaderResourceDeclaration;
-class ShaderResource;
-class ShaderUniform;
-class MaterialDescriptorSet;
+struct ShaderResourceDeclaration;
+struct ShaderUniform;
+struct MaterialDescriptorSet;
 
 } // namespace Reflection

@@ -27,17 +27,18 @@ void main()
 
   // Normal, sampled from the uniform sampler2D normal_map
   vec3 normal = in_normals;
-  if (pc.use_normal_map > 0) {
+  if (pc.use_normal_map > 0)
+  {
     normal = texture(normal_map, in_uvs).rgb;
     normal = normal * 2.0 - 1.0;
     normal = normalize(in_tbn * normal);
   }
 
   // Diffuse
-    vec3 diffuse = vec3(0.0);
-    vec3 light_dir = normalize(renderer.light_dir.xyz);
-    float diff = max(dot(normal, light_dir), 0.0);
-    diffuse = diff * in_colour.rgb;
+  vec3 diffuse = vec3(0.0);
+  vec3 light_dir = normalize(renderer.light_dir.xyz);
+  float diff = max(dot(normal, light_dir), 0.0);
+  diffuse = diff * in_colour.rgb;
 
   // Specular
   vec3 view_direction = normalize(renderer.camera_pos.xyz - in_fragment_position.xyz);
@@ -45,7 +46,6 @@ void main()
   const float roughness = pc.roughness;
   float specular_intensity = pow(max(dot(half_direction, normal), 0.0), 64.0F);
   specular *= specular_intensity;
-
 
   // Shadow
   vec4 shadow_pos = in_shadow_pos;
@@ -59,6 +59,6 @@ void main()
   }
 
   // Final colour
-  vec3 colour = ambient;
+  vec3 colour = ambient + (1.0 - visibility) * (diffuse + specular);
   out_colour = vec4(gamma_correct(colour), 1.0);
 }
