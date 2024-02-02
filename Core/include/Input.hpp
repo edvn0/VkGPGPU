@@ -171,9 +171,16 @@ public:
   }
   template <MouseCode M> static auto released() -> bool { return released(M); }
 
-  static auto mouse_position() -> glm::vec2 {
-    glm::dvec2 pos;
-    glfwGetCursorPos(window, &pos.x, &pos.y);
+  static auto mouse_position() -> auto {
+    struct Out {
+      std::tuple<double, double> data;
+
+      auto operator-(const Out &rhs) const -> std::tuple<double, double> {
+        return {std::get<0>(data) - std::get<0>(rhs.data),
+                std::get<1>(data) - std::get<1>(rhs.data)};
+      }
+    } pos;
+    glfwGetCursorPos(window, &std::get<0>(pos.data), &std::get<1>(pos.data));
     return pos;
   }
 

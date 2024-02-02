@@ -52,11 +52,15 @@ public:
   }
 
   [[nodiscard]] auto get_projection_matrix() const -> glm::mat4 {
-    return glm::perspective(glm::radians(fov), aspect_ratio, near, far);
+    return glm::perspective(glm::radians(fov), aspect_ratio, far, near);
   }
 
   [[nodiscard]] auto get_camera_position() -> glm::vec3 & {
     return camera_position;
+  }
+
+  auto set_aspect_ratio(const float aspect_ratio) -> void {
+    this->aspect_ratio = aspect_ratio;
   }
 
 private:

@@ -11,6 +11,7 @@ add_executable(Test
     units/generic_cache/texture_cache_tests.cpp
     units/containers/combine_into_one.cpp
     units/serialisation/scene_serialisation_test.cpp
+        units/aabb/aabb_tests.cpp
 )
 
 target_include_directories(Test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include ../Platform/include ${CMAKE_SOURCE_DIR}/ThirdParty/glm)

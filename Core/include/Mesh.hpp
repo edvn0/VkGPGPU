@@ -65,7 +65,7 @@ public:
   [[nodiscard]] auto get_index_buffer() const -> const auto & {
     return index_buffer;
   }
-  [[nodiscard]] auto get_aabb() const { return nullptr; }
+  [[nodiscard]] auto get_aabb() const -> const AABB & { return bounding_box; }
 
   [[nodiscard]] constexpr auto casts_shadows() const -> bool {
     return is_shadow_caster;

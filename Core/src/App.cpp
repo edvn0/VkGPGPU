@@ -66,7 +66,7 @@ auto App::run() -> void {
     return std::chrono::high_resolution_clock::now();
   };
 
-  Scope<InterfaceSystem> interface_system =
+  const auto interface_system =
       make_scope<InterfaceSystem>(*device, *window, *swapchain);
 
   on_create();
@@ -75,6 +75,7 @@ auto App::run() -> void {
   const auto total_time = last_time;
 
   while (!window->should_close()) {
+
     if (was_resized()) {
       on_resize(window->get_extent());
       window->reset_resize_status();

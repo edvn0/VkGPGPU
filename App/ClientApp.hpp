@@ -34,6 +34,7 @@
 #include <unordered_map>
 
 #include "bus/MessagingClient.hpp"
+#include "ecs/Entity.hpp"
 #include "ecs/Scene.hpp"
 #include "widgets/Widget.hpp"
 
@@ -54,6 +55,8 @@ private:
   Scope<ECS::Scene> scene;
   Scope<CommandDispatcher> dispatcher;
   Scope<DynamicLibraryLoader> loader;
+
+  std::optional<ECS::Entity> selected_entity;
 
   Camera camera;
 

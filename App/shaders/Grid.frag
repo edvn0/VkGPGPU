@@ -1,24 +1,57 @@
 #version 460
 
+// Taken verbatim (minus my uniforms)
+// from https://asliceofrendering.com/scene%20helper/2020/01/05/InfiniteGrid/
+
 #include <ShaderResources.glsl>
 
-layout(location = 0) out vec4 out_colour;
+layout(location = 0) in vec3 nearPoint;
+layout(location = 1) in vec3 farPoint;
+layout(location = 0) out vec4 outColor;
 
+vec4 calculate_grid(vec3 fragPos3D, float scale)
+{
+  vec2 coord = fragPos3D.xz * scale;
+  vec2 derivative = fwidth(coord);
+  vec2 g = abs(fract(coord - 0.5) - 0.5) / derivative;
+  float line = min(g.x, g.y);
+  float minimumz = min(derivative.y, 1);
+  float minimumx = min(derivative.x, 1);
+  vec4 colour = grid.grid_colour;
+  colour.a = 1.0 - min(line, 1.0);
+  // z axis
+  if (fragPos3D.x > -0.1 * minimumx && fragPos3D.x < 0.1 * minimumx)
+    colour.z = 1.0;
+  // x axis
+  if (fragPos3D.z > -0.1 * minimumz && fragPos3D.z < 0.1 * minimumz)
+    colour.x = 1.0;
+  return colour;
+}
+float computeDepth(vec3 pos)
+{
+  vec4 clip_space_pos = renderer.view_projection * vec4(pos.xyz, 1.0);
+  return (clip_space_pos.z / clip_space_pos.w);
+}
+float computeLinearDepth(vec3 pos)
+{
+  vec4 clip_space_pos = renderer.view_projection * vec4(pos.xyz, 1.0);
+    float clip_space_depth = (clip_space_pos.z / clip_space_pos.w) * 2.0 - 1.0; // put back between -1 and 1
+    float near = grid.grid_size.z; // near plane
+    float far = grid.grid_size.a; // far plane
+    float linearDepth = (2.0 * near * far) / (far + near - clip_space_depth * (far - near)); // get linear value between 0.01 and 100
+    return linearDepth / far;
+}
 void main()
 {
-  vec4 view_pos = shadow.view * vec4(gl_FragCoord.xyz, 1.0);
+  float t = -nearPoint.y / (farPoint.y - nearPoint.y);
+  vec3 fragPos3D = nearPoint + t * (farPoint - nearPoint);
 
-  vec2 grid_coordinates = mod(view_pos.xz / grid.grid_size.xy, 1.0);
-  float line_thickness = 0.02;
-  float gridPattern = min(smoothstep(0.0, line_thickness, grid_coordinates.x),
-                          smoothstep(0.0, line_thickness, grid_coordinates.y));
+  gl_FragDepth = computeDepth(fragPos3D);
 
-  vec4 color = mix(grid.plane_colour, grid.grid_colour, gridPattern);
+  float linearDepth = computeLinearDepth(fragPos3D);
+  float fading = max(0, (0.5 - linearDepth));
 
-  float distance = length(renderer.camera_pos.xyz - gl_FragCoord.xyz);
-  const float fog_density = grid.fog_colour.a;
-  float fogFactor = 1.0 / exp(distance * fog_density);
-  fogFactor = clamp(fogFactor, 0.0, 1.0);
-
-  out_colour = mix(grid.fog_colour, color, fogFactor);
+  outColor = (calculate_grid(fragPos3D, grid.grid_size.x) +
+              calculate_grid(fragPos3D, grid.grid_size.y)) * float(t > 0);
+  outColor.a *= fading;
 }

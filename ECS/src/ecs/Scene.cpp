@@ -81,7 +81,7 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
                       const glm::mat4 &projection_matrix,
                       const glm::mat4 &view_matrix) -> void {
   registry.view<TransformComponent, CameraComponent>().each(
-      [&](auto, auto &transform, auto &camera) {
+      [&](auto, auto &transform, auto &) {
         transform.position = glm::inverse(view_matrix)[3];
       });
 
@@ -95,9 +95,8 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   // Loop over all Meshes and create them, if the path is not empty
   // We do this to ensure that deserialisers won't have to care about Devices
   registry.view<MeshComponent>().each([&](auto, auto &mesh) {
-    if (!mesh.mesh) {
-      mesh.mesh = Core::Mesh::reference_import_from(
-          device, Core::FS::model("cube.fbx"));
+    if (!mesh.mesh && !mesh.path.empty()) {
+      mesh.mesh = Core::Mesh::reference_import_from(device, mesh.path);
     }
   });
 
@@ -105,6 +104,14 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   camera_entity.add_component<CameraComponent>();
   camera_entity.add_component<MeshComponent>(
       Core::Mesh::reference_import_from(device, Core::FS::model("sphere.fbx")));
+
+  auto basic_cube_at_3_3_1 = create_entity("Basic Cube at 3, 3, 1");
+  auto &transform = basic_cube_at_3_3_1.add_component<TransformComponent>();
+  transform.position = glm::vec3{3.0F, 3.0F, 1.0F};
+  basic_cube_at_3_3_1.add_component<MeshComponent>(
+      Core::Mesh::reference_import_from(device, Core::FS::model("cube.fbx")));
+  basic_cube_at_3_3_1.add_component<TextureComponent>(
+      glm::vec4{1.0F, 0.0F, 1.0F, 1.0F});
 }
 
 auto Scene::on_destroy() -> void {

@@ -56,10 +56,11 @@ struct ShadowUBO {
 };
 
 struct GridUBO {
-  glm::vec4 grid_colour;
-  glm::vec4 plane_colour;
-  glm::vec4 grid_size;
-  glm::vec4 fog_colour; // alpha is fog density
+  glm::vec4 grid_colour{0.5F, 0.5F, 0.5F, 1.0F};
+  glm::vec4 plane_colour{0.5F, 0.5F, 0.5F, 1.0F};
+  glm::vec4 grid_size{0.2F, 0.2F, 0.1F,
+                      1000.0F}; // z and w are for the near and far planes
+  glm::vec4 fog_colour{0.5F, 0.5F, 0.5F, 1.0F};
 };
 
 struct DepthParameters {

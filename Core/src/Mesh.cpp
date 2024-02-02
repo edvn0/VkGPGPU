@@ -144,20 +144,23 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
     return;
   }
 
-  const glm::mat4 local_transform = to_mat4_from_assimp(node->mTransformation);
+  const glm::mat4 local_transform =
+      glm::mat4{1.0F}; // to_mat4_from_assimp(node->mTransformation);
   const glm::mat4 transform = parent_transform * local_transform;
-  importer->node_map[node].resize(node->mNumMeshes);
-  for (u32 i = 0; i < node->mNumMeshes; i++) {
-    const u32 mesh = node->mMeshes[i];
+  const std::span node_meshes{node->mMeshes, node->mNumMeshes};
+
+  importer->node_map[node].resize(node_meshes.size());
+  for (auto i = 0; i < node_meshes.size(); i++) {
+    const u32 mesh = node_meshes[i];
     auto &submesh = submeshes[mesh];
     submesh.transform = transform;
     submesh.local_transform = local_transform;
     importer->node_map[node][i] = mesh;
   }
 
-  for (u32 i = 0; i < node->mNumChildren; i++) {
-    traverse_nodes(submeshes, importer, node->mChildren[i], transform,
-                   level + 1);
+  for (std::span children{node->mChildren, node->mNumChildren};
+       auto &child : children) {
+    traverse_nodes(submeshes, importer, child, transform, level + 1);
   }
 }
 

@@ -14,9 +14,8 @@ enum class AABBAxis : u8 {
 };
 
 struct AABBRange {
-  float min{};
-  float max{};
-
+  float min = std::numeric_limits<float>::max();
+  float max = std::numeric_limits<float>::lowest();
   constexpr AABBRange(std::floating_point auto min_value,
                       std::floating_point auto max_value)
       : min(min_value), max(max_value) {}
@@ -71,6 +70,12 @@ public:
   }
   [[nodiscard]] auto min_vector() const {
     return glm::vec4{min_max_x.min, min_max_y.min, min_max_z.min, 1.0F};
+  }
+  [[nodiscard]] auto min() const {
+    return glm::vec3{min_max_x.min, min_max_y.min, min_max_z.min};
+  }
+  [[nodiscard]] auto max() const {
+    return glm::vec3{min_max_x.max, min_max_y.max, min_max_z.max};
   }
 
 private:

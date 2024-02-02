@@ -8,6 +8,7 @@
 #include "Framebuffer.hpp"
 #include "Input.hpp"
 #include "Material.hpp"
+#include "Mesh.hpp"
 #include "UI.hpp"
 
 #include <algorithm>
@@ -157,6 +158,23 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                scene_renderer.get_compute_command_buffer());
   });
 
+  UI::widget("Selected entity", [&]() {
+    if (selected_entity.has_value()) {
+      auto &entity = selected_entity.value();
+      auto &transform = entity.get_component<ECS::TransformComponent>();
+
+      UI::text("Entity: {}", entity.get_name());
+      UI::text("Position: x={}, y={}, z={}", transform.position.x,
+               transform.position.y, transform.position.z);
+      UI::text("Rotation: x={}, y={}, z={}", transform.rotation.x,
+               transform.rotation.y, transform.rotation.z);
+      UI::text("Scale: x={}, y={}, z={}", transform.scale.x, transform.scale.y,
+               transform.scale.z);
+    } else {
+      UI::text("No entity selected");
+    }
+  });
+
   /*UI::widget("Image", [&]() {
     UI::image_drop_button(texture, {128, 128});
     ImGui::SameLine();
@@ -165,39 +183,35 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     UI::image(*output_texture_second, {128, 128});
   });*/
 
-  UI::widget("Scene", [&](const auto &extent) {
-    if (Input::pressed(MouseCode::MOUSE_BUTTON_LEFT)) {
-
-      const auto mouse_position = Input::mouse_position();
-
-      // Get the widget's screen position and size
-      const ImVec2 widget_pos = ImGui::GetCursorScreenPos();
-      ImVec2 widget_size =
-          ImGui::GetContentRegionAvail(); // or another method to get the size
-
-      // Calculate mouse position relative to the widget
-      ImVec2 mouse_pos_relative_to_widget;
-      mouse_pos_relative_to_widget.x = mouse_position.x - widget_pos.x;
-      mouse_pos_relative_to_widget.y = mouse_position.y - widget_pos.y;
-
-      glm::vec2 ndc;
-      ndc.x = (2.0f * mouse_pos_relative_to_widget.x) / widget_size.x - 1.0f;
-      ndc.y = 1.0f - (2.0f * mouse_pos_relative_to_widget.y) / widget_size.y;
-
-      ndc.x *= extent.aspect_ratio();
-
-      const auto ray_clip = glm::vec4{ndc.x, ndc.y, -1.0F, 1.0F};
-      auto ray_eye = glm::inverse(camera.get_projection_matrix()) * ray_clip;
-      ray_eye = glm::vec4{ray_eye.x, ray_eye.y, -1.0F, 0.0F};
-
-      auto ray_world = glm::inverse(camera.get_view_matrix()) * ray_eye;
-      ray_world = glm::normalize(
-          glm::vec4{ray_world.x, ray_world.y, ray_world.z, 0.0F});
-
-      const auto ray_origin = camera.get_camera_position();
-    }
-
+  UI::widget("Scene", [&](const Extent<u32> &extent) {
     UI::image(scene_renderer.get_output_image(), {extent.width, extent.height});
+    camera.set_aspect_ratio(extent.aspect_ratio());
+    if (Input::pressed(MouseCode::MOUSE_BUTTON_LEFT)) {
+      float dist_to_nearest = std::numeric_limits<float>::max();
+      auto view = scene->get_registry()
+                      .view<ECS::TransformComponent, ECS::MeshComponent>(
+                          entt::exclude<ECS::CameraComponent>);
+      entt::entity nearest_entity = entt::null;
+      view.each([&](auto entity, auto &transform, auto &mesh) {
+        // Assume meshes are spheres
+        const auto &aabb = mesh.mesh->get_aabb();
+
+        glm::vec3 scaledMin = aabb.min() * transform.scale;
+        glm::vec3 scaledMax = aabb.max() * transform.scale;
+
+        // Translate the scaled AABB by the entity's position to move it into
+        // world space
+        glm::vec3 worldMin = scaledMin + transform.position;
+        glm::vec3 worldMax = scaledMax + transform.position;
+        if (false) {
+          nearest_entity = entity;
+        }
+      });
+      if (nearest_entity != entt::null) {
+        selected_entity = ECS::Entity{scene.get(), nearest_entity, "Empty"};
+      }
+      selected_entity = std::nullopt;
+    }
   });
 
   UI::widget("Depth", [&](const auto &extent) {
@@ -223,6 +237,15 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     ImGui::SliderFloat("Depth Far", &far, 0.1f, 100.0f);
     ImGui::SliderFloat("Depth Bias", &bias, 0.0f, 0.1F);
     ImGui::SliderFloat("Depth Factor", &depth_value, 0.01f, 1.0f);
+
+    auto &&[grid_colour, plane_colour, grid_size, fog_colour] =
+        scene_renderer.get_grid_configuration();
+    ImGui::ColorEdit4("Grid Colour", Math::value_ptr(grid_colour));
+    ImGui::ColorEdit4("Plane Colour", Math::value_ptr(plane_colour));
+    ImGui::SliderFloat2("Grid Size", &grid_size.x, 0.1f, 100.0f);
+    ImGui::SliderFloat("Grid Near", &grid_size.z, 0.1f, 100.0f);
+    ImGui::SliderFloat("Grid Far", &grid_size.w, 0.1f, 100.0f);
+    ImGui::ColorEdit4("Fog Colour", Math::value_ptr(fog_colour));
   });
 
   for (const auto &widget : widgets)

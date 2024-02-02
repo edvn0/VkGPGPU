@@ -13,12 +13,11 @@ static constexpr auto min_image_count =
         const auto found_max =
             std::max(props.image_count, capabilities.minImageCount);
         return std::min(found_max, Config::frame_count);
-      } else {
-        const auto found_max =
-            std::clamp(props.image_count + 1, capabilities.minImageCount,
-                       capabilities.maxImageCount);
-        return std::min(found_max, Config::frame_count);
       }
+      const auto found_max =
+          std::clamp(props.image_count + 1, capabilities.minImageCount,
+                     capabilities.maxImageCount);
+      return std::min(found_max, Config::frame_count);
     };
 
 static constexpr auto supported_and_preferred_format =
@@ -64,10 +63,10 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
   }
 
   const auto capabilities = [&] {
-    VkSurfaceCapabilitiesKHR capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-        device->get_physical_device(), window->get_surface(), &capabilities);
-    return capabilities;
+    VkSurfaceCapabilitiesKHR caps{};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->get_physical_device(),
+                                              window->get_surface(), &caps);
+    return caps;
   }();
 
   VkSwapchainCreateInfoKHR create_info{};
@@ -112,10 +111,11 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
   }
 
   images = [&] {
-    u32 count = 0;
-    vkGetSwapchainImagesKHR(device->get_device(), swapchain, &count, nullptr);
-    std::vector<VkImage> temporary_images(count);
-    vkGetSwapchainImagesKHR(device->get_device(), swapchain, &count,
+    u32 img_count = 0;
+    vkGetSwapchainImagesKHR(device->get_device(), swapchain, &img_count,
+                            nullptr);
+    std::vector<VkImage> temporary_images(img_count);
+    vkGetSwapchainImagesKHR(device->get_device(), swapchain, &img_count,
                             temporary_images.data());
     return temporary_images;
   }();
@@ -124,23 +124,22 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
     std::vector<VkImageView> temporary_image_views;
     temporary_image_views.reserve(images.size());
     for (const auto &image : images) {
-      VkImageViewCreateInfo create_info{};
-      create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      create_info.image = image;
-      create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      create_info.format = format_and_color_space.format;
-      create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-      create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-      create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-      create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-      create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      create_info.subresourceRange.baseMipLevel = 0;
-      create_info.subresourceRange.levelCount = 1;
-      create_info.subresourceRange.baseArrayLayer = 0;
-      create_info.subresourceRange.layerCount = 1;
+      VkImageViewCreateInfo view_ci{};
+      view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+      view_ci.image = image;
+      view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+      view_ci.format = format_and_color_space.format;
+      view_ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+      view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      view_ci.subresourceRange.baseMipLevel = 0;
+      view_ci.subresourceRange.levelCount = 1;
+      view_ci.subresourceRange.baseArrayLayer = 0;
+      view_ci.subresourceRange.layerCount = 1;
       VkImageView image_view;
-      vkCreateImageView(device->get_device(), &create_info, nullptr,
-                        &image_view);
+      vkCreateImageView(device->get_device(), &view_ci, nullptr, &image_view);
       temporary_image_views.push_back(image_view);
     }
     return temporary_image_views;
@@ -302,7 +301,8 @@ auto Swapchain::begin_frame() -> bool {
     recreate(window->get_framebuffer_size(), true);
     info("Recreation called from acquire");
     return false;
-  } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+  }
+  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     info("Result: {}", result);
     throw std::runtime_error("failed to acquire swap chain image!");
   }
@@ -323,8 +323,9 @@ auto Swapchain::end_frame() -> void {
   VkSubmitInfo submit_info{};
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-  VkSemaphore wait_semaphores[] = {image_available_semaphores[current_frame()]};
-  VkPipelineStageFlags wait_stages[] = {
+  const VkSemaphore wait_semaphores[] = {
+      image_available_semaphores[current_frame()]};
+  constexpr VkPipelineStageFlags wait_stages[] = {
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
   submit_info.waitSemaphoreCount = 1;
   submit_info.pWaitSemaphores = wait_semaphores;
@@ -333,7 +334,7 @@ auto Swapchain::end_frame() -> void {
   submit_info.pCommandBuffers =
       &command_buffers[current_frame()].command_buffer;
 
-  VkSemaphore signal_semaphores[] = {
+  const VkSemaphore signal_semaphores[] = {
       render_finished_semaphores[current_frame()]};
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = signal_semaphores;
@@ -353,23 +354,16 @@ auto Swapchain::present() -> void {
   present_info.pImageIndices = &current_image_index;
   present_info.pResults = nullptr;
   const auto &present_queue = device->get_queue(Queue::Type::Graphics);
-  verify(vkWaitForFences(device->get_device(), 1,
-                         &render_finished_fences[current_frame()], VK_TRUE,
-                         UINT64_MAX),
-         "vkWaitForFences", "Failed to wait for fences");
-  auto result = vkQueuePresentKHR(present_queue, &present_info);
 
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+  if (const auto result = vkQueuePresentKHR(present_queue, &present_info);
+      result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
     recreate(window->get_framebuffer_size(), true);
     info("Recreation called from present");
   } else if (result != VK_SUCCESS) {
     throw std::runtime_error("failed to present swap chain image!");
   }
+
   frame_index = (frame_index + 1) % properties.image_count;
-  verify(vkWaitForFences(device->get_device(), 1,
-                         &render_finished_fences[current_frame()], VK_TRUE,
-                         UINT64_MAX),
-         "vkWaitForFences", "Failed to wait for fences");
 }
 
 auto Swapchain::construct(const Device &device, const Window &window,

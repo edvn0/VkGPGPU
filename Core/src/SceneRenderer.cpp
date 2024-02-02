@@ -291,11 +291,6 @@ auto SceneRenderer::begin_frame(const glm::mat4 &projection,
   ubo_shadow->write(shadow_ubo);
 
   const auto &ubo_grid = ubos->get(3, current_frame);
-  grid_ubo.grid_colour = glm::vec4{0.2F, 0.2F, 0.2F, 1.0F};
-  grid_ubo.plane_colour = glm::vec4{0.4F, 0.4F, 0.4F, 1.0F};
-  grid_ubo.grid_size = glm::vec4{1.0F, 1.0F, 0.0F, 0.0F};
-  grid_ubo.fog_colour = glm::vec4{0.8F, 0.9F, 1.0F, 0.02F};
-
   ubo_grid->write(grid_ubo);
 
   vkResetDescriptorPool(device->get_device(), pool, 0);
@@ -323,7 +318,6 @@ auto SceneRenderer::begin_frame(const glm::mat4 &projection,
 
 auto SceneRenderer::shadow_pass() -> void {
   bind_pipeline(*shadow_pipeline);
-  const auto &transforms = ssbos->get(2, current_frame);
   for (const auto &[key, value] : shadow_draw_commands) {
     auto &&[mesh_ptr, submesh_index, instance_count, colour_data, material] =
         value;
@@ -390,15 +384,19 @@ auto SceneRenderer::geometry_pass() -> void {
   }
 }
 
+auto SceneRenderer::debug_pass() -> void {
+  // AABBs with cube_mesh, from debug_draw_commands
+}
+
 auto SceneRenderer::grid_pass() -> void {
   bind_pipeline(*grid_pipeline);
   update_material_for_rendering(current_frame, *grid_material, ubos.get(),
                                 ssbos.get());
   grid_material->bind(*command_buffer, *grid_pipeline, current_frame);
-  const auto &grid_submesh = grid_mesh->get_submesh(0);
+  const auto &grid_submesh = cube_mesh->get_submesh(0);
 
-  bind_vertex_buffer(*grid_mesh->get_vertex_buffer());
-  bind_index_buffer(*grid_mesh->get_index_buffer());
+  bind_vertex_buffer(*cube_mesh->get_vertex_buffer());
+  bind_index_buffer(*cube_mesh->get_index_buffer());
 
   push_constants(*grid_pipeline, *grid_material);
 
@@ -450,8 +448,9 @@ auto SceneRenderer::flush() -> void {
   }
   {
     begin_renderpass(*geometry_framebuffer);
-    grid_pass();
     geometry_pass();
+    debug_pass();
+    grid_pass();
     end_renderpass();
   }
   {
@@ -642,6 +641,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .face_mode = FaceMode::CounterClockwise,
   };
   geometry_pipeline = GraphicsPipeline::construct(*device, config);
+  config.polygon_mode = PolygonMode::Line;
+  wireframed_geometry_pipeline = GraphicsPipeline::construct(*device, config);
 
   grid_shader = Shader::construct(*device, FS::shader("Grid.vert.spv"),
                                   FS::shader("Grid.frag.spv"));
@@ -656,7 +657,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .face_mode = FaceMode::CounterClockwise,
   };
   grid_pipeline = GraphicsPipeline::construct(*device, grid_config);
-  grid_mesh = Mesh::import_from(*device, FS::model("cube.fbx"));
+  cube_mesh = Mesh::import_from(*device, FS::model("cube.fbx"));
 
   GraphicsPipelineConfiguration shadow_config{
       .name = "ShadowGraphicsPipeline",

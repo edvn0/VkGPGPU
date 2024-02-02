@@ -75,6 +75,7 @@ public:
 
   auto get_sun_position() -> auto & { return sun_position; }
   auto get_depth_factors() -> auto & { return depth_factor; }
+  auto get_grid_configuration() -> auto & { return grid_ubo; }
   auto create_pool_and_layout() -> void;
 
   [[nodiscard]] auto get_command_buffer() const -> const auto & {
@@ -100,9 +101,10 @@ private:
 
   Extent<u32> extent{};
 
-  Scope<Mesh> grid_mesh;
+  Scope<Mesh> cube_mesh;
 
   Scope<GraphicsPipeline> geometry_pipeline;
+  Scope<GraphicsPipeline> wireframed_geometry_pipeline;
   Scope<Framebuffer> geometry_framebuffer;
 
   Scope<GraphicsPipeline> fullscreen_pipeline;
@@ -158,6 +160,7 @@ private:
   auto shadow_pass() -> void;
   auto grid_pass() -> void;
   auto geometry_pass() -> void;
+  auto debug_pass() -> void;
   auto fullscreen_pass() -> void;
 };
 

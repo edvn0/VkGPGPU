@@ -144,7 +144,8 @@ auto Window::was_resized() -> bool {
     return false;
   }
 
-  return user_data.was_resized;
+  return user_data.was_resized || size_is_zero() ||
+         glfwGetWindowAttrib(window, GLFW_ICONIFIED);
 }
 
 auto Window::reset_resize_status() -> void { user_data.was_resized = false; }
