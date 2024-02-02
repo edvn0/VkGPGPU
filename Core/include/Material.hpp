@@ -10,7 +10,7 @@
 #include <BufferSet.hpp>
 #include <optional>
 
-#include "reflection/Forward.hpp"
+#include "reflection/ReflectionData.hpp"
 
 namespace Core {
 

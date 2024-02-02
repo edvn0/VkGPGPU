@@ -80,6 +80,9 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
          count, properties.image_count);
   }
 
+  info("Swapchain image count requested: {}, actual: {}",
+       properties.image_count, count);
+
   auto format_and_color_space =
       supported_and_preferred_format(*device, window->get_surface());
   surface_format = format_and_color_space;
@@ -183,10 +186,7 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
                              &command_buffers[i].command_buffer);
   }
 
-  // Create renderpass
-  // Render Pass
   VkAttachmentDescription colour_attachment_description = {};
-  // Color attachment
   colour_attachment_description.format = format_and_color_space.format;
   colour_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
   colour_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -365,7 +365,6 @@ auto Swapchain::present() -> void {
   } else if (result != VK_SUCCESS) {
     throw std::runtime_error("failed to present swap chain image!");
   }
-
   frame_index = (frame_index + 1) % properties.image_count;
   verify(vkWaitForFences(device->get_device(), 1,
                          &render_finished_fences[current_frame()], VK_TRUE,

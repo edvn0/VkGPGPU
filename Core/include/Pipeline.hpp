@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CommandBuffer.hpp"
+#include "ResizeDependent.hpp"
 #include "Shader.hpp"
 #include "Types.hpp"
 
@@ -185,7 +186,10 @@ class Framebuffer;
 struct GraphicsPipelineConfiguration {
   std::string name;
   const Shader *shader{nullptr};
-  const Framebuffer *framebuffer{nullptr};
+
+  // The framebuffer is not const because we register a resize dependent
+  Framebuffer *framebuffer{nullptr};
+
   VertexLayout layout{};
   VertexLayout instance_layout{};
   PolygonMode polygon_mode{PolygonMode::Fill};
@@ -196,10 +200,11 @@ struct GraphicsPipelineConfiguration {
   bool write_depth{true};
   bool test_depth{true};
 };
-class GraphicsPipeline {
+class GraphicsPipeline : public IResizeDependent<Framebuffer> {
 public:
-  ~GraphicsPipeline();
-  auto on_resize(const Extent<u32> &) -> void {}
+  ~GraphicsPipeline() override;
+  auto on_resize(const Extent<u32> &) -> void;
+  auto resize(const Framebuffer &framebuffer) -> void override;
 
   [[nodiscard]] auto get_pipeline() const -> const VkPipeline & {
     return pipeline;
@@ -213,7 +218,8 @@ public:
   [[nodiscard]] auto hash() const noexcept -> usize {
     static constexpr std::hash<std::string> hasher;
     static constexpr std::hash<const void *> void_hasher;
-    return hasher(name) ^ void_hasher(static_cast<const void *>(pipeline));
+    return hasher(configuration.name) ^
+           void_hasher(static_cast<const void *>(pipeline));
   }
 
   auto bind(const CommandBuffer &) const -> void;
@@ -228,10 +234,10 @@ private:
   auto construct_pipeline(const GraphicsPipelineConfiguration &) -> void;
   auto initialise_blend_states(const GraphicsPipelineConfiguration &)
       -> std::vector<VkPipelineColorBlendAttachmentState>;
+  auto destroy() -> void;
 
   const Device *device;
-  Extent<u32> extent;
-  std::string name{};
+  GraphicsPipelineConfiguration configuration;
   VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_GRAPHICS};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};

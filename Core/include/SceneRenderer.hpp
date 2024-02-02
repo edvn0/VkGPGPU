@@ -6,6 +6,7 @@
 #include "Material.hpp"
 #include "Mesh.hpp"
 #include "Pipeline.hpp"
+#include "RenderingDefinitions.hpp"
 #include "Swapchain.hpp"
 
 #include <functional>
@@ -28,88 +29,12 @@ struct CommandKey {
 };
 
 class SceneRenderer {
-  struct DrawCommand {
-    const Mesh *mesh_ptr{};
-    u32 submesh_index{0};
-    u32 instance_count{0};
-    std::vector<glm::vec4> colours{};
-    Material *material{};
-  };
-
-  struct RendererUBO {
-    glm::mat4 view;
-    glm::mat4 projection;
-    glm::mat4 view_projection;
-    glm::vec4 light_position;
-    glm::vec4 light_direction;
-    glm::vec4 camera_position;
-  };
-
-  struct ShadowUBO {
-    glm::mat4 view;
-    glm::mat4 projection;
-    glm::mat4 view_projection;
-    glm::vec2 bias_and_default{0.005, 0.1};
-  };
-
-  struct GridUBO {
-    glm::vec4 grid_colour;
-    glm::vec4 plane_colour;
-    glm::vec4 grid_size;
-    glm::vec4 fog_colour; // alpha is fog density
-  };
-
-  struct DepthParameters {
-    float value = 9.0F;
-    float near = -10.0F;
-    float far = 21.F;
-    float bias = 0.005F;
-    float default_value = 0.1F;
-  };
-
-  struct TransformData {
-    std::vector<glm::mat4> transforms{};
-
-    [[nodiscard]] auto size() const -> usize {
-      return transforms.size() * sizeof(glm::mat4);
-    }
-  };
-  struct ColourData {
-    std::vector<glm::vec4> colours{};
-
-    [[nodiscard]] auto size() const -> usize {
-      return colours.size() * sizeof(glm::vec4);
-    }
-  };
-  TransformData buffer_for_transform_data{};
-  ColourData buffer_for_colour_data{};
-
-  RendererUBO renderer_ubo{};
-  ShadowUBO shadow_ubo{};
-  GridUBO grid_ubo{};
-  DepthParameters depth_factor{};
-
-  Scope<BufferSet<Buffer::Type::Uniform>> ubos;
-  Scope<BufferSet<Buffer::Type::Storage>> ssbos;
-
-  VkDescriptorPool pool{};
-  VkDescriptorSet active = nullptr;
-  VkDescriptorSetLayout layout = nullptr;
-
 public:
   explicit SceneRenderer(const Device &dev) : device(&dev) {}
 
-  struct DrawParameters {
-    u32 index_count{};
-    u32 vertex_count{0};
-    u32 instance_count{1};
-    u32 first_index{0};
-    u32 vertex_offset{0};
-    u32 first_instance{0};
-  };
-
   auto destroy() -> void;
   auto begin_renderpass(const Framebuffer &framebuffer) -> void;
+  auto on_resize(const Extent<u32> &extent) -> void;
 
   /**
    * @brief Does a full renderpass (begins + ends) which clears!
@@ -148,7 +73,6 @@ public:
   [[nodiscard]] auto get_output_image() const -> const Image &;
   [[nodiscard]] auto get_depth_image() const -> const Image &;
 
-  auto set_extent(const Extent<u32> &ext) -> void { extent = ext; }
   auto get_sun_position() -> auto & { return sun_position; }
   auto get_depth_factors() -> auto & { return depth_factor; }
   auto create_pool_and_layout() -> void;
@@ -203,33 +127,28 @@ private:
 
   glm::vec3 sun_position{3, -5, -3};
 
-  struct PipelineAndHash {
-    VkPipeline bound_pipeline{nullptr};
-    u64 hash{0};
-
-    auto reset() -> void {
-      bound_pipeline = nullptr;
-      hash = 0;
-    }
-  };
   PipelineAndHash bound_pipeline{};
 
   std::unordered_map<CommandKey, DrawCommand> draw_commands;
   std::unordered_map<CommandKey, DrawCommand> shadow_draw_commands;
 
-  struct SubmeshTransformBuffer {
-    Scope<Buffer> vertex_buffer;
-    Scope<DataBuffer> transform_buffer;
-  };
   std::vector<SubmeshTransformBuffer> transform_buffers;
-  struct TransformVertexData {
-    std::array<glm::vec4, 3> transform_rows{};
-  };
-  struct TransformMapData {
-    std::vector<TransformVertexData> transforms;
-    u32 offset = 0;
-  };
   std::unordered_map<CommandKey, TransformMapData> mesh_transform_map;
+
+  TransformData buffer_for_transform_data{};
+  ColourData buffer_for_colour_data{};
+
+  RendererUBO renderer_ubo{};
+  ShadowUBO shadow_ubo{};
+  GridUBO grid_ubo{};
+  DepthParameters depth_factor{};
+
+  Scope<BufferSet<Buffer::Type::Uniform>> ubos;
+  Scope<BufferSet<Buffer::Type::Storage>> ssbos;
+
+  VkDescriptorPool pool{};
+  VkDescriptorSet active = nullptr;
+  VkDescriptorSetLayout layout = nullptr;
 
   [[nodiscard]] auto is_already_bound(const GraphicsPipeline &pipeline) const
       -> bool {

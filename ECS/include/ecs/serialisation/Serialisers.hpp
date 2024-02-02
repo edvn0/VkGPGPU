@@ -3,241 +3,298 @@
 #include "Logger.hpp"
 
 #include <entt/entt.hpp>
-#include <fstream>
+#include <istream>
+#include <ostream>
 
 #include "ecs/components/Component.hpp"
 
 namespace ECS {
 
-inline auto write(std::ostream &out, const entt::entity &entity) -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&entity), sizeof(entity)))
+namespace Detail {
+template <typename T> bool write(std::ostream &out, const T &value) {
+  static_assert(std::is_same_v<T, void>, "No write function found for type.");
+  return false;
+}
+
+// Base deserialize function to be specialized or found via ADL
+template <typename T> bool read(std::istream &in, T &value) {
+  static_assert(std::is_same_v<T, void>, "No write function found for type.");
+  return false;
+}
+} // namespace Detail
+
+template <typename T>
+concept Serializable = requires(const T &a, std::ostream &os) {
+  { Detail::write(os, a) } -> std::same_as<bool>;
+};
+
+template <typename T>
+concept Deserializable = requires(T &a, std::istream &is) {
+  { Detail::read(is, a) } -> std::same_as<bool>;
+};
+
+template <typename T>
+concept TwoWaySerializable = Serializable<T> && Deserializable<T>;
+
+template <typename T>
+  requires(std::floating_point<T> || std::integral<T>)
+bool write(std::ostream &out, const T &value) {
+  if (!out.write(reinterpret_cast<const char *>(&value), sizeof(value))) {
+    error("Failed to write value to stream.");
+    return false;
+  }
+  return true;
+}
+
+template <typename T>
+  requires(std::floating_point<T> || std::integral<T>)
+bool read(std::istream &in, T &value) {
+  if (!in.read(reinterpret_cast<char *>(&value), sizeof(value))) {
+    error("Failed to read value from stream.");
+    return false;
+  }
+  return true;
+}
+
+// BEGIN GLM TYPES
+template <glm::length_t L, typename T, glm::qualifier Q>
+auto write(std::ostream &out, const glm::vec<L, T, Q> &vec) -> bool {
+  if (!out.write(reinterpret_cast<const char *>(&vec), sizeof(vec)))
     return false;
   return true;
 }
 
-inline auto write(std::ostream &out, const std::integral auto &value) -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&value), sizeof(value)))
+template <glm::length_t L, typename T, glm::qualifier Q>
+auto read(std::istream &in, glm::vec<L, T, Q> &vec) -> bool {
+  if (!in.read(reinterpret_cast<char *>(&vec), sizeof(vec)))
     return false;
   return true;
 }
 
-inline auto write(std::ostream &out, const std::floating_point auto &value)
-    -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&value), sizeof(value)))
+template <glm::length_t C, glm::length_t R, typename T, glm::qualifier Q>
+auto write(std::ostream &out, const glm::mat<C, R, T, Q> &mat) -> bool {
+  if (!out.write(reinterpret_cast<const char *>(&mat), sizeof(mat))) {
+
+    return false;
+  }
+  return true;
+}
+template <glm::length_t C, glm::length_t R, typename T, glm::qualifier Q>
+auto read(std::istream &in, glm::mat<C, R, T, Q> &mat) -> bool {
+  if (!in.read(reinterpret_cast<char *>(&mat), sizeof(mat)))
     return false;
   return true;
 }
 
-inline auto read(std::istream &in, entt::entity &entity) -> bool {
-  if (!in.read(reinterpret_cast<char *>(&entity), sizeof(entity)))
+template <typename T, glm::qualifier Q>
+auto write(std::ostream &out, const glm::qua<T, Q> &quat) -> bool {
+  if (!out.write(reinterpret_cast<const char *>(&quat), sizeof(quat))) {
     return false;
+  }
   return true;
 }
 
-inline auto read(std::istream &in, std::integral auto &value) -> bool {
-  if (!in.read(reinterpret_cast<char *>(&value), sizeof(value)))
+template <typename T, glm::qualifier Q>
+static bool read(std::istream &in, glm::qua<T, Q> &quat) {
+  if (!in.read(reinterpret_cast<char *>(&quat), sizeof(quat)))
     return false;
   return true;
 }
+// END GLM TYPES
 
-inline auto read(std::istream &in, std::floating_point auto &value) -> bool {
-  if (!in.read(reinterpret_cast<char *>(&value), sizeof(value)))
+// String
+inline auto write(std::ostream &out, const std::string &str) -> bool {
+  const auto size = str.size();
+  if (!write(out, size))
     return false;
+  if (!out.write(str.data(), size)) {
+    error("Failed to write string to stream.");
+    return false;
+  }
   return true;
 }
 
-inline auto write(std::ostream &out, const glm::vec2 &vec) -> bool {
-  if (!write(out, vec[0]))
-    return false;
-  if (!write(out, vec[1]))
-    return false;
-  return true;
-}
-
-inline auto write(std::ostream &out, const glm::vec3 &vec) -> bool {
-  if (!write(out, vec[0]))
-    return false;
-  if (!write(out, vec[1]))
-    return false;
-  if (!write(out, vec[2]))
-    return false;
-  return true;
-}
-
-inline auto write(std::ostream &out, const glm::vec4 &vec) -> bool {
-  if (!write(out, vec[0]))
-    return false;
-  if (!write(out, vec[1]))
-    return false;
-  if (!write(out, vec[2]))
-    return false;
-  if (!write(out, vec[3]))
-    return false;
-  return true;
-}
-
-inline auto write(std::ostream &out, const glm::quat &quat) -> bool {
-  if (!write(out, quat[0]))
-    return false;
-  if (!write(out, quat[1]))
-    return false;
-  if (!write(out, quat[2]))
-    return false;
-  if (!write(out, quat[3]))
-    return false;
-  return true;
-}
-
-inline auto read(std::istream &in, glm::vec2 &vec) -> bool {
-  if (!read(in, vec[0]))
-    return false;
-  if (!read(in, vec[1]))
-    return false;
-  return true;
-}
-
-inline auto read(std::istream &in, glm::vec3 &vec) -> bool {
-  if (!read(in, vec[0]))
-    return false;
-  if (!read(in, vec[1]))
-    return false;
-  if (!read(in, vec[2]))
-    return false;
-  return true;
-}
-
-inline auto read(std::istream &in, glm::vec4 &vec) -> bool {
-  if (!read(in, vec[0]))
-    return false;
-  if (!read(in, vec[1]))
-    return false;
-  if (!read(in, vec[2]))
-    return false;
-  if (!read(in, vec[3]))
-    return false;
-  return true;
-}
-
-inline auto read(std::istream &in, glm::quat &quat) -> bool {
-  if (!read(in, quat[0]))
-    return false;
-  if (!read(in, quat[1]))
-    return false;
-  if (!read(in, quat[2]))
-    return false;
-  if (!read(in, quat[3]))
-    return false;
-  return true;
-}
-
-inline auto write(std::ostream &out, const std::string &string) -> bool {
-  const auto size = string.size();
-  if (!out.write(reinterpret_cast<const char *>(&size), sizeof(size)))
-    return false;
-  if (!out.write(string.data(), size))
-    return false;
-  return true;
-}
-
-inline auto read(std::istream &in, std::string &string) -> bool {
+inline auto read(std::istream &in, std::string &str) -> bool {
   std::size_t size;
-  if (!in.read(reinterpret_cast<char *>(&size), sizeof(size)))
+  if (!read(in, size))
     return false;
-  string.resize(size);
-  if (!in.read(string.data(), size))
+  str.resize(size);
+  if (!in.read(str.data(), size)) {
+    error("Failed to read string from stream.");
     return false;
+  }
   return true;
 }
+
+// Begin std (vector, unordered_map, set, map, array)
+template <TwoWaySerializable T>
+auto write(std::ostream &out, const std::vector<T> &vec) -> bool {
+  const auto size = vec.size();
+  if (!write(out, size))
+    return false;
+  for (const T &element : vec) {
+    if (!write(out, element))
+      return false;
+  }
+  return true;
+}
+
+template <TwoWaySerializable T>
+auto read(std::istream &in, std::vector<T> &vec) -> bool {
+  std::size_t size;
+  if (!read(in, size))
+    return false;
+  vec.resize(size);
+  for (auto &element : vec) {
+    if (!read(in, element))
+      return false;
+  }
+  return true;
+}
+
+template <TwoWaySerializable T, TwoWaySerializable U>
+auto write(std::ostream &out, const std::unordered_map<T, U> &map) -> bool {
+  const auto size = map.size();
+  if (!write(out, size))
+    return false;
+  for (const auto &[key, value] : map) {
+    if (!write(out, key))
+      return false;
+    if (!write(out, value))
+      return false;
+  }
+  return true;
+}
+
+template <TwoWaySerializable T, TwoWaySerializable U>
+auto read(std::istream &in, std::unordered_map<T, U> &map) -> bool {
+  std::size_t size;
+  if (!read(in, size))
+    return false;
+  for (std::size_t i = 0; i < size; ++i) {
+    T key;
+    U value;
+    if (!read(in, key))
+      return false;
+    if (!read(in, value))
+      return false;
+    map[key] = value;
+  }
+  return true;
+}
+// End std
 
 template <class T> struct ComponentSerialiser;
 
 template <> struct ComponentSerialiser<IdentityComponent> {
-  static void serialise(const IdentityComponent &component,
-                        std::ostream &out_stream) {
-    write(out_stream, component.id);
-    write(out_stream, component.name);
+  static auto serialise(const IdentityComponent &component, std::ostream &out)
+      -> bool {
+    if (!write(out, component.id))
+      return false;
+    if (!write(out, component.name))
+      return false;
+    return true;
   }
 
-  static IdentityComponent deserialise(std::istream &inFile) {
-    IdentityComponent component;
-    read(inFile, component.id);
-    read(inFile, component.name);
-    return component;
+  static auto deserialise(std::istream &in, IdentityComponent &component)
+      -> bool {
+    if (!read(in, component.id))
+      return false;
+    if (!read(in, component.name))
+      return false;
+    return true;
   }
 };
 
 template <> struct ComponentSerialiser<TransformComponent> {
-  static void serialise(const TransformComponent &component,
-                        std::ostream &out_stream) {
-    if (write(out_stream, component.position)) {
-    }
-    if (write(out_stream, component.rotation)) {
-    }
-    if (write(out_stream, component.scale)) {
-    }
+  static auto serialise(const TransformComponent &component, std::ostream &out)
+      -> bool {
+    if (!write(out, component.position))
+      return false;
+    if (!write(out, component.rotation))
+      return false;
+    if (!write(out, component.scale))
+      return false;
+    return true;
   }
 
-  static TransformComponent deserialise(std::istream &inFile) {
-    TransformComponent component;
-    if (read(inFile, component.position)) {
-    }
-    if (read(inFile, component.rotation)) {
-    }
-    if (read(inFile, component.scale)) {
-    }
-
-    return component;
+  static auto deserialise(std::istream &in, TransformComponent &out) -> bool {
+    if (!read(in, out.position))
+      return false;
+    if (!read(in, out.rotation))
+      return false;
+    if (!read(in, out.scale))
+      return false;
+    return true;
   }
 };
 
 template <> struct ComponentSerialiser<TextureComponent> {
-  static void serialise(const TextureComponent &component,
-                        std::ostream &out_stream) {
-    write(out_stream, component.colour);
+  static auto serialise(const TextureComponent &component,
+                        std::ostream &out_stream) -> bool {
+    if (!write(out_stream, component.colour))
+      return false;
+
+    return true;
   }
 
-  static TextureComponent deserialise(std::istream &inFile) {
-    TextureComponent component;
-    read(inFile, component.colour);
-    return component;
+  static auto deserialise(std::istream &in, TextureComponent &out) -> bool {
+    if (!read(in, out.colour))
+      return false;
+    return true;
   }
 };
 
 template <> struct ComponentSerialiser<MeshComponent> {
-  static void serialise(const MeshComponent &component,
-                        std::ostream &out_stream) {
-    // we only write the path to the mesh file, not the path field of the
-    // component need to indicate to deserialiser if the mesh is loaded or not
-    // (nullptr or not)
-    write(out_stream, component.mesh != nullptr ? 1 : 0);
-    if (component.mesh != nullptr) {
-      write(out_stream, component.mesh->get_file_path().string());
+  static auto serialise(const MeshComponent &component,
+                        std::ostream &out_stream) -> bool {
+    const auto has_valid_mesh_path =
+        component.mesh != nullptr || !component.path.empty();
+    if (!write(out_stream, has_valid_mesh_path))
+      return false;
+
+    if (has_valid_mesh_path) {
+      if (component.mesh != nullptr) {
+        const auto &mesh = *component.mesh;
+        if (!write(out_stream, mesh.get_file_path().string()))
+          return false;
+      } else {
+        if (!write(out_stream, component.path.string()))
+          return false;
+      }
     }
+
+    return true;
   }
 
-  static MeshComponent deserialise(std::istream &inFile) {
-    MeshComponent component;
-    int is_loaded;
-    read(inFile, is_loaded);
-    if (is_loaded) {
-      std::string path;
-      read(inFile, path);
-      component.path = path;
+  static auto deserialise(std::istream &in, MeshComponent &out) -> bool {
+    bool has_mesh = false;
+    if (!read(in, has_mesh))
+      return false;
+
+    if (has_mesh) {
+      std::string file_path;
+      if (!read(in, file_path))
+        return false;
+      out.path = file_path;
     }
-    return component;
+
+    return true;
   }
 };
 
 template <> struct ComponentSerialiser<CameraComponent> {
-  static void serialise(const CameraComponent &component,
-                        std::ostream &out_stream) {
-    write(out_stream, component.field_of_view);
+  static auto serialise(const CameraComponent &component,
+                        std::ostream &out_stream) -> bool {
+    if (!write(out_stream, component.field_of_view))
+      return false;
+    return true;
   }
 
-  static CameraComponent deserialise(std::istream &inFile) {
-    CameraComponent component;
-    read(inFile, component.field_of_view);
-    return component;
+  static auto deserialise(std::istream &in, CameraComponent &out) -> bool {
+    if (!read(in, out.field_of_view))
+      return false;
+    return true;
   }
 };
 

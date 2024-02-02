@@ -62,6 +62,10 @@ auto Framebuffer::on_resize(u32 w, u32 h, bool should_clean) -> void {
   width = w;
   height = h;
 
+  for (auto &dependent : resize_dependents) {
+    dependent->resize(*this);
+  }
+
   if (should_clean) {
     clean();
   }
@@ -79,10 +83,6 @@ auto Framebuffer::clean() -> void {
   if (render_pass) {
     vkDestroyRenderPass(device->get_device(), render_pass, nullptr);
   }
-}
-
-auto Framebuffer::add_resize_callback(const resize_callback &func) -> void {
-  resize_callbacks.push_back(func);
 }
 
 auto Framebuffer::invalidate() -> void {

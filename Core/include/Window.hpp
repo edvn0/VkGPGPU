@@ -15,8 +15,14 @@ namespace Core {
 struct WindowProperties {
   Extent<u32> extent{1280, 720};
   bool fullscreen{false};
-  bool vsync{false};
-  bool headless{false};
+  const bool vsync{false};
+  const bool headless{false};
+  const bool begin_fullscreen{false};
+
+  u32 windowed_width{1280};
+  u32 windowed_height{720};
+  u32 windowed_position_x{0};
+  u32 windowed_position_y{0};
 };
 
 class Window {

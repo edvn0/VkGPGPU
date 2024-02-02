@@ -54,6 +54,15 @@ public:
   }
 
   [[nodiscard]] auto hash() const -> usize;
+  [[nodiscard]] auto get_file_path() const
+      -> std::optional<std::filesystem::path> {
+
+    if (properties.path.empty()) {
+      return std::nullopt;
+    }
+
+    return properties.path;
+  }
 
   static auto empty_with_size(const Device &, usize, const Extent<u32> &)
       -> Scope<Texture>;

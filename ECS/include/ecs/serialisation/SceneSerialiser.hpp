@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 
+#include "ecs/Entity.hpp"
 #include "ecs/Scene.hpp"
 #include "ecs/serialisation/Serialisers.hpp"
 
@@ -39,11 +40,13 @@ private:
                  MeshComponent, CameraComponent>;
   static constexpr auto ComponentCount = std::tuple_size_v<ComponentTypes>;
 
+  void serialise_entity_components(std::ostream &out, Entity &entity);
+  void deserialise_entity_components(std::istream &in, Entity &entity);
+
   template <std::size_t... Is>
-  auto make_component_mask(const entt::registry &registry, entt::entity entity,
-                           std::index_sequence<Is...>) {
+  auto make_component_mask(Entity &entity, std::index_sequence<Is...>) {
     Core::u32 mask = 0;
-    ((registry.any_of<std::tuple_element_t<Is, ComponentTypes>>(entity)
+    ((entity.any_of<std::tuple_element_t<Is, ComponentTypes>>()
           ? mask |= (1 << Is)
           : mask),
      ...);
@@ -51,63 +54,48 @@ private:
   }
 
   template <typename T>
-  void serialise_component(const entt::registry &registry, std::ostream &out,
-                           entt::entity entity) {
-    if (registry.any_of<T>(entity)) {
-      const auto &component = registry.get<T>(entity);
-      ComponentSerialiser<T>::serialise(component, out);
+  void serialise_component(std::ostream &out, Entity &entity) {
+    if (entity.has_component<T>()) {
+      const auto &component = entity.get_component<T>();
+      if (!ComponentSerialiser<T>::serialise(component, out)) {
+        error("Failed to serialise component of type {}", typeid(T).name());
+      }
     }
   }
 
   template <std::size_t... Is>
-  void serialise_entity_components_impl(const entt::registry &registry,
-                                        std::ostream &out, entt::entity entity,
+  void serialise_entity_components_impl(std::ostream &out, Entity &entity,
                                         std::index_sequence<Is...>) {
     // Write component mask
-    auto mask =
-        make_component_mask(registry, entity, std::index_sequence<Is...>{});
-    out.write(reinterpret_cast<const char *>(&mask), sizeof(mask));
+    auto mask = make_component_mask(entity, std::index_sequence<Is...>{});
+    out.write(std::bit_cast<const char *>(&mask), sizeof(mask));
 
     // Serialize components based on mask
-    (serialise_component<std::tuple_element_t<Is, ComponentTypes>>(registry,
-                                                                   out, entity),
+    (serialise_component<std::tuple_element_t<Is, ComponentTypes>>(out, entity),
      ...);
-  }
-
-  void serialise_entity_components(const entt::registry &registry,
-                                   std::ostream &out, entt::entity entity) {
-    serialise_entity_components_impl(
-        registry, out, entity, std::make_index_sequence<ComponentCount>{});
   }
 
   template <typename T>
-  void deserialise_component(entt::registry &registry, std::istream &in,
-                             entt::entity entity, Core::u32 mask,
+  void deserialise_component(std::istream &in, Entity &entity, Core::u32 mask,
                              Core::u32 component_bit) {
     if (mask & component_bit) {
-      // const auto& old = registry.get<T>(entity);
-      auto component = ComponentSerialiser<T>::deserialise(in);
-      registry.emplace_or_replace<T>(entity, component);
+      auto &t = entity.add_component<T>();
+      if (!ComponentSerialiser<T>::deserialise(in, t)) {
+        error("Failed to deserialise component of type {}", typeid(T).name());
+      }
     }
   }
 
   template <std::size_t... Is>
-  void deserialise_entity_components_impl(entt::registry &registry,
-                                          std::istream &in, entt::entity entity,
+  void deserialise_entity_components_impl(std::istream &in, Entity &entity,
                                           std::index_sequence<Is...>) {
-    Core::u32 mask;
-    in.read(reinterpret_cast<char *>(&mask), sizeof(mask));
+    Core::u32 mask = 0;
+    in.read(std::bit_cast<char *>(&mask), sizeof(mask));
 
     // Deserialise components based on mask
     (deserialise_component<std::tuple_element_t<Is, ComponentTypes>>(
-         registry, in, entity, mask, (1 << Is)),
+         in, entity, mask, (1 << Is)),
      ...);
-  }
-
-  void deserialise_entity_components(entt::registry &registry, std::istream &in,
-                                     entt::entity entity) {
-    deserialise_entity_components_impl(
-        registry, in, entity, std::make_index_sequence<ComponentCount>{});
   }
 };
 

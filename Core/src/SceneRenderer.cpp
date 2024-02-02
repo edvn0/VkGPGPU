@@ -88,6 +88,17 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                                    buffer_set, shader_hash);
 }
 
+auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
+  extent = new_extent;
+  geometry_framebuffer->on_resize(extent);
+  shadow_framebuffer->on_resize(extent);
+  fullscreen_framebuffer->on_resize(extent);
+
+  shadow_material->on_resize(extent);
+  grid_material->on_resize(extent);
+  fullscreen_material->on_resize(extent);
+}
+
 auto SceneRenderer::destroy() -> void {
   Destructors::destroy(device, pool);
   Destructors::destroy(device, layout);
@@ -190,6 +201,10 @@ auto SceneRenderer::draw_vertices(const DrawParameters &params) const -> void {
 }
 
 auto SceneRenderer::bind_pipeline(const GraphicsPipeline &pipeline) -> void {
+  if (bound_pipeline.hash == pipeline.hash()) {
+    return;
+  }
+
   pipeline.bind(*command_buffer);
   bound_pipeline = {
       .bound_pipeline = pipeline.get_pipeline(),
@@ -509,6 +524,8 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 }
 
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
+  extent = swapchain.get_extent();
+
   const VertexLayout default_vertex_layout = VertexLayout{
       {
           LayoutElement{ElementType::Float3, "pos"},
@@ -533,8 +550,6 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   buffer_for_transform_data.transforms.resize(100 *
                                               Config::transform_buffer_size);
   buffer_for_colour_data.colours.resize(100 * Config::transform_buffer_size);
-
-  set_extent(swapchain.get_extent());
 
   command_buffer =
       CommandBuffer::construct(*device, CommandBufferProperties{

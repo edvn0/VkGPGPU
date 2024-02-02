@@ -16,6 +16,7 @@ class Environment;
 class FileCouldNotBeOpened;
 class InterfaceSystem;
 class Image;
+class Mesh;
 class Instance;
 class Logger;
 class Material;

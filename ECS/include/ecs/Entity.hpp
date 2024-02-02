@@ -11,9 +11,12 @@ namespace ECS {
 class Entity : public ISceneObserver {
 public:
   Entity(Scene *scene, std::string_view name);
+  Entity(Scene *scene, entt::entity, std::string_view name);
   ~Entity() override;
 
   [[nodiscard]] auto get_id() const -> Core::u64;
+  [[nodiscard]] auto get_handle() const { return handle; }
+  [[nodiscard]] auto get_name() const -> const std::string &;
 
   template <class T> auto add_component(T &&component) -> decltype(auto) {
     return scene->registry.emplace<T>(handle, std::forward<T>(component));
@@ -49,6 +52,9 @@ public:
   template <class... Ts> [[nodiscard]] auto all_of() const -> bool {
     return scene->registry.all_of<Ts...>(handle);
   }
+  template <class... Ts> [[nodiscard]] auto any_of() const -> bool {
+    return scene->registry.any_of<Ts...>(handle);
+  }
 
   auto on_notify(const Message &) -> void override;
 
@@ -57,7 +63,6 @@ public:
 private:
   Scene *scene;
   entt::entity handle;
-  std::string name;
 };
 
 } // namespace ECS

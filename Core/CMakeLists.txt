@@ -39,6 +39,8 @@ set(SOURCES
     include/Pipeline.hpp
     include/PlatformConfig.hpp
     include/PlatformUI.hpp
+    include/RenderingDefinitions.hpp
+    include/ResizeDependent.hpp
     include/Shader.hpp
     include/Swapchain.hpp
     include/Texture.hpp
@@ -98,12 +100,14 @@ target_compile_definitions(Core PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
+    set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
     target_compile_definitions(Core PUBLIC GPGPU_RELEASE)
+    set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(GPGPU_PIPELINE STREQUAL "ON")
@@ -111,6 +115,10 @@ if(GPGPU_PIPELINE STREQUAL "ON")
     target_compile_definitions(Core PUBLIC GPGPU_PIPELINE)
 else()
     message(STATUS "GPGPU_PIPELINE is OFF")
+endif()
+
+if (GPGPU_FAST_LOGGING)
+    target_compile_definitions(Core PUBLIC GPGPU_OPTIMIZE_LOGGING)
 endif()
 
 # If we're on Linux + clang/gnu, need to set -Wno-nullability-completeness

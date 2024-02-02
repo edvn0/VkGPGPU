@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
 
   ApplicationProperties props{
       .headless = false,
+      .start_fullscreen = false,
   };
 
   {

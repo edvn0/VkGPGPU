@@ -24,8 +24,6 @@ public:
   // Lifetime events
   auto on_create(const Core::Device &, const Core::Window &,
                  const Core::Swapchain &) -> void;
-  auto temp_on_create(const Core::Device &, const Core::Window &,
-                      const Core::Swapchain &) -> void;
   auto on_destroy() -> void;
   auto on_update(Core::SceneRenderer &, Core::floating) -> void;
   auto on_interface(Core::InterfaceSystem &) -> void;

@@ -70,7 +70,8 @@ struct AppDeleter {
 };
 
 struct ApplicationProperties {
-  bool headless{true};
+  const bool headless{true};
+  const bool start_fullscreen{false};
 };
 
 class App {

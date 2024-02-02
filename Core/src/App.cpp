@@ -31,12 +31,14 @@ App::App(const ApplicationProperties &props) : properties(props) {
   message_client = make_scope<Bus::MessagingClient>(
       make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
 
-  window = Window::construct(*instance, {
-                                            .extent = extent,
-                                            .fullscreen = false,
-                                            .vsync = false,
-                                            .headless = properties.headless,
-                                        });
+  window = Window::construct(
+      *instance, {
+                     .extent = extent,
+                     .fullscreen = false,
+                     .vsync = false,
+                     .headless = properties.headless,
+                     .begin_fullscreen = properties.start_fullscreen,
+                 });
   // Initialize the device
   device = Device::construct(*instance, *window);
   UI::initialise(*device);

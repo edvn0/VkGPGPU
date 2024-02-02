@@ -51,12 +51,12 @@ void ClientApp::on_create() {
   scene = make_scope<ECS::Scene>("Default");
   auto entity = scene->create_entity("Test");
 
-  // scene->on_create(*get_device(), *get_window(), *get_swapchain());
+  scene->on_create(*get_device(), *get_window(), *get_swapchain());
 
-  ECS::SceneSerialiser serialiser;
-  serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});
+  // ECS::SceneSerialiser serialiser;
+  // serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});
 
-  scene->temp_on_create(*get_device(), *get_window(), *get_swapchain());
+  // scene->temp_on_create(*get_device(), *get_window(), *get_swapchain());
 
   for (const auto &widget : widgets) {
     widget->on_create(*get_device(), *get_window(), *get_swapchain());
@@ -230,7 +230,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
 }
 
 auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
-  scene_renderer.set_extent(new_extent);
+  scene_renderer.on_resize(new_extent);
 
   info("{}", new_extent);
 }

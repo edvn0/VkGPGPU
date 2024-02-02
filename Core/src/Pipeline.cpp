@@ -283,18 +283,31 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
          "vkCreateComputePipelines", "Failed to create compute pipeline");
 }
 
-GraphicsPipeline::GraphicsPipeline(
-    const Device &dev, const GraphicsPipelineConfiguration &configuration)
-    : device(&dev), name(configuration.name) {
+GraphicsPipeline::GraphicsPipeline(const Device &dev,
+                                   const GraphicsPipelineConfiguration &config)
+    : device(&dev), configuration(config) {
   construct_pipeline(configuration);
 }
 
-GraphicsPipeline::~GraphicsPipeline() {
+auto GraphicsPipeline::on_resize(const Extent<u32> &extent) -> void {
+  destroy();
+  construct_pipeline(configuration);
+  info("Pipeline with name {} was resized to extent {}", configuration.name,
+       extent);
+}
+
+auto GraphicsPipeline::resize(const Framebuffer &framebuffer) -> void {
+  on_resize(framebuffer.get_extent());
+}
+
+auto GraphicsPipeline::destroy() -> void {
   auto vk_device = device->get_device();
   vkDestroyPipelineLayout(vk_device, pipeline_layout, nullptr);
   vkDestroyPipelineCache(vk_device, pipeline_cache, nullptr);
   vkDestroyPipeline(vk_device, pipeline, nullptr);
-};
+}
+
+GraphicsPipeline::~GraphicsPipeline() { destroy(); };
 
 auto GraphicsPipeline::bind(const CommandBuffer &buffer) const -> void {
   vkCmdBindPipeline(buffer.get_command_buffer(),
@@ -372,6 +385,8 @@ auto GraphicsPipeline::initialise_blend_states(
 auto GraphicsPipeline::construct_pipeline(
     const GraphicsPipelineConfiguration &configuration) -> void {
 
+  configuration.framebuffer->add_resize_dependent(this);
+
   std::vector dynamic_states = {
       VK_DYNAMIC_STATE_VIEWPORT,
       VK_DYNAMIC_STATE_SCISSOR,
@@ -447,23 +462,8 @@ auto GraphicsPipeline::construct_pipeline(
   input_assembly.primitiveRestartEnable = static_cast<VkBool32>(false);
 
   // Prefer extent over props (due to resizing API)
-  u32 width{extent.width};
-  u32 height{extent.height};
-
   VkViewport viewport{};
-  viewport.x = 0.0F;
-  viewport.y = 0.0F;
-  viewport.width = static_cast<float>(width);
-  viewport.height = static_cast<float>(height);
-  viewport.minDepth = 0.0F;
-  viewport.maxDepth = 1.0F;
-
   VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = {
-      .width = width,
-      .height = height,
-  };
 
   VkPipelineViewportStateCreateInfo viewport_state{};
   viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;

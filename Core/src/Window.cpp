@@ -28,7 +28,20 @@ Window::Window(const Instance &inst, const WindowProperties &props)
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
   auto &&[width, height] = properties.extent.as<i32>();
 
-  window = glfwCreateWindow(width, height, "VkGPGPU", nullptr, nullptr);
+  if (properties.begin_fullscreen) {
+    // If starting in fullscreen, get the primary monitor and its video mode
+    auto *monitor = glfwGetPrimaryMonitor();
+    const auto *mode = glfwGetVideoMode(monitor);
+
+    // Create a fullscreen window using the primary monitor's resolution
+    window = glfwCreateWindow(mode->width, mode->height, "VkGPGPU", monitor,
+                              nullptr);
+    properties.fullscreen = true; // Set the fullscreen property to true
+  } else {
+    // Create the window in windowed mode with the specified size
+    auto &&[width, height] = properties.extent.as<i32>();
+    window = glfwCreateWindow(width, height, "VkGPGPU", nullptr, nullptr);
+  }
   Input::initialise(window);
 
   verify(glfwCreateWindowSurface(instance->get_instance(), window, nullptr,
@@ -61,6 +74,39 @@ Window::Window(const Instance &inst, const WindowProperties &props)
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
           info("Escape key pressed, closing window");
           glfwSetWindowShouldClose(win, GLFW_TRUE);
+        }
+
+        if (key == GLFW_KEY_F11 && action == GLFW_PRESS) {
+          if (!self.properties.fullscreen) {
+            // Store current window size and position
+            i32 w{}, h{}, x{}, y{};
+            glfwGetWindowSize(win, &w, &h);
+            glfwGetWindowPos(win, &x, &y);
+
+            self.properties.windowed_width = static_cast<u32>(w);
+            self.properties.windowed_height = static_cast<u32>(h);
+            self.properties.windowed_position_x = static_cast<u32>(x);
+            self.properties.windowed_position_y = static_cast<u32>(y);
+
+            // Get the primary monitor and its video mode
+            auto *monitor = glfwGetPrimaryMonitor();
+            const auto *mode = glfwGetVideoMode(monitor);
+
+            // Switch to fullscreen
+            glfwSetWindowMonitor(win, monitor, 0, 0, mode->width, mode->height,
+                                 mode->refreshRate);
+            self.properties.fullscreen = true;
+            self.user_data.was_resized = true;
+          } else {
+            // Switch back to windowed mode
+            glfwSetWindowMonitor(win, nullptr,
+                                 self.properties.windowed_position_x,
+                                 self.properties.windowed_position_y,
+                                 self.properties.windowed_width,
+                                 self.properties.windowed_height, 0);
+            self.properties.fullscreen = false;
+            self.user_data.was_resized = true;
+          }
         }
       });
 }
