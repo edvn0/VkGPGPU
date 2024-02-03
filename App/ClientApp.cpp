@@ -9,6 +9,7 @@
 #include "Input.hpp"
 #include "Material.hpp"
 #include "Mesh.hpp"
+#include "SceneWidget.hpp"
 #include "UI.hpp"
 
 #include <algorithm>
@@ -25,10 +26,7 @@
 
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), timer(*get_messaging_client()),
-      scene_renderer(*get_device()) {
-  widgets.emplace_back(make_scope<FilesystemWidget>(
-      *get_device(), std::filesystem::current_path()));
-};
+      scene_renderer(*get_device()){};
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
@@ -58,6 +56,12 @@ void ClientApp::on_create() {
   // serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});
 
   // scene->temp_on_create(*get_device(), *get_window(), *get_swapchain());
+
+  widgets.emplace_back(make_scope<FilesystemWidget>(
+      *get_device(), std::filesystem::current_path()));
+  auto widget = make_scope<SceneWidget>(*get_device());
+  widget->set_scene_context(scene.get());
+  widgets.emplace_back(std::move(widget));
 
   for (const auto &widget : widgets) {
     widget->on_create(*get_device(), *get_window(), *get_swapchain());

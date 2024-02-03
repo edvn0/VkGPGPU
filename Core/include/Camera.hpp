@@ -43,7 +43,7 @@ public:
 
     camera_orientation = glm::normalize(camera_orientation);
     const glm::vec3 direction =
-        glm::rotate(camera_orientation, glm::vec3(0, 0, -1));
+        glm::rotate(camera_orientation, glm::vec3(0, 0, 1));
     camera_position = direction * radius;
   }
 
@@ -67,12 +67,12 @@ private:
   glm::vec3 camera_position{-7, 8, 2};
   static constexpr float zoom_speed = 1.0F;
   float radius = 17.0F;
-  glm::quat camera_orientation{1.0, 0.0, 0.0, 0.0};
+  glm::quat camera_orientation{glm::vec3{0, glm::radians(45.0F), 0}};
 
   float near = 0.1F;
   float aspect_ratio = 1280.0F / 720.0F;
-  float far = 100.0F;
-  float fov = 45.0F;
+  float far = 1000.0F;
+  float fov = 70.0F;
 };
 
 } // namespace Core

@@ -393,17 +393,11 @@ auto SceneRenderer::grid_pass() -> void {
   update_material_for_rendering(current_frame, *grid_material, ubos.get(),
                                 ssbos.get());
   grid_material->bind(*command_buffer, *grid_pipeline, current_frame);
-  const auto &grid_submesh = cube_mesh->get_submesh(0);
-
-  bind_vertex_buffer(*cube_mesh->get_vertex_buffer());
-  bind_index_buffer(*cube_mesh->get_index_buffer());
-
   push_constants(*grid_pipeline, *grid_material);
 
-  draw({
-      .index_count = grid_submesh.index_count,
+  draw_vertices({
+      .vertex_count = 4,
       .instance_count = 1,
-      .first_index = grid_submesh.base_index,
   });
 }
 
@@ -448,9 +442,9 @@ auto SceneRenderer::flush() -> void {
   }
   {
     begin_renderpass(*geometry_framebuffer);
+    grid_pass();
     geometry_pass();
     debug_pass();
-    grid_pass();
     end_renderpass();
   }
   {
@@ -653,7 +647,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = geometry_framebuffer.get(),
       .layout = default_vertex_layout,
       .depth_comparison_operator = DepthCompareOperator::Greater,
-      .cull_mode = CullMode::Back,
+      .cull_mode = CullMode::Front,
       .face_mode = FaceMode::CounterClockwise,
   };
   grid_pipeline = GraphicsPipeline::construct(*device, grid_config);

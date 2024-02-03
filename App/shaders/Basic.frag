@@ -18,9 +18,11 @@ vec3 gamma_correct(vec3 colour) { return pow(colour, vec3(1.0 / 2.2)); }
 void main()
 {
   // Ambient light, sampled from the uniform sampler2D ambient_map
-  vec3 ambient = texture(albedo_map, in_uvs).rgb;
+  vec4 ambient_texture = texture(albedo_map, in_uvs);
+  if (ambient_texture.a < 0.1)
+    discard;
   // Also use the pc.albedo_colour
-  ambient *= in_colour.rgb;
+  vec3 ambient = ambient_texture.xyz * in_colour.rgb;
 
   // Specular light, sampled from the uniform sampler2D specular_map
   vec3 specular = texture(specular_map, in_uvs).rgb;
@@ -41,7 +43,8 @@ void main()
   diffuse = diff * in_colour.rgb;
 
   // Specular
-  vec3 view_direction = normalize(renderer.camera_pos.xyz - in_fragment_position.xyz);
+  vec3 view_direction =
+      normalize(renderer.camera_pos.xyz - in_fragment_position.xyz);
   vec3 half_direction = normalize(renderer.light_dir.xyz + view_direction);
   const float roughness = pc.roughness;
   float specular_intensity = pow(max(dot(half_direction, normal), 0.0), 64.0F);
@@ -60,5 +63,6 @@ void main()
 
   // Final colour
   vec3 colour = ambient + (1.0 - visibility) * (diffuse + specular);
+
   out_colour = vec4(gamma_correct(colour), 1.0);
 }

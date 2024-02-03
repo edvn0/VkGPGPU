@@ -10,6 +10,7 @@
 #include "Verify.hpp"
 #include "Window.hpp"
 
+#include <ImGuizmo.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
@@ -117,6 +118,7 @@ auto InterfaceSystem::begin_frame() -> void {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+  ImGuizmo::BeginFrame();
 }
 
 auto InterfaceSystem::end_frame() -> void {

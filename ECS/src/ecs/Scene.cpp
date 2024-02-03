@@ -108,6 +108,7 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   auto basic_cube_at_3_3_1 = create_entity("Basic Cube at 3, 3, 1");
   auto &transform = basic_cube_at_3_3_1.add_component<TransformComponent>();
   transform.position = glm::vec3{3.0F, 3.0F, 1.0F};
+  transform.scale = glm::vec3{10.F, 1.0F, 1.0F};
   basic_cube_at_3_3_1.add_component<MeshComponent>(
       Core::Mesh::reference_import_from(device, Core::FS::model("cube.fbx")));
   basic_cube_at_3_3_1.add_component<TextureComponent>(

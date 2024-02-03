@@ -21,12 +21,14 @@ public:
   template <class T> auto add_component(T &&component) -> decltype(auto) {
     return scene->registry.emplace<T>(handle, std::forward<T>(component));
   }
+  template <class T> auto add_component() -> decltype(auto) {
+    if (scene->registry.any_of<T>(handle)) {
+      return scene->registry.get<T>(handle);
+    }
 
-  template <class T, class... Args>
-  auto add_or_get_component(Args &&...args) -> decltype(auto) {
-    return scene->registry.emplace_or_replace<T>(handle,
-                                                 std::forward<Args>(args)...);
+    return scene->registry.emplace<T>(handle, T{});
   }
+
   template <class T, class... Args>
   auto add_component(Args &&...args) -> decltype(auto) {
     if (scene->registry.any_of<T>(handle)) {
@@ -54,6 +56,9 @@ public:
   }
   template <class... Ts> [[nodiscard]] auto any_of() const -> bool {
     return scene->registry.any_of<Ts...>(handle);
+  }
+  template <class T> auto remove_component() const -> void {
+    scene->registry.remove<T>(handle);
   }
 
   auto on_notify(const Message &) -> void override;
