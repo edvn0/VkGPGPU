@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Concepts.hpp"
 #include "Types.hpp"
 
 #include <fmt/core.h>
@@ -51,6 +52,19 @@ template <IsNumber T> struct Extent {
         .height = static_cast<Other>(height),
     };
   }
+
+  template <IsNumber U>
+    requires(!std::is_same_v<U, T>)
+  auto operator==(const Extent<U> &rhs) const -> bool {
+    return width == rhs.width && height == rhs.height;
+  }
+  template <IsNumber U>
+    requires(!std::is_same_v<U, T>)
+  auto operator!=(const Extent<U> &rhs) const -> bool {
+    return !(*this == rhs);
+  }
+  auto operator==(const Extent &rhs) const -> bool = default;
+  auto operator!=(const Extent &rhs) const -> bool = default;
 };
 
 enum class ImageTiling : std::uint8_t {

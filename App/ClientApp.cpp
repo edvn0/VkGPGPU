@@ -12,6 +12,7 @@
 #include "SceneWidget.hpp"
 #include "UI.hpp"
 
+#include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -25,13 +26,15 @@
 #include "ecs/serialisation/SceneSerialiser.hpp"
 
 ClientApp::ClientApp(const ApplicationProperties &props)
-    : App(props), timer(*get_messaging_client()),
-      scene_renderer(*get_device()){};
+    : App(props), timer(*get_messaging_client()), scene_renderer(*get_device()),
+      camera(75.0F, get_swapchain()->get_extent().as<float>().width,
+             get_swapchain()->get_extent().as<float>().height, 0.1F, 1000.0F,
+             nullptr){};
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
 
-  camera.update_camera(ts);
+  camera.on_update(ts);
   scene_renderer.set_frame_index(frame());
   for (const auto &widget : widgets) {
     widget->on_update(ts);
@@ -57,14 +60,16 @@ void ClientApp::on_create() {
 
   // scene->temp_on_create(*get_device(), *get_window(), *get_swapchain());
 
-  widgets.emplace_back(make_scope<FilesystemWidget>(
-      *get_device(), std::filesystem::current_path()));
-  auto widget = make_scope<SceneWidget>(*get_device());
+  auto fs_widget = make_scope<FilesystemWidget>(
+      *get_device(), std::filesystem::current_path());
+  auto widget = make_scope<SceneWidget>(*get_device(), selected_entity);
   widget->set_scene_context(scene.get());
-  widgets.emplace_back(std::move(widget));
 
-  for (const auto &widget : widgets) {
-    widget->on_create(*get_device(), *get_window(), *get_swapchain());
+  widgets.emplace_back(std::move(widget));
+  widgets.emplace_back(std::move(fs_widget));
+
+  for (const auto &w : widgets) {
+    w->on_create(*get_device(), *get_window(), *get_swapchain());
   }
 }
 
@@ -162,23 +167,6 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                scene_renderer.get_compute_command_buffer());
   });
 
-  UI::widget("Selected entity", [&]() {
-    if (selected_entity.has_value()) {
-      auto &entity = selected_entity.value();
-      auto &transform = entity.get_component<ECS::TransformComponent>();
-
-      UI::text("Entity: {}", entity.get_name());
-      UI::text("Position: x={}, y={}, z={}", transform.position.x,
-               transform.position.y, transform.position.z);
-      UI::text("Rotation: x={}, y={}, z={}", transform.rotation.x,
-               transform.rotation.y, transform.rotation.z);
-      UI::text("Scale: x={}, y={}, z={}", transform.scale.x, transform.scale.y,
-               transform.scale.z);
-    } else {
-      UI::text("No entity selected");
-    }
-  });
-
   /*UI::widget("Image", [&]() {
     UI::image_drop_button(texture, {128, 128});
     ImGui::SameLine();
@@ -189,32 +177,95 @@ void ClientApp::on_interface(InterfaceSystem &system) {
 
   UI::widget("Scene", [&](const Extent<u32> &extent) {
     UI::image(scene_renderer.get_output_image(), {extent.width, extent.height});
-    camera.set_aspect_ratio(extent.aspect_ratio());
-    if (Input::pressed(MouseCode::MOUSE_BUTTON_LEFT)) {
-      float dist_to_nearest = std::numeric_limits<float>::max();
-      auto view = scene->get_registry()
-                      .view<ECS::TransformComponent, ECS::MeshComponent>(
-                          entt::exclude<ECS::CameraComponent>);
-      entt::entity nearest_entity = entt::null;
-      view.each([&](auto entity, auto &transform, auto &mesh) {
-        // Assume meshes are spheres
-        const auto &aabb = mesh.mesh->get_aabb();
+    camera.set_viewport_size(extent);
 
-        glm::vec3 scaledMin = aabb.min() * transform.scale;
-        glm::vec3 scaledMax = aabb.max() * transform.scale;
+    const auto &view = camera.get_view_matrix();
+    const auto &projection = camera.get_projection_matrix();
 
-        // Translate the scaled AABB by the entity's position to move it into
-        // world space
-        glm::vec3 worldMin = scaledMin + transform.position;
-        glm::vec3 worldMax = scaledMax + transform.position;
-        if (false) {
-          nearest_entity = entity;
-        }
-      });
-      if (nearest_entity != entt::null) {
-        selected_entity = ECS::Entity{scene.get(), nearest_entity, "Empty"};
+    if (!selected_entity)
+      return;
+
+    auto entity = scene->get_entity(*selected_entity);
+    auto &transform_component = entity.get_transform();
+    auto transform = transform_component.compute();
+
+    auto y_inverted_projection = projection;
+    y_inverted_projection[1][1] *= -1;
+
+    auto [width, height] = extent.as<float>();
+
+    ImGuizmo::SetDrawlist();
+    ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, width,
+                      height);
+
+    bool snap = Input::pressed(KeyCode::KEY_LEFT_CONTROL);
+    constexpr float snap_value = 0.5f;
+    constexpr std::array snap_modes = {snap_value, snap_value, snap_value};
+
+    if (ImGuizmo::Manipulate(
+            Math::value_ptr(view), Math::value_ptr(y_inverted_projection),
+            static_cast<ImGuizmo::OPERATION>(this->current_operation),
+            ImGuizmo::MODE::LOCAL, Math::value_ptr(transform), nullptr,
+            snap ? snap_modes.data() : nullptr)) {
+
+      glm::vec3 scale;
+      glm::quat orientation;
+      glm::vec3 translation;
+      glm::vec3 skew;
+      glm::vec4 perspective;
+      glm::decompose(transform, scale, orientation, translation, skew,
+                     perspective);
+
+      // Perform smooth updates
+      switch (current_operation) {
+      case GuizmoOperation::T: {
+        transform_component.position = translation;
+        break;
       }
-      selected_entity = std::nullopt;
+      case GuizmoOperation::R: {
+        // Do this in Euler in an attempt to preserve any full revolutions (>
+        // 360)
+        glm::vec3 original_rotation_euler_angles =
+            transform_component.get_rotation_in_euler_angles();
+
+        // Map original rotation to range [-180, 180] which is what ImGuizmo
+        // gives us
+        original_rotation_euler_angles.x =
+            fmodf(original_rotation_euler_angles.x + glm::pi<float>(),
+                  glm::two_pi<float>()) -
+            glm::pi<float>();
+        original_rotation_euler_angles.y =
+            fmodf(original_rotation_euler_angles.y + glm::pi<float>(),
+                  glm::two_pi<float>()) -
+            glm::pi<float>();
+        original_rotation_euler_angles.z =
+            fmodf(original_rotation_euler_angles.z + glm::pi<float>(),
+                  glm::two_pi<float>()) -
+            glm::pi<float>();
+
+        glm::vec3 deltaRotationEuler =
+            glm::eulerAngles(orientation) - original_rotation_euler_angles;
+
+        // Try to avoid drift due numeric precision
+        if (fabs(deltaRotationEuler.x) < 0.001)
+          deltaRotationEuler.x = 0.0f;
+        if (fabs(deltaRotationEuler.y) < 0.001)
+          deltaRotationEuler.y = 0.0f;
+        if (fabs(deltaRotationEuler.z) < 0.001)
+          deltaRotationEuler.z = 0.0f;
+
+        transform_component.set_rotation_as_euler_angles(
+            transform_component.get_rotation_in_euler_angles() +=
+            deltaRotationEuler);
+        break;
+      }
+      case GuizmoOperation::S: {
+        transform_component.scale = scale;
+        break;
+      }
+      default:
+        break;
+      }
     }
   });
 
@@ -223,24 +274,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   });
 
   UI::widget("Push constant", [&]() {
-    auto &camera_position = camera.get_camera_position();
+    auto &camera_position = camera.get_position();
     ImGui::SliderFloat3("Position", &camera_position[0], -10.0f, 10.0f);
     UI::text("Current Position: x={}, y={}, z={}", camera_position.x,
              camera_position.y, camera_position.z);
-
-    auto &sun_position = scene_renderer.get_sun_position();
-    ImGui::SliderFloat3("Sun Position", Math::value_ptr(sun_position), -10.0f,
-                        10.0f);
-    UI::text("Sun Position: x={}, y={}, z={}", sun_position.x, sun_position.y,
-             sun_position.z);
-
-    auto &&[value, near, far, bias, depth_value] =
-        scene_renderer.get_depth_factors();
-    ImGui::SliderFloat("Depth Value", &value, 5.0f, 100.0f);
-    ImGui::SliderFloat("Depth Near", &near, -50.F, 50.F);
-    ImGui::SliderFloat("Depth Far", &far, 0.1f, 100.0f);
-    ImGui::SliderFloat("Depth Bias", &bias, 0.0f, 0.1F);
-    ImGui::SliderFloat("Depth Factor", &depth_value, 0.01f, 1.0f);
 
     auto &&[grid_colour, plane_colour, grid_size, fog_colour] =
         scene_renderer.get_grid_configuration();
@@ -260,4 +297,50 @@ auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
   scene_renderer.on_resize(new_extent);
 
   info("{}", new_extent);
+}
+
+void ClientApp::on_event(Event &event) {
+  camera.on_event(event);
+
+  EventDispatcher dispatcher(event);
+  dispatcher.dispatch<KeyPressedEvent>([this](KeyPressedEvent &event) {
+    if (event.get_keycode() == KeyCode::KEY_T) {
+      current_operation = ClientApp::cycle(current_operation);
+      return true;
+    }
+    if (event.get_keycode() == KeyCode::KEY_ESCAPE) {
+      get_window()->close();
+      return true;
+    }
+    return false;
+  });
+  dispatcher.dispatch<KeyReleasedEvent>([this](KeyReleasedEvent &event) {
+    if (event.get_keycode() == KeyCode::KEY_F11) {
+      get_window()->toggle_fullscreen();
+      return true;
+    }
+    return false;
+  });
+
+  if (event.handled)
+    return;
+
+  for (auto &widget : widgets) {
+    widget->on_event(event);
+    if (event.handled)
+      break;
+  }
+}
+
+auto ClientApp::cycle(GuizmoOperation current) -> GuizmoOperation {
+  switch (current) {
+  case GuizmoOperation::T:
+    return GuizmoOperation::R; // T -> R
+  case GuizmoOperation::R:
+    return GuizmoOperation::S; // R -> S
+  case GuizmoOperation::S:
+    return GuizmoOperation::T; // S -> T
+  default:
+    return GuizmoOperation::T; // Default to T if not currently T, R, or S
+  }
 }

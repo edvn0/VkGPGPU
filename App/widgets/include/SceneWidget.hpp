@@ -10,7 +10,7 @@
 
 class SceneWidget : public Widget {
 public:
-  explicit SceneWidget(const Core::Device &);
+  explicit SceneWidget(const Core::Device &, std::optional<entt::entity> &);
 
   auto set_scene_context(ECS::Scene *scene) -> void { context = scene; }
 
@@ -19,10 +19,15 @@ public:
   void on_create(const Core::Device &, const Core::Window &,
                  const Core::Swapchain &) override {}
   void on_destroy() override {}
+  auto on_notify(const ECS::Message &) -> void override;
 
 private:
   const Core::Device *device;
   ECS::Scene *context{nullptr};
+
+  std::optional<entt::entity> &selected;
+  entt::entity last_selected = entt::null;
+  std::string selected_name;
 
   void draw_component_widget(ECS::Entity &entity);
 

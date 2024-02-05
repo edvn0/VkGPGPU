@@ -35,9 +35,7 @@ public:
   auto deserialise(Scene &scene, std::istream &stream) -> void;
 
 private:
-  using ComponentTypes =
-      std::tuple<IdentityComponent, TransformComponent, TextureComponent,
-                 MeshComponent, CameraComponent>;
+  using ComponentTypes = Core::TypelistToTuple<EngineComponents>::type;
   static constexpr auto ComponentCount = std::tuple_size_v<ComponentTypes>;
 
   void serialise_entity_components(std::ostream &out, Entity &entity);

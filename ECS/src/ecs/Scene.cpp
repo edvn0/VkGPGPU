@@ -77,12 +77,24 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
       });
 }
 
+auto Scene::get_entity(entt::entity identifier) -> Entity {
+  Entity entity{this, identifier};
+  return entity;
+};
+
 auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
                       const glm::mat4 &projection_matrix,
                       const glm::mat4 &view_matrix) -> void {
   registry.view<TransformComponent, CameraComponent>().each(
       [&](auto, auto &transform, auto &) {
         transform.position = glm::inverse(view_matrix)[3];
+      });
+
+  auto sun_view = registry.view<const SunComponent, const TransformComponent>();
+  sun_view.each(
+      [&](auto, const SunComponent &sun, const TransformComponent &transform) {
+        scene_renderer.get_sun_position() = transform.position;
+        scene_renderer.get_depth_factors() = sun.depth_params;
       });
 
   scene_renderer.begin_frame(projection_matrix, view_matrix);
@@ -100,6 +112,11 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
     }
   });
 
+  auto sun = create_entity("Sun");
+  auto &sun_component = sun.add_component<SunComponent>();
+  sun_component.colour = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F};
+  sun_component.direction = glm::vec3{0.0F, 0.0F, 1.0F};
+
   auto camera_entity = create_entity("Camera");
   camera_entity.add_component<CameraComponent>();
   camera_entity.add_component<MeshComponent>(
@@ -108,7 +125,7 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   auto basic_cube_at_3_3_1 = create_entity("Basic Cube at 3, 3, 1");
   auto &transform = basic_cube_at_3_3_1.add_component<TransformComponent>();
   transform.position = glm::vec3{3.0F, 3.0F, 1.0F};
-  transform.scale = glm::vec3{10.F, 1.0F, 1.0F};
+  transform.scale = glm::vec3{2.F, 2.0F, 2.0F};
   basic_cube_at_3_3_1.add_component<MeshComponent>(
       Core::Mesh::reference_import_from(device, Core::FS::model("cube.fbx")));
   basic_cube_at_3_3_1.add_component<TextureComponent>(

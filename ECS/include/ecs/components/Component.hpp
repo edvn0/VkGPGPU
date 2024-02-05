@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Mesh.hpp"
+#include "RenderingDefinitions.hpp"
+#include "TypeUtility.hpp"
 #include "Types.hpp"
 
 #include <string>
@@ -29,6 +31,16 @@ struct TransformComponent {
   glm::vec3 scale{1.0f};
 
   [[nodiscard]] auto compute() const -> glm::mat4;
+  auto update(const glm::vec3 &position, const glm::quat &rotation,
+              const glm::vec3 &scale) -> void;
+
+  auto get_rotation_in_euler_angles() const -> glm::vec3 {
+    return glm::eulerAngles(rotation);
+  }
+
+  auto set_rotation_as_euler_angles(const glm::vec3 &euler_angles) -> void {
+    rotation = glm::quat(euler_angles);
+  }
 
   static constexpr std::string_view component_name{"Transform"};
 };
@@ -52,11 +64,19 @@ struct CameraComponent {
   static constexpr std::string_view component_name{"Camera"};
 };
 
-template <typename...> struct ComponentList {};
+struct SunComponent {
+  glm::vec4 colour;
+  glm::vec3 direction;
+  Core::DepthParameters depth_params{};
+
+  static constexpr std::string_view component_name{"Sun"};
+};
+
+template <typename... Ts> using ComponentList = Core::Typelist<Ts...>;
 
 using EngineComponents =
     ComponentList<IdentityComponent, TransformComponent, TextureComponent,
-                  MeshComponent, CameraComponent>;
+                  MeshComponent, CameraComponent, SunComponent>;
 using UnremovableComponents =
     ComponentList<IdentityComponent, TransformComponent>;
 

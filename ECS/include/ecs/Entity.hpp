@@ -12,6 +12,7 @@ class Entity : public ISceneObserver {
 public:
   Entity(Scene *scene, std::string_view name);
   Entity(Scene *scene, entt::entity, std::string_view name);
+  Entity(Scene *scene, entt::entity);
   ~Entity() override;
 
   [[nodiscard]] auto get_id() const -> Core::u64;

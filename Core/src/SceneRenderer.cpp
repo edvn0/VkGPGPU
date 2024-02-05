@@ -274,7 +274,7 @@ auto SceneRenderer::begin_frame(const glm::mat4 &projection,
   renderer_ubo.view = view;
   renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
   renderer_ubo.light_position = {sun_position, 1.0F};
-  renderer_ubo.light_direction = {glm::normalize(sun_position), 1.0F};
+  renderer_ubo.light_direction = {glm::normalize(-sun_position), 1.0F};
   const auto &position = view[3];
   renderer_ubo.camera_position = position;
 
@@ -689,7 +689,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .shader = fullscreen_shader.get(),
       .framebuffer = fullscreen_framebuffer.get(),
       .depth_comparison_operator = DepthCompareOperator::Greater,
-      .cull_mode = CullMode::Back,
+      .cull_mode = CullMode::None,
       .face_mode = FaceMode::CounterClockwise,
   };
   fullscreen_pipeline = GraphicsPipeline::construct(*device, fullscreen_config);

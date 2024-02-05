@@ -47,6 +47,10 @@ public:
 
   [[nodiscard]] auto get_instance() const -> VkInstance;
 
+  auto set_event_handler(std::function<void(Event &)> &&) -> void;
+  auto toggle_fullscreen() -> void;
+  auto close() -> void;
+
 protected:
   Window(const Instance &, const WindowProperties &);
 

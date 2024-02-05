@@ -10,10 +10,12 @@
 #include "Verify.hpp"
 #include "Window.hpp"
 
+// clang-format off
+#include <imgui.h>
 #include <ImGuizmo.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
-#include <imgui.h>
+// clang-format on
 
 namespace Core {
 
@@ -213,10 +215,10 @@ auto InterfaceSystem::end_frame() -> void {
   vkCmdEndRenderPass(draw_command_buffer);
 
   {
-    std::unique_lock lock{callbacks_mutex};
     while (!frame_end_callbacks.empty()) {
       auto front = frame_end_callbacks.front();
       frame_end_callbacks.pop();
+      std::unique_lock lock{callbacks_mutex};
       front(*command_executor);
     }
   }

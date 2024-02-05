@@ -58,6 +58,7 @@ set(SOURCES
     src/Allocator.cpp
     src/App.cpp
     src/Buffer.cpp
+    src/Camera.cpp
     src/CommandBuffer.cpp
     src/DataBuffer.cpp
     src/DebugMarker.cpp
@@ -100,12 +101,12 @@ target_compile_definitions(Core PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
     set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=2)
+    target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
     target_compile_definitions(Core PUBLIC GPGPU_RELEASE)
     set(GPGPU_FAST_LOGGING ON)
 endif()

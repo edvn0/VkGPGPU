@@ -22,6 +22,10 @@ Entity::Entity(Scene *scene, entt::entity entity_handle, std::string_view name)
   add_component<TransformComponent>();
 }
 
+Entity::Entity(Scene *scene, entt::entity entity_handle) : scene(scene) {
+  handle = entity_handle;
+}
+
 Entity::~Entity() = default;
 
 auto Entity::get_id() const -> Core::u64 {

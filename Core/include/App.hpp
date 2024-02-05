@@ -56,7 +56,7 @@ template <Core::usize N = 10000> struct FPSAverage {
          fps);
   }
 
-  auto get_statistics() const {
+  [[nodiscard]] auto get_statistics() const {
     const auto avg_frame_time = frame_time_sum / N;
     const auto fps = 1.0 / avg_frame_time;
     return std::tuple{1000.0F * avg_frame_time, fps};
@@ -85,6 +85,7 @@ protected:
   virtual auto on_interface(InterfaceSystem &) -> void = 0;
   virtual auto on_create() -> void = 0;
   virtual auto on_destroy() -> void = 0;
+  virtual auto on_event(Event &) -> void{};
 
   explicit App(const ApplicationProperties &);
 
@@ -126,6 +127,8 @@ private:
   FPSAverage<144> fps_average{};
 
   ApplicationProperties properties{};
+
+  auto forward_incoming_events(Event &) -> void;
 
   u64 frame_counter{0};
 };

@@ -12,4 +12,11 @@ auto TransformComponent::compute() const -> glm::mat4 {
          glm::scale(glm::mat4(1.0F), scale);
 }
 
+auto TransformComponent::update(const glm::vec3 &pos, const glm::quat &rot,
+                                const glm::vec3 &scl) -> void {
+  position = pos;
+  rotation = rot;
+  scale = scl;
+}
+
 } // namespace ECS

@@ -1,6 +1,7 @@
 #include "SceneWidget.hpp"
 
 #include "Device.hpp"
+#include "Logger.hpp"
 #include "UI.hpp"
 
 #include <imgui.h>
@@ -12,7 +13,9 @@
 using namespace Core;
 using namespace ECS;
 
-SceneWidget::SceneWidget(const Device &device) : device(&device) {}
+SceneWidget::SceneWidget(const Device &device,
+                         std::optional<entt::entity> &scene_selected)
+    : device(&device), selected(scene_selected) {}
 
 void SceneWidget::on_interface(InterfaceSystem &) {
   if (!UI::begin("SceneContext")) {
@@ -22,13 +25,11 @@ void SceneWidget::on_interface(InterfaceSystem &) {
 
   const auto identifer_view = context->get_registry().view<IdentityComponent>();
   // Make a list of all the entities in the scene, should be selectable
-  static entt::entity selected = entt::null;
-  static std::string selected_name;
 
   for (const auto entity : identifer_view) {
     auto &identity = identifer_view.get<IdentityComponent>(entity);
     ImGui::PushID(static_cast<i32>(identity.id));
-    bool is_selected = selected == entity;
+    bool is_selected = selected.has_value() && selected == entity;
     if (ImGui::Selectable(identity.name.c_str(), &is_selected)) {
       selected = entity;
       selected_name = identity.name;
@@ -40,7 +41,12 @@ void SceneWidget::on_interface(InterfaceSystem &) {
   // Must also be inside the SceneContext window
   if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
     selected = entt::null;
+    if (last_selected != selected) {
+      on_notify(ECS::Events::SelectedEntityUpdateEvent::empty());
+    }
+
     selected_name.clear();
+    last_selected = entt::null;
   }
 
   // Create a right click menu for adding entities
@@ -60,12 +66,18 @@ void SceneWidget::on_interface(InterfaceSystem &) {
     return;
   }
 
-  if (selected != entt::null) {
+  if (selected.has_value() && selected.value() != entt::null) {
     Entity entity{
         context,
-        selected,
+        selected.value(),
         selected_name,
     };
+
+    if (last_selected != selected) {
+
+      on_notify(ECS::Events::SelectedEntityUpdateEvent{entity.get_id()});
+      last_selected = selected.value();
+    }
 
     draw_component_widget(entity);
   } else {
@@ -73,6 +85,18 @@ void SceneWidget::on_interface(InterfaceSystem &) {
   }
 
   UI::end();
+}
+
+auto SceneWidget::on_notify(const ECS::Message &message) -> void {
+  std::visit(
+      [this](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T,
+                                     ECS::Events::SelectedEntityUpdateEvent>) {
+          info("Selected entity is now: {}", arg.id);
+        }
+      },
+      message);
 }
 
 void SceneWidget::draw_component_widget(ECS::Entity &entity) {
@@ -116,4 +140,18 @@ void SceneWidget::draw_component_widget(ECS::Entity &entity) {
         auto &texture_vector4 = texture.colour;
         ImGui::ColorEdit4("Colour", &texture_vector4.x);
       });
+
+  draw_component<SunComponent>(entity, "Sun", [](SunComponent &sun) {
+    ImGui::DragFloat3("Direction", &sun.direction.x, 0.1F);
+    ImGui::ColorEdit3("Colour", &sun.colour.x);
+
+    Core::DepthParameters &depth = sun.depth_params;
+    ImGui::DragFloat("Near", &depth.near, 0.1F);
+    ImGui::DragFloat("Far", &depth.far, 0.1F);
+    // Bias (0 to 1), value (-100, 100), default_value = 0.1
+    ImGui::DragFloat("Bias", &depth.bias, 0.1F, 0.0F, 1.0F);
+    ImGui::DragFloat("Value", &depth.value, 0.1F, -100.0F, 100.0F);
+    ImGui::DragFloat("Default Value", &depth.default_value, 0.1F, -100.0F,
+                     100.0F);
+  });
 }

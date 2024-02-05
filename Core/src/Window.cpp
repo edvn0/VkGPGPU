@@ -33,6 +33,12 @@ Window::Window(const Instance &inst, const WindowProperties &props)
     auto *monitor = glfwGetPrimaryMonitor();
     const auto *mode = glfwGetVideoMode(monitor);
 
+    glfwWindowHint(GLFW_DECORATED, false);
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+
     // Create a fullscreen window using the primary monitor's resolution
     window = glfwCreateWindow(mode->width, mode->height, "VkGPGPU", monitor,
                               nullptr);
@@ -58,6 +64,35 @@ Window::Window(const Instance &inst, const WindowProperties &props)
         };
         self.user_data.was_resized = true;
       });
+
+  glfwSetKeyCallback(
+      window,
+      +[](GLFWwindow *win, i32 key, i32 scancode, i32 action, i32 mods) {
+        auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
+        // send different based on action, mods etc: KeyPressedEVent,
+        // KeyReleasedEvent, KeyTypedEvent
+        switch (action) {
+        case GLFW_PRESS: {
+          KeyPressedEvent event{key, 0};
+          self.user_data.event_callback(event);
+          break;
+        }
+        case GLFW_RELEASE: {
+          KeyReleasedEvent event{key};
+          self.user_data.event_callback(event);
+          break;
+        }
+        case GLFW_REPEAT: {
+          KeyPressedEvent event{key, 1};
+          self.user_data.event_callback(event);
+          break;
+        }
+        default: {
+          error("Unknown key action: {}", action);
+          break;
+        }
+        }
+      });
   glfwSetWindowSizeCallback(
       window, +[](GLFWwindow *win, i32 w, i32 h) {
         auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
@@ -66,50 +101,52 @@ Window::Window(const Instance &inst, const WindowProperties &props)
             static_cast<u32>(h),
         };
         self.user_data.was_resized = true;
+
+        WindowResizeEvent event{w, h};
+        self.user_data.event_callback(event);
       });
-  glfwSetKeyCallback(
-      window,
-      +[](GLFWwindow *win, i32 key, i32 scancode, i32 action, i32 mods) {
+
+  glfwSetScrollCallback(
+      window, +[](GLFWwindow *win, f64 x, f64 y) {
         auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-          info("Escape key pressed, closing window");
-          glfwSetWindowShouldClose(win, GLFW_TRUE);
-        }
-
-        if (key == GLFW_KEY_F11 && action == GLFW_PRESS) {
-          if (!self.properties.fullscreen) {
-            // Store current window size and position
-            i32 w{}, h{}, x{}, y{};
-            glfwGetWindowSize(win, &w, &h);
-            glfwGetWindowPos(win, &x, &y);
-
-            self.properties.windowed_width = static_cast<u32>(w);
-            self.properties.windowed_height = static_cast<u32>(h);
-            self.properties.windowed_position_x = static_cast<u32>(x);
-            self.properties.windowed_position_y = static_cast<u32>(y);
-
-            // Get the primary monitor and its video mode
-            auto *monitor = glfwGetPrimaryMonitor();
-            const auto *mode = glfwGetVideoMode(monitor);
-
-            // Switch to fullscreen
-            glfwSetWindowMonitor(win, monitor, 0, 0, mode->width, mode->height,
-                                 mode->refreshRate);
-            self.properties.fullscreen = true;
-            self.user_data.was_resized = true;
-          } else {
-            // Switch back to windowed mode
-            glfwSetWindowMonitor(win, nullptr,
-                                 self.properties.windowed_position_x,
-                                 self.properties.windowed_position_y,
-                                 self.properties.windowed_width,
-                                 self.properties.windowed_height, 0);
-            self.properties.fullscreen = false;
-            self.user_data.was_resized = true;
-          }
-        }
+        MouseScrolledEvent event{static_cast<float>(x), static_cast<float>(y)};
+        self.user_data.event_callback(event);
       });
 }
+
+auto Window::toggle_fullscreen() -> void {
+  if (!properties.fullscreen) {
+    // Store current window size and position
+    i32 w{}, h{}, x{}, y{};
+    glfwGetWindowSize(window, &w, &h);
+    glfwGetWindowPos(window, &x, &y);
+
+    properties.windowed_width = static_cast<u32>(w);
+    properties.windowed_height = static_cast<u32>(h);
+    properties.windowed_position_x = static_cast<u32>(x);
+    properties.windowed_position_y = static_cast<u32>(y);
+
+    // Get the primary monitor and its video mode
+    auto *monitor = glfwGetPrimaryMonitor();
+    const auto *mode = glfwGetVideoMode(monitor);
+
+    // Switch to fullscreen
+    glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height,
+                         mode->refreshRate);
+    properties.fullscreen = true;
+    user_data.was_resized = true;
+  } else {
+    // Switch back to windowed mode
+    glfwSetWindowMonitor(window, nullptr, properties.windowed_position_x,
+                         properties.windowed_position_y,
+                         properties.windowed_width, properties.windowed_height,
+                         0);
+    properties.fullscreen = false;
+    user_data.was_resized = true;
+  }
+}
+
+auto Window::close() -> void { glfwSetWindowShouldClose(window, GLFW_TRUE); }
 
 auto Window::should_close() const -> bool {
   if (window == nullptr)
@@ -137,6 +174,11 @@ Window::~Window() {
 
 auto Window::get_instance() const -> VkInstance {
   return instance->get_instance();
+}
+
+auto Window::set_event_handler(std::function<void(Event &)> &&event_callback)
+    -> void {
+  user_data.event_callback = std::move(event_callback);
 }
 
 auto Window::was_resized() -> bool {

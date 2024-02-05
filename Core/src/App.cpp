@@ -39,6 +39,8 @@ App::App(const ApplicationProperties &props) : properties(props) {
                      .headless = properties.headless,
                      .begin_fullscreen = properties.start_fullscreen,
                  });
+  window->set_event_handler(
+      [this](Event &event) { forward_incoming_events(event); });
   // Initialize the device
   device = Device::construct(*instance, *window);
   UI::initialise(*device);
@@ -60,6 +62,19 @@ App::~App() {
 }
 
 auto App::frame() const -> u32 { return swapchain->current_frame(); }
+
+auto App::forward_incoming_events(Event &event) -> void {
+  EventDispatcher dispatcher(event);
+  dispatcher.dispatch<WindowResizeEvent>([this](WindowResizeEvent &event) {
+    const Extent extent{event.get_width(), event.get_height()};
+    on_resize(extent.as<u32>());
+    return true;
+  });
+
+  if (event.handled)
+    return;
+  on_event(event);
+}
 
 auto App::run() -> void {
   static constexpr auto now = [] {

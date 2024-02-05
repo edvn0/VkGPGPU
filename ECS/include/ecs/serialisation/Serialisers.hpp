@@ -298,4 +298,45 @@ template <> struct ComponentSerialiser<CameraComponent> {
   }
 };
 
+template <> struct ComponentSerialiser<SunComponent> {
+  static auto serialise(const SunComponent &component, std::ostream &out_stream)
+      -> bool {
+    if (!write(out_stream, component.direction))
+      return false;
+    if (!write(out_stream, component.colour))
+      return false;
+    if (!write(out_stream, component.depth_params.bias))
+      return false;
+    if (!write(out_stream, component.depth_params.default_value))
+      return false;
+    if (!write(out_stream, component.depth_params.far))
+      return false;
+    if (!write(out_stream, component.depth_params.near))
+      return false;
+    if (!write(out_stream, component.depth_params.value))
+      return false;
+
+    return true;
+  }
+
+  static auto deserialise(std::istream &in, SunComponent &out) -> bool {
+    if (!read(in, out.direction))
+      return false;
+    if (!read(in, out.colour))
+      return false;
+    if (!read(in, out.depth_params.bias))
+      return false;
+    if (!read(in, out.depth_params.default_value))
+      return false;
+    if (!read(in, out.depth_params.far))
+      return false;
+    if (!read(in, out.depth_params.near))
+      return false;
+    if (!read(in, out.depth_params.value))
+      return false;
+
+    return true;
+  }
+};
+
 } // namespace ECS

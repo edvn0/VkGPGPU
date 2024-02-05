@@ -5,8 +5,8 @@
 #include "Types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <list>
 #include <functional>
+#include <list>
 #include <map>
 #include <numeric>
 #include <set>

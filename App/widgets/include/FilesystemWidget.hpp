@@ -23,6 +23,7 @@ public:
   void on_create(const Core::Device &, const Core::Window &,
                  const Core::Swapchain &) override;
   void on_destroy() override;
+  auto on_notify(const ECS::Message &message) -> void override {}
 
 private:
   const Device *device;

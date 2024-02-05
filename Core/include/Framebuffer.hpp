@@ -39,19 +39,20 @@ struct FramebufferAttachmentSpecification {
 struct FramebufferProperties {
   u32 width{0};
   u32 height{0};
-  bool resizeable{true};
-  floating scale{1.0f};
-  Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
-  floating depth_clear_value{1.0f};
-  bool clear_colour_on_load{true};
-  bool clear_depth_on_load{true};
+  const bool resizeable{true};
+  const floating scale{1.0f};
+  const Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
+  const floating depth_clear_value{0.0f}; // We use inverted z-buffer
+  const bool clear_colour_on_load{true};
+  const bool clear_depth_on_load{true};
 
-  bool blend{true};
+  const bool blend{true};
+  const bool invert_viewport{true};
   FramebufferBlendMode blend_mode = FramebufferBlendMode::None;
 
   FramebufferAttachmentSpecification attachments;
 
-  bool transfer{false};
+  const bool transfer{false};
 
   Ref<Image> existing_image;
   std::vector<u32> existing_image_layers;
