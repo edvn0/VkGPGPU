@@ -60,7 +60,7 @@ struct FramebufferProperties {
   std::unordered_map<u32, Ref<Image>> existing_images;
 
   Ref<Framebuffer> existing_framebuffer;
-
+  const bool flip_viewport{true};
   std::string debug_name;
 };
 

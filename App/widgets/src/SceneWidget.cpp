@@ -42,7 +42,7 @@ void SceneWidget::on_interface(InterfaceSystem &) {
   if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
     selected = entt::null;
     if (last_selected != selected) {
-      on_notify(ECS::Events::SelectedEntityUpdateEvent::empty());
+      on_notify(Events::SelectedEntityUpdateEvent::empty());
     }
 
     selected_name.clear();
@@ -75,7 +75,7 @@ void SceneWidget::on_interface(InterfaceSystem &) {
 
     if (last_selected != selected) {
 
-      on_notify(ECS::Events::SelectedEntityUpdateEvent{entity.get_id()});
+      on_notify(Events::SelectedEntityUpdateEvent{entity.get_id()});
       last_selected = selected.value();
     }
 
@@ -87,19 +87,18 @@ void SceneWidget::on_interface(InterfaceSystem &) {
   UI::end();
 }
 
-auto SceneWidget::on_notify(const ECS::Message &message) -> void {
+auto SceneWidget::on_notify(const Message &message) -> void {
   std::visit(
       [this](auto &&arg) {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T,
-                                     ECS::Events::SelectedEntityUpdateEvent>) {
+        if constexpr (std::is_same_v<T, Events::SelectedEntityUpdateEvent>) {
           info("Selected entity is now: {}", arg.id);
         }
       },
       message);
 }
 
-void SceneWidget::draw_component_widget(ECS::Entity &entity) {
+void SceneWidget::draw_component_widget(Entity &entity) {
   if (entity.has_component<IdentityComponent>()) {
     auto &tag = entity.get_component<IdentityComponent>();
     std::string buffer = tag.name;
@@ -123,7 +122,7 @@ void SceneWidget::draw_component_widget(ECS::Entity &entity) {
   }
 
   if (ImGui::BeginPopup("AddComponent")) {
-    draw_add_component_all(entity, ECS::EngineComponents{});
+    draw_add_component_all(entity, EngineComponents{});
     ImGui::EndPopup();
   }
 
@@ -131,7 +130,7 @@ void SceneWidget::draw_component_widget(ECS::Entity &entity) {
 
   draw_component<TransformComponent>(entity, "Transform", [](auto &transform) {
     ImGui::DragFloat3("Position", &transform.position.x, 0.1F);
-    ImGui::DragFloat4("Rotation", &transform.rotation.x, 0.1F);
+    ImGui::DragFloat4("Rotation", Math::value_ptr(transform.rotation), 0.1F);
     ImGui::DragFloat3("Scale", &transform.scale.x, 0.1F);
   });
 
@@ -148,10 +147,34 @@ void SceneWidget::draw_component_widget(ECS::Entity &entity) {
     Core::DepthParameters &depth = sun.depth_params;
     ImGui::DragFloat("Near", &depth.near, 0.1F);
     ImGui::DragFloat("Far", &depth.far, 0.1F);
-    // Bias (0 to 1), value (-100, 100), default_value = 0.1
     ImGui::DragFloat("Bias", &depth.bias, 0.1F, 0.0F, 1.0F);
     ImGui::DragFloat("Value", &depth.value, 0.1F, -100.0F, 100.0F);
     ImGui::DragFloat("Default Value", &depth.default_value, 0.1F, -100.0F,
                      100.0F);
   });
+
+  draw_component<MeshComponent>(
+      entity, "Mesh", [&dev = device](MeshComponent &mesh) {
+        if (!mesh.path.empty()) {
+          UI::text("Path: {}", mesh.path.string());
+        } else {
+          UI::text("Path: {}", mesh.mesh->get_file_path().string());
+        }
+
+        ImGui::NewLine();
+        // Dragdroppable button
+        if (ImGui::Button("LoadMesh")) {
+        }
+
+        if (const auto path = UI::accept_drag_drop_payload("LoadMesh");
+            !path.empty()) {
+          mesh.path = path;
+          if (const auto constructed =
+                  Mesh::reference_import_from(*dev, path)) {
+            mesh.mesh = constructed;
+          } else {
+            info("Failed to load mesh from path: {}", path);
+          }
+        }
+      });
 }

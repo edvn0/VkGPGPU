@@ -131,6 +131,12 @@ auto SceneRenderer::begin_renderpass(const Framebuffer &framebuffer) -> void {
   viewport.height = -static_cast<float>(framebuffer.get_height());
   viewport.minDepth = 1.0F;
   viewport.maxDepth = 0.0F;
+
+  if (!framebuffer.get_properties().flip_viewport) {
+    viewport.y = 0.0F;
+    viewport.height = static_cast<float>(framebuffer.get_height());
+  }
+
   vkCmdSetViewport(command_buffer->get_command_buffer(), 0, 1, &viewport);
 
   VkRect2D scissor = {};
@@ -396,7 +402,7 @@ auto SceneRenderer::grid_pass() -> void {
   push_constants(*grid_pipeline, *grid_material);
 
   draw_vertices({
-      .vertex_count = 4,
+      .vertex_count = 6,
       .instance_count = 1,
   });
 }
@@ -442,9 +448,9 @@ auto SceneRenderer::flush() -> void {
   }
   {
     begin_renderpass(*geometry_framebuffer);
-    grid_pass();
     geometry_pass();
     debug_pass();
+    grid_pass();
     end_renderpass();
   }
   {
@@ -594,6 +600,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
                   .format = ImageFormat::DEPTH32F,
               },
           },
+      .flip_viewport = false,
       .debug_name = "ShadowFramebuffer",
   };
   shadow_framebuffer = Framebuffer::construct(*device, shadow_props);
@@ -630,7 +637,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = geometry_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
-      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
@@ -645,8 +652,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .name = "GridPipeline",
       .shader = grid_shader.get(),
       .framebuffer = geometry_framebuffer.get(),
-      .layout = default_vertex_layout,
-      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Front,
       .face_mode = FaceMode::CounterClockwise,
   };
@@ -659,7 +665,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = shadow_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
-      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
@@ -688,7 +694,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .name = "FullscreenPipeline",
       .shader = fullscreen_shader.get(),
       .framebuffer = fullscreen_framebuffer.get(),
-      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::None,
       .face_mode = FaceMode::CounterClockwise,
   };

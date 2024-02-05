@@ -12,9 +12,6 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
                              dev, {
                                       .format = ImageFormat::UNORM_RGBA8,
                                       .path = FS::icon("loading.png"),
-                                      .usage = ImageUsage::Sampled |
-                                               ImageUsage::TransferSrc |
-                                               ImageUsage::TransferDst,
                                   })) {
   history.push_back(current_path);
 
@@ -105,13 +102,13 @@ void FilesystemWidget::render_directory_contents() {
         static_cast<u32>(size),
     };
     if (entry.is_directory()) {
-      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+      if (UI::set_drag_drop_payload(UI::Identifiers::fs_widget_identifier,
                                     entry.path()) &&
           UI::image_button(*directory_icon, {extent})) {
         change_directory(entry);
       }
     } else {
-      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+      if (UI::set_drag_drop_payload(UI::Identifiers::fs_widget_identifier,
                                     entry.path())) {
         UI::image(*file_icon, {extent});
       }
@@ -165,8 +162,8 @@ void FilesystemWidget::render_directory_contents() {
         render_file_or_directory(directory_entry, thumbnail_size);
       }
 
-      [[maybe_unused]] auto could =
-          UI::set_drag_drop_payload(UI::Identifiers::texture_identifier, path);
+      [[maybe_unused]] auto could = UI::set_drag_drop_payload(
+          UI::Identifiers::fs_widget_identifier, path);
 
       UI::text_wrapped("{}", filename_string);
 
@@ -179,41 +176,31 @@ void FilesystemWidget::render_directory_contents() {
 }
 
 void FilesystemWidget::load_icons() {
-  back_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("back.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
-  forward_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("forward.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
+  back_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("back.png"),
+                                         });
+  forward_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("forward.png"),
 
-               });
-  home_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("home.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
+                                         });
+  home_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("home.png"),
 
-               });
-  file_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("file.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
-  directory_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("directory.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
+                                         });
+  file_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("file.png"),
+                                         });
+  directory_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("directory.png"),
+                                         });
 }

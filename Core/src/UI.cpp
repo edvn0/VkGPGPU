@@ -113,7 +113,7 @@ auto image_drop_button(Scope<Core::Texture> &texture,
 
   // Use the platform-independent payload handling function
   const auto dropped_file_path =
-      Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
+      Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
   if (!dropped_file_path.empty()) {
     try {
       auto path = std::filesystem::path{dropped_file_path};
@@ -134,7 +134,11 @@ auto image_drop_button(Scope<Core::Texture> &texture,
 }
 
 auto accept_drag_drop_payload(std::string_view) -> std::string {
-  return Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
+  return Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
+}
+
+auto accept_drag_drop_payload() -> std::string {
+  return Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
 }
 
 auto set_drag_drop_payload(const std::string_view payload_identifier,

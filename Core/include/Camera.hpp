@@ -202,7 +202,7 @@ private:
   glm::vec2 initial_mouse_position{};
 
   float distance;
-  float normal_speed{0.02f};
+  float normal_speed{0.85F};
 
   float pitch = glm::radians(-30.0F);
   float yaw = 0;
@@ -217,8 +217,8 @@ private:
 
   Extent<u32> viewport{1600, 900};
 
-  constexpr static float min_speed{0.002f};
-  constexpr static float max_speed{0.2f};
+  constexpr static float min_speed{0.002F};
+  constexpr static float max_speed{2.0F};
 };
 
 } // namespace Core

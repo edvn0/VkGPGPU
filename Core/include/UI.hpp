@@ -15,7 +15,7 @@ namespace Core::UI {
 auto initialise(const Device &) -> void;
 
 namespace Identifiers {
-static constexpr std::string_view texture_identifier =
+static constexpr std::string_view fs_widget_identifier =
     "DRAGDROP_IDENTIFIER_TEXTURE";
 }
 
@@ -59,6 +59,7 @@ auto image_button(const Image &, InterfaceImageProperties = {}) -> bool;
 auto image_drop_button(Scope<Core::Texture> &, InterfaceImageProperties = {})
     -> void;
 auto accept_drag_drop_payload(std::string_view) -> std::string;
+auto accept_drag_drop_payload() -> std::string;
 auto set_drag_drop_payload(std::string_view payload_type,
                            const StringLike auto &data) -> bool {
   return Detail::set_drag_drop_payload_impl(payload_type, data);

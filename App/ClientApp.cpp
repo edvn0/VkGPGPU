@@ -274,11 +274,6 @@ void ClientApp::on_interface(InterfaceSystem &system) {
   });
 
   UI::widget("Push constant", [&]() {
-    auto &camera_position = camera.get_position();
-    ImGui::SliderFloat3("Position", &camera_position[0], -10.0f, 10.0f);
-    UI::text("Current Position: x={}, y={}, z={}", camera_position.x,
-             camera_position.y, camera_position.z);
-
     auto &&[grid_colour, plane_colour, grid_size, fog_colour] =
         scene_renderer.get_grid_configuration();
     ImGui::ColorEdit4("Grid Colour", Math::value_ptr(grid_colour));

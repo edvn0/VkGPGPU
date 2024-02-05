@@ -68,7 +68,7 @@ EditorCamera::EditorCamera(const float degree_fov, const float width,
   direction = glm::eulerAngles(orientation) * pi_to_rad;
   view_matrix =
       glm::translate(glm::mat4(1.0F), position) * glm::mat4(orientation);
-  // view_matrix = glm::inverse(view_matrix);
+  view_matrix = glm::inverse(view_matrix);
 }
 
 void EditorCamera::init(const EditorCamera *previous_camera) {

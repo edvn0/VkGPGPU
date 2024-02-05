@@ -2,6 +2,7 @@
 
 #include "ecs/Scene.hpp"
 
+#include "Colours.hpp"
 #include "Formatters.hpp"
 #include "Logger.hpp"
 #include "SceneRenderer.hpp"
@@ -68,13 +69,20 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
       });
 
   const auto other_view =
-      registry.view<const TransformComponent, const MeshComponent,
-                    const TextureComponent>();
-  other_view.each(
-      [&renderer](auto, auto &&transform, auto &&mesh, auto &&texture) {
-        renderer.submit_static_mesh(mesh.mesh.get(), transform.compute(),
-                                    texture.colour);
-      });
+      registry.view<const TransformComponent, const MeshComponent>();
+  other_view.each([&renderer, &r = registry](auto entity, auto &&transform,
+                                             auto &&mesh) {
+    static constexpr auto white = Core::Colours::white;
+
+    if (r.any_of<TextureComponent>(entity)) {
+      const auto &texture = r.get<TextureComponent>(entity);
+      renderer.submit_static_mesh(mesh.mesh.get(), transform.compute(),
+                                  texture.colour);
+      return;
+    }
+
+    renderer.submit_static_mesh(mesh.mesh.get(), transform.compute(), white);
+  });
 }
 
 auto Scene::get_entity(entt::entity identifier) -> Entity {
@@ -90,7 +98,8 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
         transform.position = glm::inverse(view_matrix)[3];
       });
 
-  auto sun_view = registry.view<const SunComponent, const TransformComponent>();
+  const auto sun_view =
+      registry.view<const SunComponent, const TransformComponent>();
   sun_view.each(
       [&](auto, const SunComponent &sun, const TransformComponent &transform) {
         scene_renderer.get_sun_position() = transform.position;
@@ -116,6 +125,9 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   auto &sun_component = sun.add_component<SunComponent>();
   sun_component.colour = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F};
   sun_component.direction = glm::vec3{0.0F, 0.0F, 1.0F};
+  sun.get_transform().position = glm::vec3{-3.0F, 4.0F, 2.0F};
+  sun.add_component<MeshComponent>(
+      Core::Mesh::reference_import_from(device, Core::FS::model("sphere.fbx")));
 
   auto camera_entity = create_entity("Camera");
   camera_entity.add_component<CameraComponent>();
