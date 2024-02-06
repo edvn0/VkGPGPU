@@ -70,8 +70,8 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
 
   const auto other_view =
       registry.view<const TransformComponent, const MeshComponent>();
-  other_view.each([&renderer, &r = registry](auto entity, auto &&transform,
-                                             auto &&mesh) {
+  other_view.each([&renderer, &r = registry](auto entity, const auto &transform,
+                                             const auto &mesh) {
     static constexpr auto white = Core::Colours::white;
 
     if (r.any_of<TextureComponent>(entity)) {
@@ -142,6 +142,18 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
       Core::Mesh::reference_import_from(device, Core::FS::model("cube.fbx")));
   basic_cube_at_3_3_1.add_component<TextureComponent>(
       glm::vec4{1.0F, 0.0F, 1.0F, 1.0F});
+
+  auto metahuman = create_entity("Metahuman");
+  auto &metahuman_transform = metahuman.add_component<TransformComponent>();
+  metahuman_transform.position = glm::vec3{5.0F, -4.0F, -3.0F};
+
+  metahuman.add_component<MeshComponent>(Core::Mesh::reference_import_from(
+      device, Core::FS::model("metahuman/metahuman.fbx")));
+  metahuman.add_component<TextureComponent>(glm::vec4{1.0F, 1.0F, 1.0F, 1.0F});
+  metahuman_transform.rotation =
+      glm::rotate(metahuman_transform.rotation, glm::radians(90.0F),
+                  glm::vec3{0.0F, 1.0F, 0.0F});
+  metahuman_transform.scale = glm::vec3{0.01F, 0.01F, 0.01F};
 }
 
 auto Scene::on_destroy() -> void {

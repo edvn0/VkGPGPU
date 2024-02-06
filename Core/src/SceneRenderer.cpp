@@ -88,6 +88,56 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
                                    buffer_set, shader_hash);
 }
 
+auto SceneRenderer::create_preetham_sky(float turbidity, float azimuth,
+                                        float inclination) -> Ref<TextureCube> {
+  const u32 cubemap_size = Config::environment_map_size;
+
+  const Extent<u32> cubemap_extent = {
+      cubemap_size,
+      cubemap_size,
+  };
+  auto environment_map =
+      TextureCube::construct(*device, ImageFormat::SRGB_RGBA32, cubemap_extent);
+
+  auto preetham_sky_shader = shader_cache.at("PreethamSky").get();
+  auto preetham_sky_compute_pipeline = Pipeline::construct(
+      *device,
+      PipelineConfiguration{"PreethamSkyComputePipeline",
+                            PipelineStage::Compute, *preetham_sky_shader});
+
+  glm::vec3 params = {turbidity, azimuth, inclination};
+
+  std::array<VkWriteDescriptorSet, 1> write_descriptors;
+  auto descriptor_set = preetham_sky_shader->allocate_descriptor_set(0);
+  write_descriptors[0] =
+      *preetham_sky_shader->get_descriptor_set("output_cubemap", 0);
+  write_descriptors[0].dstSet = descriptor_set.descriptor_sets[0];
+  write_descriptors[0].pImageInfo = &environment_map->get_descriptor_info();
+
+  vkUpdateDescriptorSets(device->get_device(),
+                         static_cast<u32>(write_descriptors.size()),
+                         write_descriptors.data(), 0, nullptr);
+
+  compute_command_buffer->begin(current_frame);
+  vkCmdBindPipeline(compute_command_buffer->get_command_buffer(),
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    preetham_sky_compute_pipeline->get_pipeline());
+  vkCmdPushConstants(compute_command_buffer->get_command_buffer(),
+                     preetham_sky_compute_pipeline->get_pipeline_layout(),
+                     VK_SHADER_STAGE_ALL, 0, sizeof(glm::vec3), &params);
+  vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                          VK_PIPELINE_BIND_POINT_COMPUTE,
+                          preetham_sky_compute_pipeline->get_pipeline_layout(),
+                          0, 1, &descriptor_set.descriptor_sets[0], 0, nullptr);
+  vkCmdDispatch(compute_command_buffer->get_command_buffer(), cubemap_size / 32,
+                cubemap_size / 32, 6);
+  compute_command_buffer->end_and_submit();
+
+  environment_map->generate_mips(true);
+
+  return environment_map;
+}
+
 auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
   extent = new_extent;
   geometry_framebuffer->on_resize(extent);
@@ -97,6 +147,10 @@ auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
   shadow_material->on_resize(extent);
   grid_material->on_resize(extent);
   fullscreen_material->on_resize(extent);
+
+  for (auto &[key, shader] : shader_cache) {
+    shader->on_resize(extent);
+  }
 }
 
 auto SceneRenderer::destroy() -> void {
@@ -146,8 +200,6 @@ auto SceneRenderer::begin_renderpass(const Framebuffer &framebuffer) -> void {
 }
 
 auto SceneRenderer::explicit_clear(const Framebuffer &framebuffer) -> void {
-  begin_renderpass(framebuffer);
-
   const std::vector<VkClearValue> &fb_clear_values =
       framebuffer.get_clear_values();
 
@@ -190,8 +242,6 @@ auto SceneRenderer::explicit_clear(const Framebuffer &framebuffer) -> void {
       command_buffer->get_command_buffer(),
       static_cast<u32>(total_attachment_count), attachments.data(),
       static_cast<u32>(total_attachment_count), clear_rects.data());
-
-  end_renderpass();
 }
 
 auto SceneRenderer::draw(const DrawParameters &params) const -> void {
@@ -257,7 +307,6 @@ auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
     command.submesh_index = submesh;
     command.instance_count++;
     command.material = mesh->get_material(submesh);
-    command.colours.push_back(colour);
 
     if (mesh->casts_shadows()) {
       auto &shadow_command = shadow_draw_commands[key];
@@ -325,8 +374,7 @@ auto SceneRenderer::begin_frame(const glm::mat4 &projection,
 auto SceneRenderer::shadow_pass() -> void {
   bind_pipeline(*shadow_pipeline);
   for (const auto &[key, value] : shadow_draw_commands) {
-    auto &&[mesh_ptr, submesh_index, instance_count, colour_data, material] =
-        value;
+    auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
@@ -356,12 +404,8 @@ auto SceneRenderer::shadow_pass() -> void {
 
 auto SceneRenderer::geometry_pass() -> void {
   bind_pipeline(*geometry_pipeline);
-  const auto &colours = ssbos->get(4, current_frame);
   for (auto &&[key, value] : draw_commands) {
-    auto &&[mesh_ptr, submesh_index, instance_count, colour_data, material] =
-        value;
-    colours->write(colour_data.data(), colour_data.size() * sizeof(glm::vec4));
-
+    auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
     if (material) {
@@ -392,6 +436,10 @@ auto SceneRenderer::geometry_pass() -> void {
 
 auto SceneRenderer::debug_pass() -> void {
   // AABBs with cube_mesh, from debug_draw_commands
+}
+
+auto SceneRenderer::environment_pass() -> void {
+  auto texture_cube = create_preetham_sky(3.0F, 0.0F, 0.0F);
 }
 
 auto SceneRenderer::grid_pass() -> void {
@@ -448,6 +496,12 @@ auto SceneRenderer::flush() -> void {
   }
   {
     begin_renderpass(*geometry_framebuffer);
+    explicit_clear(*geometry_framebuffer);
+    end_renderpass();
+  }
+  {
+    begin_renderpass(*geometry_framebuffer);
+    environment_pass();
     geometry_pass();
     debug_pass();
     grid_pass();
@@ -525,7 +579,7 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   extent = swapchain.get_extent();
 
-  const VertexLayout default_vertex_layout = VertexLayout{
+  const auto default_vertex_layout = VertexLayout{
       {
           LayoutElement{ElementType::Float3, "pos"},
           LayoutElement{ElementType::Float2, "uvs"},
@@ -537,7 +591,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       VertexBinding{0},
   };
 
-  const VertexLayout default_instance_layout = VertexLayout{
+  const auto default_instance_layout = VertexLayout{
       {
           LayoutElement{ElementType::Float4, "row_zero"},
           LayoutElement{ElementType::Float4, "row_one"},
@@ -546,9 +600,12 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       VertexBinding{1, sizeof(TransformVertexData)},
   };
 
+  shader_cache.try_emplace(
+      "PreethamSky",
+      Shader::construct(*device, FS::shader("PreethamSky.comp.spv")));
+
   buffer_for_transform_data.transforms.resize(100 *
                                               Config::transform_buffer_size);
-  buffer_for_colour_data.colours.resize(100 * Config::transform_buffer_size);
 
   command_buffer =
       CommandBuffer::construct(*device, CommandBufferProperties{
@@ -571,8 +628,16 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
-      .clear_colour = {0.1F, 0.1F, 0.1F, 1.0F},
+      .clear_colour =
+          {
+              0.1F,
+              0.1F,
+              0.1F,
+              1.0F,
+          },
       .depth_clear_value = 0.0F,
+      .clear_colour_on_load = false,
+      .clear_depth_on_load = false,
       .blend = true,
       .attachments =
           FramebufferAttachmentSpecification{
@@ -625,15 +690,17 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   disarray_texture = Texture::construct(*device, FS::texture("D.png"));
 
-  shadow_shader = Shader::construct(*device, FS::shader("Shadow.vert.spv"),
-                                    FS::shader("Shadow.frag.spv"));
-  shadow_material = Material::construct(*device, *shadow_shader);
-  geometry_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
-                                      FS::shader("Basic.frag.spv"));
+  shader_cache.try_emplace(
+      "Shadow", Shader::construct(*device, FS::shader("Shadow.vert.spv"),
+                                  FS::shader("Shadow.frag.spv")));
+  shadow_material = Material::construct(*device, *shader_cache.at("Shadow"));
+  shader_cache.try_emplace(
+      "BasicGeometry", Shader::construct(*device, FS::shader("Basic.vert.spv"),
+                                         FS::shader("Basic.frag.spv")));
 
   GraphicsPipelineConfiguration config{
       .name = "DefaultGraphicsPipeline",
-      .shader = geometry_shader.get(),
+      .shader = shader_cache.at("BasicGeometry").get(),
       .framebuffer = geometry_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
@@ -645,12 +712,13 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   config.polygon_mode = PolygonMode::Line;
   wireframed_geometry_pipeline = GraphicsPipeline::construct(*device, config);
 
-  grid_shader = Shader::construct(*device, FS::shader("Grid.vert.spv"),
-                                  FS::shader("Grid.frag.spv"));
-  grid_material = Material::construct(*device, *grid_shader);
+  shader_cache.try_emplace(
+      "Grid", Shader::construct(*device, FS::shader("Grid.vert.spv"),
+                                FS::shader("Grid.frag.spv")));
+  grid_material = Material::construct(*device, *shader_cache.at("Grid"));
   GraphicsPipelineConfiguration grid_config{
       .name = "GridPipeline",
-      .shader = grid_shader.get(),
+      .shader = shader_cache.at("Grid").get(),
       .framebuffer = geometry_framebuffer.get(),
       .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Front,
@@ -661,7 +729,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   GraphicsPipelineConfiguration shadow_config{
       .name = "ShadowGraphicsPipeline",
-      .shader = shadow_shader.get(),
+      .shader = shader_cache.at("Shadow").get(),
       .framebuffer = shadow_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
@@ -671,10 +739,11 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   shadow_pipeline = GraphicsPipeline::construct(*device, shadow_config);
 
-  fullscreen_shader =
-      Shader::construct(*device, FS::shader("Triangle.vert.spv"),
-                        FS::shader("Triangle.frag.spv"));
-  fullscreen_material = Material::construct(*device, *fullscreen_shader);
+  shader_cache.try_emplace(
+      "Fullscreen", Shader::construct(*device, FS::shader("Triangle.vert.spv"),
+                                      FS::shader("Triangle.frag.spv")));
+  fullscreen_material =
+      Material::construct(*device, *shader_cache.at("Fullscreen"));
   FramebufferProperties fullscreen_props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
@@ -692,7 +761,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   fullscreen_framebuffer = Framebuffer::construct(*device, fullscreen_props);
   GraphicsPipelineConfiguration fullscreen_config{
       .name = "FullscreenPipeline",
-      .shader = fullscreen_shader.get(),
+      .shader = shader_cache.at("Fullscreen").get(),
       .framebuffer = fullscreen_framebuffer.get(),
       .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::None,
@@ -706,7 +775,6 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   ubos->create(sizeof(GridUBO), SetBinding(3));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(*device);
   ssbos->create(buffer_for_transform_data.size(), SetBinding(2));
-  ssbos->create(buffer_for_colour_data.size(), SetBinding(4));
 
   transform_buffers.resize(Config::frame_count);
   static constexpr auto total_size =

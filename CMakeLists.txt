@@ -5,6 +5,16 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Vulkan REQUIRED)
 
+find_program(CCACHE_FOUND ccache)
+
+if(CCACHE_FOUND)
+    message("CCACHE is found")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache) # Less useful to do it for linking, see edit2
+else(CCACHE_FOUND)
+    message("CCACHE is NOT found")
+endif(CCACHE_FOUND)
+
 add_subdirectory(ThirdParty)
 add_subdirectory(Core)
 add_subdirectory(App)

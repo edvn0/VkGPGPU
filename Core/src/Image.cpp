@@ -551,9 +551,6 @@ auto Image::initialise_vulkan_image() -> void {
   sampler_create_info.borderColor =
       static_cast<VkBorderColor>(properties.border_color);
   sampler_create_info.unnormalizedCoordinates = VK_FALSE;
-  sampler_create_info.compareEnable = VK_FALSE;
-  sampler_create_info.compareOp =
-      static_cast<VkCompareOp>(properties.compare_op);
   sampler_create_info.mipLodBias = 0.0f;
   sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   sampler_create_info.minLod = 0.0f;
@@ -561,7 +558,8 @@ auto Image::initialise_vulkan_image() -> void {
       properties.mip_info.valid() ? static_cast<float>(properties.mip_info.mips)
                                   : 1.0f;
   sampler_create_info.compareEnable = VK_TRUE;
-  sampler_create_info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  sampler_create_info.compareOp =
+      static_cast<VkCompareOp>(properties.compare_op);
 
   verify(vkCreateSampler(device->get_device(), &sampler_create_info, nullptr,
                          &impl->sampler),

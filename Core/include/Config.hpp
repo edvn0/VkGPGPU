@@ -36,4 +36,16 @@ static constexpr u32 shadow_map_size = GPGPU_SHADOW_MAP_SIZE;
 static constexpr u32 shadow_map_size = 4096;
 #endif
 
+#ifdef GPGPU_ENVIRONMENT_MAP_SIZE
+static constexpr u32 environment_map_size = GPGPU_ENVIRONMENT_MAP_SIZE;
+#else
+static constexpr u32 environment_map_size = 512;
+#endif
+
+#ifdef GPGPU_USE_PIPELINE_CACHE
+static constexpr bool use_pipeline_cache = GPGPU_USE_PIPELINE_CACHE;
+#else
+static constexpr bool use_pipeline_cache = true;
+#endif
+
 } // namespace Core::Config

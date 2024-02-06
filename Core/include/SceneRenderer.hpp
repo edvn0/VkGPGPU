@@ -8,6 +8,7 @@
 #include "Pipeline.hpp"
 #include "RenderingDefinitions.hpp"
 #include "Swapchain.hpp"
+#include "TextureCube.hpp"
 
 #include <functional>
 
@@ -110,16 +111,11 @@ private:
   Scope<GraphicsPipeline> fullscreen_pipeline;
   Scope<Framebuffer> fullscreen_framebuffer;
   Scope<Material> fullscreen_material;
-  Scope<Shader> fullscreen_shader;
 
   Scope<GraphicsPipeline> shadow_pipeline;
-  Scope<Shader> shadow_shader;
   Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
 
-  Scope<Shader> geometry_shader;
-
-  Scope<Shader> grid_shader;
   Scope<GraphicsPipeline> grid_pipeline;
   Scope<Material> grid_material;
 
@@ -138,7 +134,6 @@ private:
   std::unordered_map<CommandKey, TransformMapData> mesh_transform_map;
 
   TransformData buffer_for_transform_data{};
-  ColourData buffer_for_colour_data{};
 
   RendererUBO renderer_ubo{};
   ShadowUBO shadow_ubo{};
@@ -152,15 +147,17 @@ private:
   VkDescriptorSet active = nullptr;
   VkDescriptorSetLayout layout = nullptr;
 
-  [[nodiscard]] auto is_already_bound(const GraphicsPipeline &pipeline) const
-      -> bool {
-    return pipeline.hash() == bound_pipeline.hash;
-  }
+  using ShaderCache = Container::StringLikeMap<Scope<Shader>>;
+  ShaderCache shader_cache{};
+
+  auto create_preetham_sky(float turbidity, float azimuth, float inclination)
+      -> Ref<TextureCube>;
 
   auto shadow_pass() -> void;
   auto grid_pass() -> void;
   auto geometry_pass() -> void;
   auto debug_pass() -> void;
+  auto environment_pass() -> void;
   auto fullscreen_pass() -> void;
 };
 

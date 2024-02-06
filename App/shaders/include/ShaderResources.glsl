@@ -33,10 +33,6 @@ layout(std140, set = 0, binding = 3) uniform GridData
 }
 grid;
 
-layout(std140, set = 0, binding = 4) readonly buffer VertexColours {
-  vec4 matrices[];
-}
-colours;
 
 layout(push_constant) uniform PushConstants {
   vec4 albedo_colour;

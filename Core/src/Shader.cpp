@@ -65,9 +65,9 @@ Shader::Shader(
 
     name_stream << path.stem().string() << "-";
   }
+  name = name_stream.str();
   const Reflection::Reflector reflector{*this};
   reflector.reflect(descriptor_set_layouts, reflection_data);
-  name = name_stream.str();
   create_descriptor_set_layouts();
 }
 
@@ -308,16 +308,16 @@ auto Shader::create_descriptor_set_layouts() -> void {
         static_cast<Core::u32>(layout_bindings.size());
     descriptor_layout.pBindings = layout_bindings.data();
 
-    info("Shader {0}: Creating descriptor set ['{1}'] with {2} ubo's, {3} "
-         "ssbo's, "
-         "{4} samplers, {5} separate textures, {6} separate samplers and {7} "
-         "storage images.",
-         name, set, shader_descriptor_set.uniform_buffers.size(),
-         shader_descriptor_set.storage_buffers.size(),
-         shader_descriptor_set.sampled_images.size(),
-         shader_descriptor_set.separate_textures.size(),
-         shader_descriptor_set.separate_samplers.size(),
-         shader_descriptor_set.storage_images.size());
+    trace("Shader {0}: Creating descriptor set ['{1}'] with {2} ubo's, {3} "
+          "ssbo's, "
+          "{4} samplers, {5} separate textures, {6} separate samplers and {7} "
+          "storage images.",
+          name, set, shader_descriptor_set.uniform_buffers.size(),
+          shader_descriptor_set.storage_buffers.size(),
+          shader_descriptor_set.sampled_images.size(),
+          shader_descriptor_set.separate_textures.size(),
+          shader_descriptor_set.separate_samplers.size(),
+          shader_descriptor_set.storage_images.size());
     if (set >= descriptor_set_layouts.size()) {
       descriptor_set_layouts.resize(static_cast<std::size_t>(set) + 1);
     }

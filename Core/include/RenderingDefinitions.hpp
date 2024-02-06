@@ -35,7 +35,6 @@ struct DrawCommand {
   const Mesh *mesh_ptr{};
   u32 submesh_index{0};
   u32 instance_count{0};
-  std::vector<glm::vec4> colours{};
   Material *material{};
 };
 

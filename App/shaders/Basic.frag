@@ -5,11 +5,10 @@
 layout(location = 0) in vec2 in_uvs;
 layout(location = 1) in vec4 in_fragment_position;
 layout(location = 2) in vec4 in_shadow_pos;
-layout(location = 3) in vec4 in_colour;
-layout(location = 4) in vec3 in_normals;
-layout(location = 5) in vec3 in_tangent;
-layout(location = 6) in vec3 in_bitangents;
-layout(location = 7) in mat3 in_tbn;
+layout(location = 3) in vec3 in_normals;
+layout(location = 4) in vec3 in_tangent;
+layout(location = 5) in vec3 in_bitangents;
+layout(location = 6) in mat3 in_tbn;
 
 layout(location = 0) out vec4 out_colour;
 
@@ -19,10 +18,6 @@ void main()
 {
   // Ambient light, sampled from the uniform sampler2D ambient_map
   vec4 ambient_texture = texture(albedo_map, in_uvs);
-  if (ambient_texture.a < 0.1)
-    discard;
-  // Also use the pc.albedo_colour
-  vec3 ambient = ambient_texture.xyz * in_colour.rgb;
 
   // Specular light, sampled from the uniform sampler2D specular_map
   vec3 specular = texture(specular_map, in_uvs).rgb;
@@ -40,7 +35,7 @@ void main()
   vec3 diffuse = vec3(0.0);
   vec3 light_dir = normalize(renderer.light_dir.xyz);
   float diff = max(dot(normal, light_dir), 0.0);
-  diffuse = diff * in_colour.rgb;
+  diffuse = vec3(diff);
 
   // Specular
   vec3 view_direction =
@@ -62,7 +57,11 @@ void main()
   }
 
   // Final colour
-  vec3 colour = ambient + (1.0 - visibility) * (diffuse + specular);
+  vec3 colour = ambient_texture.xyz + (1.0 - visibility) * (diffuse + specular);
 
-  out_colour = vec4(gamma_correct(colour), 1.0);
+  out_colour = vec4(gamma_correct(colour), ambient_texture.a);
+  if (out_colour.a < 0.1)
+  {
+    discard;
+  }
 }

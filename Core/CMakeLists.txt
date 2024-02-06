@@ -44,6 +44,7 @@ set(SOURCES
     include/Shader.hpp
     include/Swapchain.hpp
     include/Texture.hpp
+    include/TextureCube.hpp
     include/ThreadPool.hpp
     include/Timer.hpp
     include/Types.hpp
@@ -79,6 +80,7 @@ set(SOURCES
     src/Shader.cpp
     src/Swapchain.cpp
     src/Texture.cpp
+    src/TextureCube.cpp
     src/Timer.cpp
     src/UI.cpp
     src/Verify.cpp
@@ -118,7 +120,7 @@ else()
     message(STATUS "GPGPU_PIPELINE is OFF")
 endif()
 
-if (GPGPU_FAST_LOGGING)
+if(GPGPU_FAST_LOGGING)
     target_compile_definitions(Core PUBLIC GPGPU_OPTIMIZE_LOGGING)
 endif()
 

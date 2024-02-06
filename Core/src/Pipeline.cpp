@@ -181,7 +181,7 @@ auto save_cache(auto &device, auto pipeline_cache, const std::string &name) {
                                 pipeline_cache_data.data()),
          "vkGetPipelineCacheData", "Failed to get pipeline cache data");
 
-  file.write(reinterpret_cast<const char *>(pipeline_cache_data.data()),
+  file.write(std::bit_cast<const char *>(pipeline_cache_data.data()),
              pipeline_cache_data.size());
 }
 } // namespace PipelineHelpers
@@ -199,14 +199,16 @@ Pipeline::Pipeline(const Device &dev,
 }
 
 Pipeline::~Pipeline() {
-  try {
-    PipelineHelpers::save_cache(device, pipeline_cache, name);
-  } catch (const std::exception &exc) {
-    error("Pipeline save_cache exception: {}", exc.what());
+  if constexpr (Config::use_pipeline_cache) {
+    try {
+      PipelineHelpers::save_cache(device, pipeline_cache, name);
+    } catch (const std::exception &exc) {
+      error("Pipeline save_cache exception: {}", exc.what());
+    }
+    vkDestroyPipelineCache(device.get_device(), pipeline_cache, nullptr);
   }
 
   vkDestroyPipelineLayout(device.get_device(), pipeline_layout, nullptr);
-  vkDestroyPipelineCache(device.get_device(), pipeline_cache, nullptr);
   vkDestroyPipeline(device.get_device(), pipeline, nullptr);
 }
 
@@ -249,18 +251,20 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
                                 &pipeline_layout),
          "vkCreatePipelineLayout", "Failed to create pipeline layout");
 
-  const auto maybe_empty_pipeline_cache_data =
-      PipelineHelpers::try_load_pipeline_cache(name);
-  VkPipelineCacheCreateInfo pipeline_cache_create_info{};
-  pipeline_cache_create_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-  pipeline_cache_create_info.initialDataSize =
-      maybe_empty_pipeline_cache_data.size();
-  pipeline_cache_create_info.pInitialData =
-      maybe_empty_pipeline_cache_data.data();
+  if constexpr (Config::use_pipeline_cache) {
+    const auto maybe_empty_pipeline_cache_data =
+        PipelineHelpers::try_load_pipeline_cache(name);
+    VkPipelineCacheCreateInfo pipeline_cache_create_info{};
+    pipeline_cache_create_info.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    pipeline_cache_create_info.initialDataSize =
+        maybe_empty_pipeline_cache_data.size();
+    pipeline_cache_create_info.pInitialData =
+        maybe_empty_pipeline_cache_data.data();
 
-  vkCreatePipelineCache(device.get_device(), &pipeline_cache_create_info,
-                        nullptr, &pipeline_cache);
+    vkCreatePipelineCache(device.get_device(), &pipeline_cache_create_info,
+                          nullptr, &pipeline_cache);
+  }
 
   VkComputePipelineCreateInfo compute_pipeline_create_info{};
   compute_pipeline_create_info.sType =

@@ -19,16 +19,16 @@ vec4 calc_grid(vec3 fragPos3D, float scale, bool drawAxis) {
     vec3 grid_colour = grid.grid_colour.xyz;
     vec4 color = vec4(grid_colour, 1.0 - min(line, 1.0));
     // z axis
-    if (drawAxis && fragPos3D.x > -0.4 * minimumx && fragPos3D.x < 0.4 * minimumx){
+    if (drawAxis && fragPos3D.x > -0.1 * minimumx && fragPos3D.x < 0.1 * minimumx){
       color.z = 1.0; }
     // x axis
-    if (drawAxis && fragPos3D.z > -0.4 * minimumz && fragPos3D.z < 0.4 * minimumz){
+    if (drawAxis && fragPos3D.z > -0.1 * minimumz && fragPos3D.z < 0.1 * minimumz){
       color.x = 1.0; }
     return color;
 }
 float computeDepth(vec3 pos) {
-    vec4 clip_space_pos = renderer.projection * renderer.view * vec4(pos.xyz, 1.0);
-    return (clip_space_pos.z / clip_space_pos.w);
+    vec4 clip_space_position = renderer.projection * renderer.view * vec4 (pos.xyz, 1.0);
+    return 0.5 + 0.5 * (clip_space_position.z / clip_space_position.w);
 }
 float computeLinearDepth(vec3 pos) {
     vec4 clip_space_pos = renderer.projection * renderer.view * vec4(pos.xyz, 1.0);
@@ -53,5 +53,6 @@ void main() {
     // Conditionally set gl_FragDepth for grid fragments
     // For the grid, we want to ensure it's rendered at the farthest depth
     // Assuming the rest of your scene's depth is handled correctly, and this shader is specifically for the grid
-    gl_FragDepth = 0;
+    // gl_FragDepth = comn;
+    gl_FragDepth = 0.0;
 }

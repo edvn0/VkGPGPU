@@ -26,19 +26,20 @@
 #include "ecs/serialisation/SceneSerialiser.hpp"
 
 ClientApp::ClientApp(const ApplicationProperties &props)
-    : App(props), timer(*get_messaging_client()), scene_renderer(*get_device()),
-      camera(75.0F, get_swapchain()->get_extent().as<float>().width,
-             get_swapchain()->get_extent().as<float>().height, 0.1F, 1000.0F,
-             nullptr){};
+    : App(props), camera(75.0F, get_swapchain()->get_extent().as<float>().width,
+                         get_swapchain()->get_extent().as<float>().height, 0.1F,
+                         1000.0F, nullptr),
+      timer(*get_messaging_client()), scene_renderer(*get_device()){};
 
 auto ClientApp::on_update(floating ts) -> void {
   timer.begin();
 
-  camera.on_update(ts);
-  scene_renderer.set_frame_index(frame());
   for (const auto &widget : widgets) {
     widget->on_update(ts);
   }
+
+  camera.on_update(ts);
+  scene_renderer.set_frame_index(frame());
 
   scene->on_update(scene_renderer, ts);
 

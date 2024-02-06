@@ -470,13 +470,13 @@ auto Reflector::reflect(std::vector<VkDescriptorSetLayout> &output,
     // First pass is just count the max set number
     auto count_max_pass =
         [&set_resources = resources_by_set](
-            const auto &compiler,
+            const auto &comp,
             const std::pair<VkDescriptorType, const spirv_cross::SmallVector<
                                                   spirv_cross::Resource> &>
                 &input_resources) {
           for (const auto &resource : input_resources.second) {
-            const auto set = compiler.get_decoration(
-                resource.id, spv::DecorationDescriptorSet);
+            const auto set =
+                comp.get_decoration(resource.id, spv::DecorationDescriptorSet);
 
             if (set_resources.contains(set)) {
               set_resources.at(set).push_back(resource);
