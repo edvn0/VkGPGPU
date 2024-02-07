@@ -186,7 +186,11 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     if (!selected_entity)
       return;
 
-    auto entity = scene->get_entity(*selected_entity);
+    auto maybe_entity = scene->get_entity(*selected_entity);
+    if (!maybe_entity)
+      return;
+
+    auto const &entity = *maybe_entity;
     auto &transform_component = entity.get_transform();
     auto transform = transform_component.compute();
 
@@ -224,13 +228,9 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         break;
       }
       case GuizmoOperation::R: {
-        // Do this in Euler in an attempt to preserve any full revolutions (>
-        // 360)
         glm::vec3 original_rotation_euler_angles =
             transform_component.get_rotation_in_euler_angles();
 
-        // Map original rotation to range [-180, 180] which is what ImGuizmo
-        // gives us
         original_rotation_euler_angles.x =
             fmodf(original_rotation_euler_angles.x + glm::pi<float>(),
                   glm::two_pi<float>()) -
@@ -247,7 +247,6 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         glm::vec3 deltaRotationEuler =
             glm::eulerAngles(orientation) - original_rotation_euler_angles;
 
-        // Try to avoid drift due numeric precision
         if (fabs(deltaRotationEuler.x) < 0.001)
           deltaRotationEuler.x = 0.0f;
         if (fabs(deltaRotationEuler.y) < 0.001)

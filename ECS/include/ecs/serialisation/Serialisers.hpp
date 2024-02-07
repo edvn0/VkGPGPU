@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Logger.hpp"
+#include "Math.hpp"
 
+#include <bit>
 #include <entt/entt.hpp>
 #include <istream>
 #include <ostream>
@@ -39,7 +41,7 @@ concept TwoWaySerializable = Serializable<T> && Deserializable<T>;
 template <typename T>
   requires(std::floating_point<T> || std::integral<T>)
 bool write(std::ostream &out, const T &value) {
-  if (!out.write(reinterpret_cast<const char *>(&value), sizeof(value))) {
+  if (!out.write(std::bit_cast<const char *>(&value), sizeof(value))) {
     error("Failed to write value to stream.");
     return false;
   }
@@ -49,7 +51,7 @@ bool write(std::ostream &out, const T &value) {
 template <typename T>
   requires(std::floating_point<T> || std::integral<T>)
 bool read(std::istream &in, T &value) {
-  if (!in.read(reinterpret_cast<char *>(&value), sizeof(value))) {
+  if (!in.read(std::bit_cast<char *>(&value), sizeof(value))) {
     error("Failed to read value from stream.");
     return false;
   }
@@ -59,21 +61,23 @@ bool read(std::istream &in, T &value) {
 // BEGIN GLM TYPES
 template <glm::length_t L, typename T, glm::qualifier Q>
 auto write(std::ostream &out, const glm::vec<L, T, Q> &vec) -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&vec), sizeof(vec)))
+  if (!out.write(std::bit_cast<const char *>(Core::Math::value_ptr(vec)),
+                 sizeof(vec)))
     return false;
   return true;
 }
 
 template <glm::length_t L, typename T, glm::qualifier Q>
 auto read(std::istream &in, glm::vec<L, T, Q> &vec) -> bool {
-  if (!in.read(reinterpret_cast<char *>(&vec), sizeof(vec)))
+  if (!in.read(std::bit_cast<char *>(Core::Math::value_ptr(vec)), sizeof(vec)))
     return false;
   return true;
 }
 
 template <glm::length_t C, glm::length_t R, typename T, glm::qualifier Q>
 auto write(std::ostream &out, const glm::mat<C, R, T, Q> &mat) -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&mat), sizeof(mat))) {
+  if (!out.write(std::bit_cast<const char *>(Core::Math::value_ptr(mat)),
+                 sizeof(mat))) {
 
     return false;
   }
@@ -81,14 +85,15 @@ auto write(std::ostream &out, const glm::mat<C, R, T, Q> &mat) -> bool {
 }
 template <glm::length_t C, glm::length_t R, typename T, glm::qualifier Q>
 auto read(std::istream &in, glm::mat<C, R, T, Q> &mat) -> bool {
-  if (!in.read(reinterpret_cast<char *>(&mat), sizeof(mat)))
+  if (!in.read(std::bit_cast<char *>(Core::Math::value_ptr(mat)), sizeof(mat)))
     return false;
   return true;
 }
 
 template <typename T, glm::qualifier Q>
 auto write(std::ostream &out, const glm::qua<T, Q> &quat) -> bool {
-  if (!out.write(reinterpret_cast<const char *>(&quat), sizeof(quat))) {
+  if (!out.write(std::bit_cast<const char *>(Core::Math::value_ptr(quat)),
+                 sizeof(quat))) {
     return false;
   }
   return true;
@@ -96,7 +101,8 @@ auto write(std::ostream &out, const glm::qua<T, Q> &quat) -> bool {
 
 template <typename T, glm::qualifier Q>
 static bool read(std::istream &in, glm::qua<T, Q> &quat) {
-  if (!in.read(reinterpret_cast<char *>(&quat), sizeof(quat)))
+  if (!in.read(std::bit_cast<char *>(Core::Math::value_ptr(quat)),
+               sizeof(quat)))
     return false;
   return true;
 }
@@ -335,6 +341,58 @@ template <> struct ComponentSerialiser<SunComponent> {
     if (!read(in, out.depth_params.value))
       return false;
 
+    return true;
+  }
+};
+
+template <> struct ComponentSerialiser<ChildComponent> {
+  static auto serialise(const ChildComponent &component, std::ostream &out)
+      -> bool {
+    // Serialize the number of children
+    const auto size = component.children.size();
+    if (!write(out, size))
+      return false;
+
+    // Serialize each child entity handle
+    for (const auto &child : component.children) {
+      if (!write(out, child))
+        return false;
+    }
+
+    return true;
+  }
+
+  static auto deserialise(std::istream &in, ChildComponent &component) -> bool {
+    std::size_t size;
+    // Deserialize the number of children
+    if (!read(in, size))
+      return false;
+
+    component.children.resize(size);
+    // Deserialize each child entity handle
+    for (auto &child : component.children) {
+      if (!read(in, child))
+        return false;
+    }
+
+    return true;
+  }
+};
+
+template <> struct ComponentSerialiser<ParentComponent> {
+  static auto serialise(const ParentComponent &component, std::ostream &out)
+      -> bool {
+    // Serialize the parent entity handle
+    if (!write(out, component.parent))
+      return false;
+    return true;
+  }
+
+  static auto deserialise(std::istream &in, ParentComponent &component)
+      -> bool {
+    // Deserialize the parent entity handle
+    if (!read(in, component.parent))
+      return false;
     return true;
   }
 };

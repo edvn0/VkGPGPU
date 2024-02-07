@@ -171,20 +171,20 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev,
     const auto &queue_family = queue_families[i];
 
     if (i == dedicated_compute_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Compute, queue_info,
+      queue_infos.emplace_back(Queue::Type::Compute, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (i == dedicated_transfer_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
@@ -193,34 +193,34 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev,
       };
       const auto disabled = true;
 
-      queue_infos.emplace_back(Queue::Type::Transfer, queue_info,
+      queue_infos.emplace_back(Queue::Type::Transfer, std::move(queue_info),
                                !disabled &&
                                    queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (i == dedicated_present_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Present, queue_info,
+      queue_infos.emplace_back(Queue::Type::Present, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      auto priority = 0.1F;
+      static constexpr auto priority = 0.1F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
+      queue_infos.emplace_back(Queue::Type::Graphics, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
     }
   }
@@ -239,9 +239,10 @@ auto Device::create_vulkan_device(
   device_features.fillModeNonSolid = VK_TRUE;
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
+  queue_infos.reserve(index_queue_type_pairs.size());
+  float priority = 1.0F;
   for (auto &&[type, queue_info, supports_timestamping] :
        index_queue_type_pairs) {
-    float priority = 1.0F;
     queue_info.pQueuePriorities = &priority;
     queue_infos.push_back(queue_info);
     queue_support[type] = {supports_timestamping};

@@ -213,7 +213,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
 
   submeshes.reserve(num_meshes);
   for (u32 submesh_index = 0; submesh_index < num_meshes; submesh_index++) {
-    aiMesh *mesh = importer->scene->mMeshes[submesh_index];
+    aiMesh const *mesh = importer->scene->mMeshes[submesh_index];
 
     Submesh &submesh = submeshes.emplace_back();
     submesh.base_vertex = vertex_count;
@@ -221,7 +221,6 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh.material_index = mesh->mMaterialIndex;
     submesh.vertex_count = mesh->mNumVertices;
     submesh.index_count = mesh->mNumFaces * 3;
-    // submesh.mesh_name = mesh->mName.C_Str();
     submesh_indices.push_back(submesh_index);
     material_to_submesh_indices[submesh.material_index].push_back(
         submesh_index);
@@ -513,8 +512,8 @@ void Mesh::handle_metalness_map(const Texture &white_texture,
   }
 }
 
-auto load_path_from_texture_path(const std::string &texture_path) {
-  static constexpr auto paths = std::array{"textures", "models"};
+auto load_path_from_texture_path(const std::string_view texture_path) {
+  static constexpr auto paths = std::array{"."};
   using recursive_iterator = std::filesystem::recursive_directory_iterator;
   static constexpr std::hash<std::string_view> hasher{};
   static std::unordered_map<std::size_t, std::filesystem::path> cache{};
@@ -529,16 +528,17 @@ auto load_path_from_texture_path(const std::string &texture_path) {
   }
 
   for (const auto &path : paths) {
-    for (const auto &entry : recursive_iterator(path)) {
+    for (const auto &entry :
+         recursive_iterator(std::filesystem::absolute(path))) {
       if (entry.is_regular_file()) {
         const auto hash = hasher(entry.path().filename().string());
         cache.try_emplace(hash, entry.path());
-
-        if (hash == texture_path_hash) {
-          return entry.path();
-        }
       }
     }
+  }
+
+  if (cache.contains(texture_path_hash)) {
+    return cache.at(texture_path_hash);
   }
 
   return FS::Path{};
@@ -546,13 +546,12 @@ auto load_path_from_texture_path(const std::string &texture_path) {
 
 auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
     -> Scope<Texture> {
+  using enum Core::ImageUsage;
   const auto path = load_path_from_texture_path(texture_path);
   return Texture::construct_shader(
       *device, {
                    .format = ImageFormat::UNORM_RGBA8,
                    .path = path,
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
-                            ImageUsage::TransferSrc,
                    .layout = ImageLayout::ShaderReadOnlyOptimal,
                });
 }

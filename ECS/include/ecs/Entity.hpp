@@ -62,6 +62,13 @@ public:
     scene->registry.remove<T>(handle);
   }
 
+  auto set_parent(const Entity &parent) -> void;
+  // Get parent entity, if it exists
+  auto get_parent() const -> std::optional<Entity>;
+  // Get children entities
+  auto get_children() const -> std::vector<Entity>;
+
+  auto valid() const -> bool { return scene->registry.valid(handle); }
   auto on_notify(const Message &) -> void override;
 
   [[nodiscard]] auto get_transform() const -> TransformComponent &;

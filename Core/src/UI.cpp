@@ -151,11 +151,11 @@ auto set_drag_drop_payload(const std::string_view payload_identifier,
 namespace Core::UI::Detail {
 
 auto text_impl(const std::string_view data) -> void {
-  return ImGui::Text(data.data());
+  return ImGui::Text("%s", data.data());
 }
 
 auto text_wrapped_impl(const std::string_view data) -> void {
-  return ImGui::TextWrapped(data.data());
+  return ImGui::TextWrapped("%s", data.data());
 }
 
 auto set_drag_drop_payload_impl(const std::string_view payload_identifier,

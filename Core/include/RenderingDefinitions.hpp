@@ -45,6 +45,7 @@ struct RendererUBO {
   glm::vec4 light_position;
   glm::vec4 light_direction;
   glm::vec4 camera_position;
+  glm::vec4 light_colour;
 };
 
 struct ShadowUBO {

@@ -24,6 +24,27 @@
           "value": "ON"
         }
       ],
+    },
+    {
+      "type": "cppvsdbg",
+      "request": "launch",
+      "name": "Debug (Clang)",
+      "program": "${workspaceRoot}/build-clang/App/App",
+      "cwd": "${workspaceRoot}/App",
+      "args": [
+        "--wd",
+        "${workspaceRoot}/App"
+      ],
+      "environment": [
+        {
+          "name": "LOG_LEVEL",
+          "value": "Debug"
+        },
+        {
+          "name": "ENABLE_VALIDATION_LAYERS",
+          "value": "ON"
+        }
+      ],
     }
   ]
 }

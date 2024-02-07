@@ -38,8 +38,8 @@ public:
   [[nodiscard]] auto get_registry() const -> const entt::registry & {
     return registry;
   }
-  [[nodiscard]] auto get_entity(entt::entity) -> Entity;
-  [[nodiscard]] auto get_entity(Core::u64) -> Entity;
+  [[nodiscard]] auto get_entity(entt::entity) -> std::optional<Entity>;
+  [[nodiscard]] auto get_entity(Core::u64) -> std::optional<Entity>;
 
   auto clear() -> void { registry.clear(); }
   void set_scene_name(const std::string_view scene_name) { name = scene_name; }

@@ -72,12 +72,26 @@ struct SunComponent {
   static constexpr std::string_view component_name{"Sun"};
 };
 
+struct ParentComponent {
+  Core::u64 parent; // Handle to the parent entity
+
+  static constexpr std::string_view component_name{"Parent"};
+};
+
+struct ChildComponent {
+  std::vector<Core::u64> children; // Handles to child entities
+
+  static constexpr std::string_view component_name{"Child"};
+};
+
 template <typename... Ts> using ComponentList = Core::Typelist<Ts...>;
 
 using EngineComponents =
     ComponentList<IdentityComponent, TransformComponent, TextureComponent,
-                  MeshComponent, CameraComponent, SunComponent>;
+                  MeshComponent, CameraComponent, SunComponent, ParentComponent,
+                  ChildComponent>;
 using UnremovableComponents =
-    ComponentList<IdentityComponent, TransformComponent>;
+    ComponentList<IdentityComponent, TransformComponent, ParentComponent,
+                  ChildComponent>;
 
 } // namespace ECS

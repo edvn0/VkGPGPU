@@ -49,11 +49,8 @@ public:
   auto bind_vertex_buffer(const Buffer &vertex_buffer) const -> void;
   auto bind_vertex_buffer(const Buffer &vertex_buffer, u32 offset,
                           u32 index) const -> void;
-  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {}) {
-    submit_static_mesh(mesh, transform, glm::vec4{1.0F});
-  }
-  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform,
-                          const glm::vec4 &colour) -> void;
+  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
+      -> void;
   auto end_renderpass() -> void;
   auto create(const Swapchain &swapchain) -> void;
   auto set_frame_index(FrameIndex frame_index) -> void {
@@ -77,6 +74,7 @@ public:
   auto get_sun_position() -> auto & { return sun_position; }
   auto get_depth_factors() -> auto & { return depth_factor; }
   auto get_grid_configuration() -> auto & { return grid_ubo; }
+  auto get_renderer_configuration() -> auto & { return renderer_ubo; }
   auto create_pool_and_layout() -> void;
 
   [[nodiscard]] auto get_command_buffer() const -> const auto & {

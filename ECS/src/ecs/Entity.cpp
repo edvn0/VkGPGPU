@@ -56,4 +56,59 @@ auto Entity::on_notify(const Message &message) -> void {
 auto Entity::get_transform() const -> TransformComponent & {
   return get_component<TransformComponent>();
 }
+
+void Entity::set_parent(const Entity &parent_entity) {
+  auto parent = parent_entity.get_id(); // Assuming get_id returns Core::u64
+  auto &parentComponent = add_component<ParentComponent>();
+  parentComponent.parent = parent;
+
+  // Add this entity as a child of the parent
+  auto &childrenComponent =
+      parent_entity.scene->registry.get_or_emplace<ChildComponent>(
+          parent_entity.handle);
+  childrenComponent.children.push_back(this->get_id());
+
+  // Optionally, ensure no duplicates
+  auto &childrenIDs = childrenComponent.children;
+  if (std::ranges::find(childrenIDs, this->get_id()) == childrenIDs.end()) {
+    childrenIDs.push_back(this->get_id());
+  }
+}
+
+// Get parent entity, if it exists
+std::optional<Entity> Entity::get_parent() const {
+  if (scene->registry.all_of<ParentComponent>(handle)) {
+    auto parent = scene->registry.get<ParentComponent>(handle).parent;
+    // Find the entity by parent
+    for (auto entity : scene->registry.view<IdentityComponent>()) {
+      if (scene->registry.get<IdentityComponent>(entity).id == parent) {
+        return Entity(scene, entity);
+      }
+    }
+  }
+  return std::nullopt; // No parent found
+}
+
+// Get children entities
+std::vector<Entity> Entity::get_children() const {
+  std::vector<Entity> childrenEntities;
+  if (!scene->registry.all_of<ChildComponent>(handle))
+    return childrenEntities;
+
+  auto &children_identifiers =
+      scene->registry.get<ChildComponent>(handle).children;
+
+  for (auto child_identifer : children_identifiers) {
+    // Find each child entity by its ID
+    for (auto entity : scene->registry.view<IdentityComponent>()) {
+      if (scene->registry.get<IdentityComponent>(entity).id ==
+          child_identifer) {
+        childrenEntities.emplace_back(scene, entity);
+        break; // Found the child, move to next ID
+      }
+    }
+  }
+  return childrenEntities;
+}
+
 } // namespace ECS

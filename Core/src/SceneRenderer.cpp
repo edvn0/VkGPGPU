@@ -100,7 +100,7 @@ auto SceneRenderer::create_preetham_sky(float turbidity, float azimuth,
       TextureCube::construct(*device, ImageFormat::SRGB_RGBA32, cubemap_extent);
 
   auto preetham_sky_shader = shader_cache.at("PreethamSky").get();
-  auto preetham_sky_compute_pipeline = Pipeline::construct(
+  static auto preetham_sky_compute_pipeline = Pipeline::construct(
       *device,
       PipelineConfiguration{"PreethamSkyComputePipeline",
                             PipelineStage::Compute, *preetham_sky_shader});
@@ -289,8 +289,7 @@ auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer,
 }
 
 auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
-                                       const glm::mat4 &transform,
-                                       const glm::vec4 &colour) -> void {
+                                       const glm::mat4 &transform) -> void {
   for (const auto &submesh : mesh->get_submeshes()) {
     CommandKey key{mesh, submesh};
 
@@ -322,24 +321,15 @@ auto SceneRenderer::end_renderpass() -> void {
   vkCmdEndRenderPass(command_buffer->get_command_buffer());
 }
 
-auto SceneRenderer::begin_frame(const glm::mat4 &projection,
-                                const glm::mat4 &view) -> void {
+auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
   const auto &ubo = ubos->get(0, current_frame);
-  renderer_ubo.projection = projection;
-  renderer_ubo.view = view;
-  renderer_ubo.view_projection = renderer_ubo.projection * renderer_ubo.view;
-  renderer_ubo.light_position = {sun_position, 1.0F};
-  renderer_ubo.light_direction = {glm::normalize(-sun_position), 1.0F};
-  const auto &position = view[3];
-  renderer_ubo.camera_position = position;
-
   ubo->write(renderer_ubo);
 
   const auto &ubo_shadow = ubos->get(1, current_frame);
   shadow_ubo.projection =
       glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
                  depth_factor.value, depth_factor.near, depth_factor.far);
-  shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, -1, 0});
+  shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, 1, 0});
   shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
   shadow_ubo.bias_and_default = {depth_factor.bias, depth_factor.default_value};
 

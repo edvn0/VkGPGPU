@@ -16,6 +16,7 @@ layout(std140, set = 0, binding = 0) uniform RendererData {
   vec4 light_pos;
   vec4 light_dir;
   vec4 camera_pos;
+  vec4 light_colour;
 }
 renderer;
 

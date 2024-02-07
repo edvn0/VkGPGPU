@@ -30,9 +30,43 @@ void SceneWidget::on_interface(InterfaceSystem &) {
     auto &identity = identifer_view.get<IdentityComponent>(entity);
     ImGui::PushID(static_cast<i32>(identity.id));
     bool is_selected = selected.has_value() && selected == entity;
-    if (ImGui::Selectable(identity.name.c_str(), &is_selected)) {
-      selected = entity;
-      selected_name = identity.name;
+
+    bool has_children = context->get_registry().any_of<ChildComponent>(entity);
+    bool has_parent = context->get_registry().any_of<ParentComponent>(entity);
+    if (has_children) {
+      const auto &children =
+          context->get_registry().get<ChildComponent>(entity);
+
+      if (ImGui::Selectable(identity.name.c_str(), &is_selected)) {
+        selected = entity;
+        selected_name = identity.name;
+      }
+
+      for (const auto child : children.children) {
+        const auto &maybe_child_identity = context->get_entity(child);
+        if (!maybe_child_identity || !maybe_child_identity->valid())
+          break;
+        ImGui::Indent();
+        ImGui::PushID(static_cast<i32>(child));
+
+        auto child_identity = maybe_child_identity.value();
+
+        bool is_selected =
+            selected.has_value() && selected == child_identity.get_handle();
+        if (ImGui::Selectable(child_identity.get_name().c_str(),
+                              &is_selected)) {
+          selected = child_identity.get_handle();
+          selected_name = child_identity.get_name();
+        }
+        ImGui::PopID();
+        ImGui::Unindent();
+      }
+    } else if (!has_parent) {
+
+      if (ImGui::Selectable(identity.name.c_str(), &is_selected)) {
+        selected = entity;
+        selected_name = identity.name;
+      }
     }
     ImGui::PopID();
   }
