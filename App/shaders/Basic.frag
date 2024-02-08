@@ -1,23 +1,21 @@
 #version 460
 
+#include <PBRUtility.glsl>
 #include <ShaderResources.glsl>
+#include <ShadowCalculation.glsl>
 
-// Assuming previous definitions and buffer bindings are included here
+layout(set = 1, binding = 29) uniform samplerCube u_EnvIrradianceTex;
+layout(set = 1, binding = 30) uniform samplerCube u_EnvRadianceTex;
 
 layout(location = 0) in vec2 in_uvs;
-layout(location = 1) in vec4 in_fragment_position;
+layout(location = 1) in vec4 in_fragment_pos;
 layout(location = 2) in vec4 in_shadow_pos;
 layout(location = 3) in vec3 in_normals;
-layout(location = 4) in vec3 in_tangent;
-layout(location = 5) in vec3 in_bitangent;
-layout(location = 6) in mat3 in_tbn; // Tangent, Bitangent, Normal matrix
+layout(location = 4) in mat3 in_tbn;
 
 layout(location = 0) out vec4 out_colour;
 
 vec3 gamma_correct(vec3 color) { return pow(color, vec3(1.0 / 2.2)); }
-
-// Basic PBR constants
-const float PI = 3.141592653589793;
 
 vec3 getAlbedo() { return texture(albedo_map, in_uvs).rgb; }
 
@@ -28,56 +26,23 @@ float getMetalness() {
 
 float getRoughness() {
   float roughness_from_texture = texture(roughness_map, in_uvs).r;
-  return roughness_from_texture * pc.roughness;
+  float computed = roughness_from_texture * pc.roughness;
+  return max(computed, 0.05);
 }
 
 float getAO() { return texture(ao_map, in_uvs).r; }
 
 vec3 getNormal() {
-  vec3 normal = normalize(in_normals);
-  if (pc.use_normal_map > 0) {
-    vec3 tNormal = texture(normal_map, in_uvs).rgb;
-    tNormal = normalize(tNormal);         // Convert to NDC
-    normal = normalize(in_tbn * tNormal); // Transform to world space
-  }
-  return normal;
-}
+  if (pc.use_normal_map < 0)
+    return in_normals;
 
-// Cook-Torrance BRDF components
-vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
-}
+  vec3 normalFromMap = texture(normal_map, in_uvs).rgb;
+  normalFromMap = normalFromMap * 2.0 - 1.0; // Transform from [0,1] to [-1,1]
 
-float distributionGGX(vec3 N, vec3 H, float roughness) {
-  float a = roughness * roughness;
-  float a2 = a * a;
-  float NdotH = max(dot(N, H), 0.0);
-  float NdotH2 = NdotH * NdotH;
+  // Use the TBN matrix to transform the normal from tangent to world space
+  vec3 worldNormal = normalize(in_tbn * normalFromMap);
 
-  float nom = a2;
-  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-  denom = PI * denom * denom;
-
-  return nom / denom;
-}
-
-float geometrySchlickGGX(float NdotV, float roughness) {
-  float r = (roughness + 1.0);
-  float k = (r * r) / 8.0;
-
-  float nom = NdotV;
-  float denom = NdotV * (1.0 - k) + k;
-
-  return nom / denom;
-}
-
-float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-  float NdotV = max(dot(N, V), 0.0);
-  float NdotL = max(dot(N, L), 0.0);
-  float ggx2 = geometrySchlickGGX(NdotV, roughness);
-  float ggx1 = geometrySchlickGGX(NdotL, roughness);
-
-  return ggx1 * ggx2;
+  return worldNormal;
 }
 
 void main() {
@@ -86,7 +51,7 @@ void main() {
   float roughness = getRoughness();
   float ao = getAO();
   vec3 normal = getNormal();
-  vec3 viewDir = normalize(renderer.camera_pos.xyz - in_fragment_position.xyz);
+  vec3 viewDir = normalize(renderer.camera_pos.xyz - in_fragment_pos.xyz);
 
   // Light model
 
@@ -118,9 +83,22 @@ void main() {
   vec3 numerator = cosTheta * albedo * PI;
   vec3 diffuse = numerator * kD;
 
-  // Combine results
-  vec3 ambient = vec3(0.03) * albedo * ao;
-  vec3 color = ambient + (diffuse + specular) * lightColor;
+  // Calculate soft shadow factor
+  vec3 projCoords = in_shadow_pos.xyz / in_shadow_pos.w;
+  vec2 shadowMapSize = vec2(4096, 4096); // Example, use actual size
+  float shadowFactor = calculateSoftShadow(
+      shadow_map, projCoords, normal, normalize(-renderer.light_dir.xyz),
+      shadowMapSize, 3); // Example filter size of 3
 
-  out_colour = vec4(gamma_correct(color), 1.0);
+  // Incorporate the shadow factor into the diffuse and specular components
+  vec3 litColor = (diffuse + specular) * lightColor * shadowFactor;
+
+  // Combine results with ambient lighting unaffected by shadows
+  vec3 ambient = vec3(0.03) * albedo * ao;
+  vec3 iblContribution =
+      IBL(u_EnvIrradianceTex, u_EnvRadianceTex, normal, viewDir, F0, albedo,
+          roughness, metalness, 20.0F, reflect(-viewDir, normal));
+  vec3 color = ambient + litColor + iblContribution;
+
+  out_colour = vec4(gamma_correct(color), texture(albedo_map, in_uvs).a);
 }

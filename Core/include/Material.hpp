@@ -6,6 +6,7 @@
 #include "Device.hpp"
 #include "Math.hpp"
 #include "Texture.hpp"
+#include "TextureCube.hpp"
 
 #include <BufferSet.hpp>
 #include <optional>
@@ -34,6 +35,7 @@ public:
   }
 
   auto set(std::string_view, const Texture &) -> bool;
+  auto set(std::string_view, const TextureCube &) -> bool;
   auto set(std::string_view, const Image &) -> bool;
   auto set(std::string_view, const Buffer &) -> bool;
   [[nodiscard]] auto get_constant_buffer() const -> const auto & {
@@ -97,6 +99,7 @@ private:
     VkDescriptorImageInfo image_info{};
     const Texture *texture{nullptr};
     const Image *image{nullptr};
+    const TextureCube *texture_cube{nullptr};
     VkDescriptorImageInfo descriptor_image_info{};
   };
 
@@ -120,6 +123,7 @@ private:
       descriptor_sets{};
 
   std::vector<const Texture *> texture_references;
+  std::vector<const TextureCube *> texture_cube_references;
   std::vector<const Image *> image_references;
 
   std::vector<std::vector<VkWriteDescriptorSet>> write_descriptors;

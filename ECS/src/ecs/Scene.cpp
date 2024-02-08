@@ -102,7 +102,7 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
     renderer_config.view_projection = projection_matrix * view_matrix;
     renderer_config.light_position = glm::vec4{transform.position, 1.0F};
     renderer_config.light_direction =
-        glm::normalize(-glm::vec4{sun.direction, 1.0F});
+        glm::normalize(glm::vec4{sun.direction, 1.0F});
     renderer_config.camera_position = glm::inverse(view_matrix)[3];
     renderer_config.light_colour = sun.colour;
   });
@@ -178,7 +178,7 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
       glm::rotate(cerberus_transform.rotation, glm::radians(90.0F),
                   glm::vec3{1.0F, 0.0F, 0.0F});
   cerberus_model.add_component<MeshComponent>(Core::Mesh::reference_import_from(
-      device, Core::FS::model("cerberus/cerberus.fbx")));
+      device, Core::FS::model("cerberus/scene.gltf")));
 }
 
 auto Scene::on_destroy() -> void {

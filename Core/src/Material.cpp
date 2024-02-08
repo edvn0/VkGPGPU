@@ -175,6 +175,10 @@ auto Material::update_for_rendering(
       auto &image = pd->image;
       pd->image_info = image->get_descriptor_info();
       pd->write_set.pImageInfo = &pd->image_info;
+    } else if (pd->type == PendingDescriptorType::TextureCube) {
+      auto &image = pd->texture_cube;
+      pd->image_info = image->get_descriptor_info();
+      pd->write_set.pImageInfo = &pd->image_info;
     }
 
     frame_write_descriptors.push_back(pd->write_set);
@@ -213,7 +217,7 @@ auto Material::update_for_rendering(
   if (shader->has_descriptor_set(0)) {
     auto descriptor_set_0 = shader->allocate_descriptor_set(0);
     std::ranges::for_each(
-        split_by_type.at(0).begin(), split_by_type.at(0).end(),
+        split_by_type.at(0),
         [&set = descriptor_set_0](VkWriteDescriptorSet &value) {
           value.dstSet = set.descriptor_sets.at(0);
         });
@@ -227,7 +231,7 @@ auto Material::update_for_rendering(
   if (shader->has_descriptor_set(1)) {
     auto descriptor_set_1 = shader->allocate_descriptor_set(1);
     std::ranges::for_each(
-        split_by_type.at(1).begin(), split_by_type.at(1).end(),
+        split_by_type.at(1),
         [&set = descriptor_set_1](VkWriteDescriptorSet &value) {
           value.dstSet = set.descriptor_sets.at(0);
         });
@@ -269,6 +273,43 @@ auto Material::set(std::string_view name, const Texture &texture) -> bool {
                         {},
                         textures.at(binding),
                         nullptr});
+  pending_descriptors.push_back(resident_descriptors.at(binding));
+
+  invalidate_descriptor_sets();
+  return true;
+}
+
+auto Material::set(const std::string_view name, const TextureCube &cube)
+    -> bool {
+  const auto resource = find_resource(name);
+  if (!resource)
+    return false;
+
+  const auto &found_resource = *resource;
+
+  const u32 binding = found_resource->get_register();
+  auto &cubes = texture_cube_references;
+  if (binding < cubes.size() && cubes.at(binding) &&
+      resident_descriptors.contains(binding)) {
+    return false;
+  }
+
+  const auto index = found_resource->get_register();
+  if (index >= cubes.size()) {
+    cubes.resize(static_cast<usize>(index) + 1);
+  }
+  cubes.at(index) = &cube;
+
+  const auto *wds = shader->get_descriptor_set(name, 1);
+  resident_descriptors[binding] =
+      std::make_shared<PendingDescriptor>(PendingDescriptor{
+          PendingDescriptorType::TextureCube,
+          *wds,
+          {},
+          nullptr,
+          nullptr,
+          cubes[found_resource->get_register()],
+      });
   pending_descriptors.push_back(resident_descriptors.at(binding));
 
   invalidate_descriptor_sets();

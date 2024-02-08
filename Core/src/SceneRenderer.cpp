@@ -2,7 +2,7 @@
 
 #include "SceneRenderer.hpp"
 
-#include <glm/glm.hpp>
+#include "Random.hpp"
 
 namespace Core {
 
@@ -100,7 +100,7 @@ auto SceneRenderer::create_preetham_sky(float turbidity, float azimuth,
       TextureCube::construct(*device, ImageFormat::SRGB_RGBA32, cubemap_extent);
 
   auto preetham_sky_shader = shader_cache.at("PreethamSky").get();
-  static auto preetham_sky_compute_pipeline = Pipeline::construct(
+  auto preetham_sky_compute_pipeline = Pipeline::construct(
       *device,
       PipelineConfiguration{"PreethamSkyComputePipeline",
                             PipelineStage::Compute, *preetham_sky_shader});
@@ -400,6 +400,9 @@ auto SceneRenderer::geometry_pass() -> void {
 
     if (material) {
       material->set("shadow_map", *shadow_framebuffer->get_depth_image());
+      material->set("u_EnvIrradianceTex",
+                    *scene_environment.irradiance_texture);
+      material->set("u_EnvRadianceTex", *scene_environment.radiance_texture);
       update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
       material->bind(*command_buffer, *geometry_pipeline, current_frame);
@@ -429,7 +432,18 @@ auto SceneRenderer::debug_pass() -> void {
 }
 
 auto SceneRenderer::environment_pass() -> void {
-  auto texture_cube = create_preetham_sky(3.0F, 0.0F, 0.0F);
+  skybox_material->set("texture_cube", *scene_environment.radiance_texture);
+
+  bind_pipeline(*skybox_pipeline);
+  update_material_for_rendering(current_frame, *skybox_material, ubos.get(),
+                                nullptr);
+  skybox_material->bind(*command_buffer, *skybox_pipeline, current_frame);
+  push_constants(*skybox_pipeline, *skybox_material);
+
+  draw_vertices({
+      .vertex_count = 6,
+      .instance_count = 1,
+  });
 }
 
 auto SceneRenderer::grid_pass() -> void {
@@ -758,6 +772,25 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .face_mode = FaceMode::CounterClockwise,
   };
   fullscreen_pipeline = GraphicsPipeline::construct(*device, fullscreen_config);
+
+  shader_cache.try_emplace(
+      "Skybox", Shader::construct(*device, FS::shader("Skybox.vert.spv"),
+                                  FS::shader("Skybox.frag.spv")));
+  GraphicsPipelineConfiguration skybox_config{
+      .name = "FullscreenPipeline",
+      .shader = shader_cache.at("Skybox").get(),
+      .framebuffer = geometry_framebuffer.get(),
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .write_depth = false,
+      .test_depth = true,
+  };
+  skybox_material = Material::construct(*device, *shader_cache.at("Skybox"));
+  skybox_pipeline = GraphicsPipeline::construct(*device, skybox_config);
+
+  auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
+  auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
+  scene_environment.radiance_texture = texture_cube;
+  scene_environment.irradiance_texture = texture_cube;
 
   ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(*device);
   ubos->create(sizeof(RendererUBO), SetBinding(0));

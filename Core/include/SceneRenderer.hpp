@@ -7,6 +7,7 @@
 #include "Mesh.hpp"
 #include "Pipeline.hpp"
 #include "RenderingDefinitions.hpp"
+#include "SceneResources.hpp"
 #include "Swapchain.hpp"
 #include "TextureCube.hpp"
 
@@ -110,6 +111,9 @@ private:
   Scope<Framebuffer> fullscreen_framebuffer;
   Scope<Material> fullscreen_material;
 
+  Scope<GraphicsPipeline> skybox_pipeline;
+  Scope<Material> skybox_material;
+
   Scope<GraphicsPipeline> shadow_pipeline;
   Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
@@ -137,6 +141,8 @@ private:
   ShadowUBO shadow_ubo{};
   GridUBO grid_ubo{};
   DepthParameters depth_factor{};
+
+  SceneEnvironment scene_environment{};
 
   Scope<BufferSet<Buffer::Type::Uniform>> ubos;
   Scope<BufferSet<Buffer::Type::Storage>> ssbos;

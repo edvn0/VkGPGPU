@@ -2,6 +2,7 @@
 
 #include "Mesh.hpp"
 
+#include "Formatters.hpp"
 #include "Logger.hpp"
 #include "Material.hpp"
 #include "SceneRenderer.hpp"
@@ -392,7 +393,7 @@ void Mesh::handle_albedo_map(const Texture &white_texture,
     }
 
     if (texture) {
-      info("{}", key);
+      info("Has albedo map: {}", mesh_owned_textures.at(key)->get_file_path());
       const auto &text = mesh_owned_textures.at(key);
       submesh_material.set("albedo_map", *text);
       auto albedo_colour = glm::vec3(1.0F);
@@ -426,6 +427,7 @@ void Mesh::handle_normal_map(const Texture &white_texture,
     if (texture) {
       submesh_material.set("normal_map", *mesh_owned_textures.at(key));
       submesh_material.set("pc.use_normal_map", 1.0F);
+      info("Has normal map: {}", mesh_owned_textures.at(key)->get_file_path());
     } else {
       fallback = true;
     }
@@ -441,30 +443,45 @@ void Mesh::handle_roughness_map(const Texture &white_texture,
                                 const aiMaterial *ai_material,
                                 Material &submesh_material,
                                 aiString ai_tex_path, float roughness) {
-  const auto has_roughness_map =
-      ai_material->GetTexture(aiTextureType_SHININESS, 0, &ai_tex_path) ==
-      AI_SUCCESS;
-  auto fallback = !has_roughness_map;
-  if (const std::string key = ai_tex_path.C_Str(); has_roughness_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
-            importer->scene->GetEmbeddedTexture(ai_tex_path.C_Str())) {
-      ensure(false, "Embedded textures are not supported.");
+  aiString path; // Path to the texture
+  bool has_roughness_texture = false;
 
-    } else {
-      mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-      texture = true;
-    }
+  // Attempt to get the texture path for the metallic-roughness map
+  // Assimp defines the key AI_MATKEY_TEXTURE_TYPE_METALNESS as the way to
+  // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
+  // aiTextureType_METALNESS for metallic-roughness maps
 
-    if (texture) {
-      submesh_material.set("roughness_map", *mesh_owned_textures.at(key));
+  static auto load_texture = [=](auto type, auto &out_path) {
+    if (type == aiTextureType_UNKNOWN)
+      return ai_material->GetTexture(type, 0, &out_path, nullptr, nullptr,
+                                     nullptr, nullptr, nullptr) == AI_SUCCESS;
+    return ai_material->GetTexture(type, 0, &out_path) == AI_SUCCESS;
+  };
+
+  if (load_texture(aiTextureType_DIFFUSE_ROUGHNESS, path) ||
+      load_texture(aiTextureType_METALNESS, path) ||
+      load_texture(aiTextureType_UNKNOWN, path) ||
+      load_texture(aiTextureType_SHININESS, path)) {
+    std::string texture_path = path.C_Str();
+
+    if (!texture_path.empty()) {
+      // Load the texture from the path
+      if (!mesh_owned_textures.contains(texture_path)) {
+        mesh_owned_textures.try_emplace(
+            texture_path, read_texture_from_file_path(texture_path));
+      }
+      has_roughness_texture = true;
+
+      submesh_material.set("roughness_map",
+                           *mesh_owned_textures.at(texture_path));
       submesh_material.set("pc.roughness", 1.0F);
-    } else {
-      fallback = true;
+
+      info("Has roughness texture: {}", texture_path);
     }
   }
 
-  if (fallback) {
+  // Fallback to default white texture if no metallic-roughness map was found
+  if (!has_roughness_texture) {
     submesh_material.set("roughness_map", white_texture);
     submesh_material.set("pc.roughness", roughness);
   }
@@ -473,40 +490,37 @@ void Mesh::handle_roughness_map(const Texture &white_texture,
 void Mesh::handle_metalness_map(const Texture &white_texture,
                                 const aiMaterial *ai_material,
                                 Material &submesh_material, float metalness) {
+  aiString path; // Path to the texture
   bool has_metalness_texture = false;
-  for (u32 property_index = 0; property_index < ai_material->mNumProperties;
-       property_index++) {
-    if (const auto *prop = ai_material->mProperties[property_index];
-        prop->mType == aiPTI_String) {
-      const auto str_length = *std::bit_cast<u32 *>(prop->mData);
-      std::string str(prop->mData + 4, str_length);
 
-      if (const std::string key = prop->mKey.data;
-          key == "$raw.ReflectionFactor|file") {
-        bool texture = false;
-        if (const auto *ai_texture_embedded =
-                importer->scene->GetEmbeddedTexture(str.data())) {
-          ensure(false, "Embedded textures are not supported.");
-        } else {
-          mesh_owned_textures.try_emplace(key,
-                                          read_texture_from_file_path(str));
-          texture = true;
-        }
+  // Attempt to get the texture path for the metallic-roughness map
+  // Assimp defines the key AI_MATKEY_TEXTURE_TYPE_METALNESS as the way to
+  // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
+  // aiTextureType_METALNESS for metallic-roughness maps
+  if (ai_material->GetTexture(aiTextureType_METALNESS, 0, &path) ==
+          AI_SUCCESS ||
+      ai_material->GetTexture(aiTextureType_UNKNOWN, 0, &path, nullptr, nullptr,
+                              nullptr, nullptr, nullptr) == AI_SUCCESS) {
+    std::string texture_path = path.C_Str();
 
-        if (texture) {
-          has_metalness_texture = true;
-          submesh_material.set("metallic_map", *mesh_owned_textures.at(key));
-          submesh_material.set("pc.metalness", 1.0F);
-        } else {
-          error("Mesh", "Could not load texture: {0}", str);
-        }
-        break;
+    if (!texture_path.empty()) {
+      // Load the texture from the path
+      if (!mesh_owned_textures.contains(texture_path)) {
+        mesh_owned_textures.try_emplace(
+            texture_path, read_texture_from_file_path(texture_path));
       }
+      has_metalness_texture = true;
+
+      submesh_material.set("metallic_map",
+                           *mesh_owned_textures.at(texture_path));
+      submesh_material.set("pc.metalness", 1.0F);
+
+      info("Has metalness texture: {}", texture_path);
     }
   }
 
-  auto fallback = !has_metalness_texture;
-  if (fallback) {
+  // Fallback to default white texture if no metallic-roughness map was found
+  if (!has_metalness_texture) {
     submesh_material.set("metallic_map", white_texture);
     submesh_material.set("pc.metalness", metalness);
   }

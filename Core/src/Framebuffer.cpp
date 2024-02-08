@@ -140,8 +140,8 @@ auto Framebuffer::create_framebuffer() -> void {
                   .usage =
                       ImageUsage::DepthStencilAttachment | ImageUsage::Sampled,
                   .layout = ImageLayout::DepthStencilReadOnlyOptimal,
-                  .address_mode = SamplerAddressMode::ClampToBorder,
-                  .border_color = SamplerBorderColor::FloatOpaqueWhite,
+                  .address_mode = SamplerAddressMode::ClampToEdge,
+                  .border_color = SamplerBorderColor::FloatOpaqueBlack,
                   .compare_op = CompareOperation::Less,
               });
         }

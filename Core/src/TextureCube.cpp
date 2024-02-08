@@ -257,6 +257,8 @@ auto TextureCube::generate_mips(bool readonly) -> void {
 
   mips_generated = true;
 
+  vkDeviceWaitIdle(device->get_device());
+
   descriptor_info.imageLayout = readonly
                                     ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                                     : VK_IMAGE_LAYOUT_GENERAL;

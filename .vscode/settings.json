@@ -6,9 +6,11 @@
     "blit",
     "databuffer",
     "librenderdoc",
+    "metalness",
     "rdoc",
     "renderpass",
     "Serialiser",
+    "skybox",
     "SUBPASS",
     "subresource"
   ],
