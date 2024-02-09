@@ -11,13 +11,18 @@ layout(location = 0) in vec2 in_uvs;
 layout(location = 1) in vec4 in_fragment_pos;
 layout(location = 2) in vec4 in_shadow_pos;
 layout(location = 3) in vec3 in_normals;
-layout(location = 4) in mat3 in_tbn;
+layout(location = 4) in vec4 in_colour;
+layout(location = 5) in mat3 in_tbn;
 
 layout(location = 0) out vec4 out_colour;
 
 vec3 gamma_correct(vec3 color) { return pow(color, vec3(1.0 / 2.2)); }
 
-vec3 getAlbedo() { return texture(albedo_map, in_uvs).rgb; }
+vec3 getAlbedo() {
+  vec4 albedo_colour = pc.albedo_colour;
+  vec3 sampled = texture(albedo_map, in_uvs).rgb;
+  return albedo_colour.rgb * sampled * in_colour.rgb;
+}
 
 float getMetalness() {
   float metalness_from_texture = texture(metallic_map, in_uvs).r;

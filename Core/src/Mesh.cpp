@@ -20,6 +20,19 @@
 
 namespace Core {
 
+class CustomStream : public Assimp::LogStream {
+public:
+  CustomStream() = default;
+  ~CustomStream() override = default;
+  void write(const char *message) override {
+    ::info("Message from CustomStream: {}", message);
+  }
+};
+// Select the kinds of messages you want to receive on this log stream
+static constexpr unsigned int severity =
+    Assimp::Logger::Debugging | Assimp::Logger::Info | Assimp::Logger::Err |
+    Assimp::Logger::Warn;
+
 auto Mesh::get_materials_span() const -> std::span<Material *> {
   std::vector<Material *> raw_pointers;
   raw_pointers.reserve(materials.size());
@@ -145,9 +158,8 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
     return;
   }
 
-  const glm::mat4 local_transform =
-      glm::mat4{1.0F}; // to_mat4_from_assimp(node->mTransformation);
-  const glm::mat4 transform = parent_transform * local_transform;
+  const auto local_transform = to_mat4_from_assimp(node->mTransformation);
+  const auto transform = parent_transform * local_transform;
   const std::span node_meshes{node->mMeshes, node->mNumMeshes};
 
   importer->node_map[node].resize(node_meshes.size());
@@ -166,8 +178,21 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcess_Triangulate | aiProcess_GenUVCoords | aiProcess_CalcTangentSpace |
-    aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_FlipUVs;
+    aiProcess_CalcTangentSpace | // Create binormals/tangents just in case
+    aiProcess_Triangulate |      // Make sure we're triangles
+    aiProcess_FlipUVs |
+    aiProcess_SortByPType |    // Split meshes by primitive type
+    aiProcess_GenNormals |     // Make sure we have legit normals
+    aiProcess_GenUVCoords |    // Convert UVs if required
+                               //		aiProcess_OptimizeGraph |
+    aiProcess_OptimizeMeshes | // Batch draws where possible
+    aiProcess_JoinIdenticalVertices |
+    aiProcess_LimitBoneWeights | // If more than N (=4) bone weights, discard
+                                 // least influencing bones and renormalise sum
+                                 // to 1
+    aiProcess_ValidateDataStructure | // Validation
+    aiProcess_GlobalScale; // e.g. convert cm to m for fbx import (and other
+                           // formats where cm is native)
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
@@ -189,6 +214,11 @@ auto Mesh::reference_import_from(const Device &device,
 Mesh::Mesh(const Device &dev, const FS::Path &path)
     : device(&dev), file_path(path) {
   importer = make_scope<ImporterImpl, Mesh::Deleter>();
+
+  // Setup logger with CustomStream
+  Assimp::DefaultLogger::create("", Assimp::Logger::VERBOSE, severity);
+  Assimp::DefaultLogger::get()->attachStream(new CustomStream(), severity);
+
   importer->importer = make_scope<Assimp::Importer>();
 
   default_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
@@ -313,6 +343,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("specular_map", white_texture);
     materials.push_back(submesh_material);
 
+    Assimp::DefaultLogger::kill();
     return;
   }
 
@@ -373,6 +404,8 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     handle_metalness_map(white_texture, ai_material, *submesh_material,
                          metalness);
   }
+
+  Assimp::DefaultLogger::kill();
 }
 
 void Mesh::handle_albedo_map(const Texture &white_texture,
@@ -439,6 +472,14 @@ void Mesh::handle_normal_map(const Texture &white_texture,
   }
 }
 
+static constexpr auto load_texture = [](const auto *ai_material, auto type,
+                                        auto &out_path) {
+  if (type == aiTextureType_UNKNOWN)
+    return ai_material->GetTexture(type, 0, &out_path, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr) == AI_SUCCESS;
+  return ai_material->GetTexture(type, 0, &out_path) == AI_SUCCESS;
+};
+
 void Mesh::handle_roughness_map(const Texture &white_texture,
                                 const aiMaterial *ai_material,
                                 Material &submesh_material,
@@ -451,17 +492,10 @@ void Mesh::handle_roughness_map(const Texture &white_texture,
   // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
   // aiTextureType_METALNESS for metallic-roughness maps
 
-  static auto load_texture = [=](auto type, auto &out_path) {
-    if (type == aiTextureType_UNKNOWN)
-      return ai_material->GetTexture(type, 0, &out_path, nullptr, nullptr,
-                                     nullptr, nullptr, nullptr) == AI_SUCCESS;
-    return ai_material->GetTexture(type, 0, &out_path) == AI_SUCCESS;
-  };
-
-  if (load_texture(aiTextureType_DIFFUSE_ROUGHNESS, path) ||
-      load_texture(aiTextureType_METALNESS, path) ||
-      load_texture(aiTextureType_UNKNOWN, path) ||
-      load_texture(aiTextureType_SHININESS, path)) {
+  if (load_texture(ai_material, aiTextureType_DIFFUSE_ROUGHNESS, path) ||
+      load_texture(ai_material, aiTextureType_METALNESS, path) ||
+      load_texture(ai_material, aiTextureType_UNKNOWN, path) ||
+      load_texture(ai_material, aiTextureType_SHININESS, path)) {
     std::string texture_path = path.C_Str();
 
     if (!texture_path.empty()) {
@@ -497,10 +531,8 @@ void Mesh::handle_metalness_map(const Texture &white_texture,
   // Assimp defines the key AI_MATKEY_TEXTURE_TYPE_METALNESS as the way to
   // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
   // aiTextureType_METALNESS for metallic-roughness maps
-  if (ai_material->GetTexture(aiTextureType_METALNESS, 0, &path) ==
-          AI_SUCCESS ||
-      ai_material->GetTexture(aiTextureType_UNKNOWN, 0, &path, nullptr, nullptr,
-                              nullptr, nullptr, nullptr) == AI_SUCCESS) {
+  if (load_texture(ai_material, aiTextureType_METALNESS, path) ||
+      load_texture(ai_material, aiTextureType_UNKNOWN, path)) {
     std::string texture_path = path.C_Str();
 
     if (!texture_path.empty()) {

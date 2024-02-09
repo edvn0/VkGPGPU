@@ -4,7 +4,7 @@
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec2 uvs;
-layout(location = 2) in vec4 unused_colour;
+layout(location = 2) in vec4 colour;
 layout(location = 3) in vec3 normals;
 layout(location = 4) in vec3 tangent;
 layout(location = 5) in vec3 bitangents;
@@ -17,7 +17,8 @@ layout(location = 0) out vec2 out_uvs;
 layout(location = 1) out vec4 out_fragment_pos;
 layout(location = 2) out vec4 out_shadow_pos;
 layout(location = 3) out vec3 out_normals;
-layout(location = 4) out mat3 out_tbn;
+layout(location = 4) out vec4 out_colour;
+layout(location = 5) out mat3 out_tbn;
 
 void main() {
   mat4 transform = mat4(
@@ -40,4 +41,5 @@ void main() {
   out_tbn = mat3(T, B, N);
 
   out_normals = normals;
+  out_colour = colour;
 }

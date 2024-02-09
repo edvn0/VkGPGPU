@@ -169,20 +169,23 @@ auto save_cache(auto &device, auto pipeline_cache, const std::string &name) {
     info("Failed to open pipeline cache file at {}", name + ".cache");
     return;
   }
+  try {
+    auto pipeline_cache_size = size_t{0};
+    verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                  &pipeline_cache_size, nullptr),
+           "vkGetPipelineCacheData", "Failed to get pipeline cache data");
 
-  auto pipeline_cache_size = size_t{0};
-  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
-                                &pipeline_cache_size, nullptr),
-         "vkGetPipelineCacheData", "Failed to get pipeline cache data");
+    auto pipeline_cache_data = std::vector<u8>(pipeline_cache_size);
+    verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                  &pipeline_cache_size,
+                                  pipeline_cache_data.data()),
+           "vkGetPipelineCacheData", "Failed to get pipeline cache data");
 
-  auto pipeline_cache_data = std::vector<u8>(pipeline_cache_size);
-  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
-                                &pipeline_cache_size,
-                                pipeline_cache_data.data()),
-         "vkGetPipelineCacheData", "Failed to get pipeline cache data");
-
-  file.write(std::bit_cast<const char *>(pipeline_cache_data.data()),
-             pipeline_cache_data.size());
+    file.write(std::bit_cast<const char *>(pipeline_cache_data.data()),
+               pipeline_cache_data.size());
+  } catch (const std::exception &exc) {
+    error("Pipeline save_cache exception: {}", exc.what());
+  }
 }
 } // namespace PipelineHelpers
 

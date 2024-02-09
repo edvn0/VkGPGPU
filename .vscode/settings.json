@@ -11,8 +11,10 @@
     "renderpass",
     "Serialiser",
     "skybox",
+    "ssbos",
     "SUBPASS",
-    "subresource"
+    "subresource",
+    "ubos"
   ],
   "files.associations": {
     "*.frag": "hlsl",

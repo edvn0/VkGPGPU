@@ -2,6 +2,7 @@
 
 #include "SceneRenderer.hpp"
 
+#include "Input.hpp"
 #include "Random.hpp"
 
 namespace Core {
@@ -393,7 +394,15 @@ auto SceneRenderer::shadow_pass() -> void {
 }
 
 auto SceneRenderer::geometry_pass() -> void {
-  bind_pipeline(*geometry_pipeline);
+  static bool wireframe = false;
+  if (Input::pressed(KeyCode::KEY_F3)) {
+    wireframe = !wireframe;
+  }
+
+  const auto *selected_pipeline =
+      wireframe ? wireframed_geometry_pipeline.get() : geometry_pipeline.get();
+
+  bind_pipeline(*selected_pipeline);
   for (auto &&[key, value] : draw_commands) {
     auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
@@ -405,8 +414,8 @@ auto SceneRenderer::geometry_pass() -> void {
       material->set("u_EnvRadianceTex", *scene_environment.radiance_texture);
       update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
-      material->bind(*command_buffer, *geometry_pipeline, current_frame);
-      push_constants(*geometry_pipeline, *material);
+      material->bind(*command_buffer, *selected_pipeline, current_frame);
+      push_constants(*selected_pipeline, *material);
     }
 
     const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
@@ -417,6 +426,10 @@ auto SceneRenderer::geometry_pass() -> void {
     bind_vertex_buffer(transform_vertex_buffer,
                        mesh_transform_map.at(key).offset, 1);
     bind_index_buffer(*mesh_ptr->get_index_buffer());
+
+    if (wireframe) {
+      vkCmdSetLineWidth(command_buffer->get_command_buffer(), 2.0F);
+    }
 
     draw({
         .index_count = submesh.index_count,
@@ -640,8 +653,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
               1.0F,
           },
       .depth_clear_value = 0.0F,
-      .clear_colour_on_load = false,
-      .clear_depth_on_load = false,
+      .clear_colour_on_load = true,
+      .clear_depth_on_load = true,
       .blend = true,
       .attachments =
           FramebufferAttachmentSpecification{
