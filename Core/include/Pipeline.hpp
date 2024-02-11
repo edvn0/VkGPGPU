@@ -194,7 +194,8 @@ struct GraphicsPipelineConfiguration {
   VertexLayout instance_layout{};
   PolygonMode polygon_mode{PolygonMode::Fill};
   float line_width{1.0F};
-  DepthCompareOperator depth_comparison_operator{DepthCompareOperator::Less};
+  DepthCompareOperator depth_comparison_operator{
+      DepthCompareOperator::GreaterOrEqual};
   CullMode cull_mode{CullMode::Back};
   FaceMode face_mode{FaceMode::CounterClockwise};
   bool write_depth{true};

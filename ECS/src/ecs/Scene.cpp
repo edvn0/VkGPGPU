@@ -51,19 +51,15 @@ auto Scene::delete_entity(const Core::u64 identifier) -> void {
 
 auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
     -> void {
-  const auto camera_view =
-      registry.view<const TransformComponent, const MeshComponent,
-                    const CameraComponent>();
-  camera_view.each([&renderer](auto, const auto &transform, const auto &mesh,
-                               const auto &camera) {
-    renderer.submit_static_mesh(mesh.mesh.get(), transform.compute());
-  });
-
   const auto other_view =
-      registry.view<const TransformComponent, const MeshComponent>();
-  other_view.each([&renderer](auto, const auto &transform, const auto &mesh) {
-    renderer.submit_static_mesh(mesh.mesh.get(), transform.compute());
-  });
+      registry.view<const TransformComponent, const MeshComponent>(
+          entt::exclude<SunComponent>);
+  other_view.each(
+      [&renderer](auto, const auto &transform, const MeshComponent &mesh) {
+        if (mesh.mesh != nullptr) {
+          renderer.submit_static_mesh(mesh.mesh.get(), transform.compute());
+        }
+      });
 }
 
 auto Scene::get_entity(entt::entity identifier) -> std::optional<Entity> {
@@ -80,6 +76,47 @@ auto Scene::get_entity(Core::u64 identifier) -> std::optional<Entity> {
   });
 
   return entity;
+}
+
+auto Scene::sort() -> void {
+  return registry.sort<IdentityComponent>(
+      [](const IdentityComponent &lhs, const IdentityComponent &rhs) {
+        return std::ranges::lexicographical_compare(lhs.name, rhs.name);
+      });
+}
+
+void Scene::initialise_device_dependent_objects(const Core::Device &device) {
+  registry.view<MeshComponent>().each([&](auto, auto &mesh) {
+    if (!mesh.mesh && !mesh.path.empty()) {
+      mesh.mesh = Core::Mesh::reference_import_from(device, mesh.path);
+    }
+  });
+}
+
+static auto compute_middle_of_scene(Scene &scene)
+    -> std::tuple<glm::vec3, float> {
+  glm::vec3 sceneMin(std::numeric_limits<float>::max());
+  glm::vec3 sceneMax(std::numeric_limits<float>::lowest());
+
+  for (const auto &[entity, transform, mesh] :
+       scene.get_registry()
+           .view<const TransformComponent, const MeshComponent>(
+               entt::exclude<SunComponent>)
+           .each()) {
+    if (!mesh.mesh)
+      continue;
+
+    const auto &aabb = mesh.mesh->get_aabb();
+    glm::vec3 minCorners = aabb.min() * transform.scale + transform.position;
+    glm::vec3 maxCorners = aabb.max() * transform.scale + transform.position;
+
+    sceneMin = glm::min(sceneMin, minCorners);
+    sceneMax = glm::max(sceneMax, maxCorners);
+  }
+  const auto sceneCenter = (sceneMin + sceneMax) / 2.0f;
+  const auto sceneRadius = glm::distance(sceneMin, sceneMax) / 2.0f;
+
+  return {sceneCenter, sceneRadius};
 }
 
 auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
@@ -101,10 +138,34 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
     renderer_config.projection = projection_matrix;
     renderer_config.view_projection = projection_matrix * view_matrix;
     renderer_config.light_position = glm::vec4{transform.position, 1.0F};
-    renderer_config.light_direction =
-        glm::normalize(glm::vec4{sun.direction, 1.0F});
+    const auto &&[center, radius] = compute_middle_of_scene(*this);
+
+    renderer_config.light_direction = -glm::normalize(glm::vec4{center, 1.0F});
     renderer_config.camera_position = glm::inverse(view_matrix)[3];
     renderer_config.light_colour = sun.colour;
+
+    auto &shadow_ubo = scene_renderer.get_shadow_configuration();
+    const float left = -radius;
+    const float right = radius;
+    const float bottom = -radius;
+    const float top = radius;
+    constexpr float near = -30.F;
+    const float far = radius * 2; // Enough to cover the scene depth
+    const glm::mat4 light_proj =
+        glm::ortho(left, right, bottom, top, near, far);
+    shadow_ubo.projection = light_proj;
+    shadow_ubo.view = glm::lookAt(transform.position, center, {0, 1, 0});
+    shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+  });
+
+  const auto mesh_view =
+      registry.view<const TransformComponent, const MeshComponent>(
+          entt::exclude<SunComponent, CameraComponent>);
+  // Draw AABBS
+  mesh_view.each([&](auto, const auto &transform, const auto &mesh) {
+    if (mesh.mesh) {
+      scene_renderer.submit_aabb(mesh.mesh->get_aabb(), transform.compute());
+    }
   });
 
   scene_renderer.begin_frame(projection_matrix, view_matrix);
@@ -128,8 +189,8 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   sun_component.colour = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F};
   sun_component.direction = glm::vec3{0.0F, 0.0F, 1.0F};
   sun.get_transform().position = glm::vec3{-3.0F, -4.0F, 2.0F};
-  sun.add_component<MeshComponent>(
-      Core::Mesh::reference_import_from(device, Core::FS::model("sphere.fbx")));
+  sun.add_component<MeshComponent>(Core::Mesh::reference_import_from(
+      device, Core::FS::model("Capsule.fbx")));
 
   auto camera_entity = create_entity("Camera");
   camera_entity.add_component<CameraComponent>();
@@ -173,12 +234,18 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   auto cerberus_model = create_entity("Cerberus Model");
   auto &cerberus_transform = cerberus_model.add_component<TransformComponent>();
   cerberus_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
-  cerberus_transform.scale = glm::vec3{0.3F, 0.3F, 0.3F};
-  cerberus_transform.rotation =
-      glm::rotate(cerberus_transform.rotation, glm::radians(90.0F),
-                  glm::vec3{1.0F, 0.0F, 0.0F});
+  cerberus_transform.scale = glm::vec3{1.F, 1.F, 1.F};
   cerberus_model.add_component<MeshComponent>(Core::Mesh::reference_import_from(
-      device, Core::FS::model("cerberus/scene.gltf")));
+      device, Core::FS::model("cerberus_correct/cerberus.gltf")));
+
+  auto metahuman_model = create_entity("Metahuman Model");
+  auto &metahuman_transform =
+      metahuman_model.add_component<TransformComponent>();
+  metahuman_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
+  metahuman_transform.scale = glm::vec3{1.F, 1.F, 1.F};
+  metahuman_model.add_component<MeshComponent>(
+      Core::Mesh::reference_import_from(
+          device, Core::FS::model("metahuman/metahuman.fbx")));
 }
 
 auto Scene::on_destroy() -> void {

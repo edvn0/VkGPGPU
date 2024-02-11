@@ -261,8 +261,8 @@ template <> struct ComponentSerialiser<MeshComponent> {
 
     if (has_valid_mesh_path) {
       if (component.mesh != nullptr) {
-        const auto &mesh = *component.mesh;
-        if (!write(out_stream, mesh.get_file_path().string()))
+        if (const auto &mesh = *component.mesh;
+            !write(out_stream, mesh.get_file_path().string()))
           return false;
       } else {
         if (!write(out_stream, component.path.string()))

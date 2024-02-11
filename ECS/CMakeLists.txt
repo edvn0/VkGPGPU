@@ -14,6 +14,7 @@ set(SOURCES
 )
 add_library(ECS STATIC ${SOURCES})
 target_link_libraries(ECS PUBLIC Reflection fmt::fmt EnTT::EnTT Vulkan::Vulkan)
+target_compile_definitions(ECS PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 target_include_directories(ECS PUBLIC
     ${CMAKE_SOURCE_DIR}/ThirdParty
     ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE

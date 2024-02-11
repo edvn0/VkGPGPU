@@ -47,4 +47,9 @@ template <class T, typename... Args> auto make_ref(Args &&...args) -> Ref<T> {
   return std::make_shared<T>(std::forward<Args>(args)...);
 }
 
+template <typename T> class Badge {
+  friend T;
+  Badge() = default;
+};
+
 } // namespace Core

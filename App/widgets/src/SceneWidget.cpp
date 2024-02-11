@@ -191,8 +191,10 @@ void SceneWidget::draw_component_widget(Entity &entity) {
       entity, "Mesh", [&dev = device](MeshComponent &mesh) {
         if (!mesh.path.empty()) {
           UI::text("Path: {}", mesh.path.string());
-        } else {
+        } else if (mesh.mesh != nullptr) {
           UI::text("Path: {}", mesh.mesh->get_file_path().string());
+        } else {
+          UI::text("No mesh selected");
         }
 
         ImGui::NewLine();

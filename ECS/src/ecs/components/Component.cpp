@@ -2,7 +2,6 @@
 
 #include "ecs/components/Component.hpp"
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
 namespace ECS {

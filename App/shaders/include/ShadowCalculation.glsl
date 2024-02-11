@@ -1,4 +1,3 @@
-// SoftShadows.glsl
 #ifndef GPGPU_SHADOW_CALCULATION
 #define GPGPU_SHADOW_CALCULATION
 
@@ -36,8 +35,9 @@ float shadowPCF(sampler2D shadowMap, vec3 projCoords, float bias,
 // texelSize.
 // - filterSize: The size of the filter kernel used for PCF.
 float calculateSoftShadow(sampler2D shadowMap, vec3 projCoords, vec3 normal,
-                          vec3 lightDir, vec2 shadowMapSize, int filterSize) {
-  float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+                          vec3 lightDir, vec2 shadowMapSize, int filterSize,
+                          float bias_value) {
+  float bias = max(0.05 * (1.0 - dot(normal, lightDir)), bias_value);
   vec2 texelSize = 1.0 / shadowMapSize;
   projCoords = projCoords * 0.5 + 0.5; // Transform to [0,1] range if needed
   return shadowPCF(shadowMap, projCoords, bias, texelSize, filterSize);

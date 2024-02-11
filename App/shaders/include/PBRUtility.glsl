@@ -1,75 +1,111 @@
 #ifndef GPGU_PBR_UTILITY
 #define GPGU_PBR_UTILITY
 
-// Basic PBR constants
+// Define the value of PI, a fundamental constant used in various calculations.
 const float PI = 3.141592653589793;
 
-vec3 FresnelSchlickRoughness(vec3 F0, float cosTheta, float roughness) {
-  return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+// Calculate Fresnel-Schlick approximation with roughness for reflectance.
+vec3 fresnel_schlick_roughness(vec3 f0, float cos_theta, float roughness) {
+  // f0: Reflectivity at normal incidence
+  // cos_theta: Cosine of the angle between the normal and the view direction
+  // roughness: Surface roughness factor
+  return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - cos_theta, 5.0);
 }
 
-vec3 RotateVectorAboutY(float angle, vec3 v) {
+// Rotate a vector about the Y axis by a given angle.
+vec3 rotate_vector_about_y(float angle, vec3 v) {
+  // angle: The angle of rotation in radians
+  // v: The original vector to be rotated
   float c = cos(angle);
   float s = sin(angle);
   return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
 }
 
-// Cook-Torrance BRDF components
-vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+// Compute the Fresnel-Schlick approximation without roughness.
+vec3 fresnel_schlick(float cos_theta, vec3 f0) {
+  // cos_theta: Cosine of the angle between the normal and the view direction
+  // f0: Reflectivity at normal incidence
+  return f0 + (1.0 - f0) * pow(1.0 - cos_theta, 5.0);
 }
 
-float distributionGGX(vec3 N, vec3 H, float roughness) {
+// Calculate the GGX distribution of normals.
+float distribution_ggx(vec3 n, vec3 h, float roughness) {
+  // n: Surface normal
+  // h: Halfway vector between view direction and light direction
+  // roughness: Surface roughness factor
   float a = roughness * roughness;
   float a2 = a * a;
-  float NdotH = max(dot(N, H), 0.0);
-  float NdotH2 = NdotH * NdotH;
+  float n_dot_h = max(dot(n, h), 0.0);
+  float n_dot_h2 = n_dot_h * n_dot_h;
 
   float nom = a2;
-  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+  float denom = (n_dot_h2 * (a2 - 1.0) + 1.0);
   denom = PI * denom * denom;
 
   return nom / denom;
 }
 
-float geometrySchlickGGX(float NdotV, float roughness) {
+// Calculate geometry function using Schlick-GGX approximation.
+float geometry_schlick_ggx(float n_dot_v, float roughness) {
+  // n_dot_v: Cosine of the angle between the normal and the view direction
+  // roughness: Surface roughness factor
   float r = (roughness + 1.0);
   float k = (r * r) / 8.0;
 
-  float nom = NdotV;
-  float denom = NdotV * (1.0 - k) + k;
+  float nom = n_dot_v;
+  float denom = n_dot_v * (1.0 - k) + k;
 
   return nom / denom;
 }
 
-float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-  float NdotV = max(dot(N, V), 0.0);
-  float NdotL = max(dot(N, L), 0.0);
-  float ggx2 = geometrySchlickGGX(NdotV, roughness);
-  float ggx1 = geometrySchlickGGX(NdotL, roughness);
+// Combine the geometry functions for the view and light directions using
+// Smith's method.
+float geometry_smith(vec3 n, vec3 v, vec3 l, float roughness) {
+  // n: Surface normal
+  // v: View direction
+  // l: Light direction
+  // roughness: Surface roughness factor
+  float n_dot_v = max(dot(n, v), 0.0);
+  float n_dot_l = max(dot(n, l), 0.0);
+  float ggx2 = geometry_schlick_ggx(n_dot_v, roughness);
+  float ggx1 = geometry_schlick_ggx(n_dot_l, roughness);
 
   return ggx1 * ggx2;
 }
 
-vec3 IBL(samplerCube envIrradianceTex, samplerCube envRadianceTex, vec3 normal,
-         vec3 viewDir, vec3 F0, vec3 albedo, float roughness, float metalness,
-         float envMapRotation, vec3 Lr) {
-  vec3 irradiance = texture(envIrradianceTex, normal).rgb;
-  float NdotV = max(dot(normal, viewDir), 0.0);
-  vec3 F = FresnelSchlickRoughness(F0, NdotV, roughness);
-  vec3 kd = (1.0 - F) * (1.0 - metalness);
-  vec3 diffuseIBL = albedo * irradiance;
+// Calculate image-based lighting (IBL) contribution.
+vec3 ibl(samplerCube env_irradiance_tex, samplerCube env_radiance_tex,
+         sampler2D brdf_lut, vec3 normal, vec3 view_dir, vec3 f0, vec3 albedo,
+         float roughness, float metalness, float env_map_rotation, vec3 lr) {
+  // env_irradiance_tex: Irradiance map
+  // env_radiance_tex: Radiance map
+  // brdf_lut: Look-up table for BRDF
+  // normal: Surface normal
+  // view_dir: View direction
+  // f0: Reflectivity at normal incidence
+  // albedo: Surface albedo
+  // roughness: Surface roughness factor
+  // metalness: Metalness factor
+  // env_map_rotation: Rotation of the environment map
+  // lr: Reflection direction for specular IBL
+  vec3 irradiance = texture(env_irradiance_tex, normal).rgb;
+  float n_dot_v = max(dot(normal, view_dir), 0.0);
+  vec3 f = fresnel_schlick_roughness(f0, n_dot_v, roughness);
+  vec3 kd = (1.0 - f) * (1.0 - metalness);
+  vec3 diffuse_ibl = albedo * irradiance;
 
-  int envRadianceTexLevels = textureQueryLevels(envRadianceTex);
-  vec3 R = 2.0 * dot(viewDir, normal) * normal - viewDir;
-  vec3 specularIrradiance =
-      textureLod(envRadianceTex, RotateVectorAboutY(envMapRotation, Lr),
-                 roughness * float(envRadianceTexLevels))
+  int env_radiance_tex_levels = textureQueryLevels(env_radiance_tex);
+  vec3 r = 2.0 * dot(view_dir, normal) * normal - view_dir;
+  vec3 specular_irradiance =
+      textureLod(env_radiance_tex, rotate_vector_about_y(env_map_rotation, lr),
+                 roughness * float(env_radiance_tex_levels))
           .rgb;
 
-  vec3 specularIBL = specularIrradiance;
+  vec2 specular_brdf = texture(brdf_lut, vec2(n_dot_v, 1.0 - roughness)).rg;
+  vec3 specular_ibl =
+      specular_irradiance * (f0 * specular_brdf.x + specular_brdf.y);
 
-  return kd * diffuseIBL + specularIBL;
+  return kd * diffuse_ibl + specular_ibl;
 }
 
 #endif // GPGU_PBR_UTILITY

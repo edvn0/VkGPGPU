@@ -160,6 +160,7 @@ auto SceneRenderer::destroy() -> void {
 
   white_texture.reset();
   black_texture.reset();
+  brdf_lookup_texture.reset();
 }
 
 auto SceneRenderer::begin_renderpass(const Framebuffer &framebuffer) -> void {
@@ -288,6 +289,10 @@ auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer,
   vkCmdBindVertexBuffers(command_buffer->get_command_buffer(), index, 1,
                          buffers.data(), offset.data());
 }
+auto SceneRenderer::submit_aabb(const AABB &aabb, const glm::mat4 &transform)
+    -> void {
+  geometry_renderer.submit_aabb(aabb, transform);
+}
 
 auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
                                        const glm::mat4 &transform) -> void {
@@ -327,11 +332,6 @@ auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
   ubo->write(renderer_ubo);
 
   const auto &ubo_shadow = ubos->get(1, current_frame);
-  shadow_ubo.projection =
-      glm::ortho(-depth_factor.value, depth_factor.value, -depth_factor.value,
-                 depth_factor.value, depth_factor.near, depth_factor.far);
-  shadow_ubo.view = glm::lookAt(sun_position, {0, 0, 0}, {0, 1, 0});
-  shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
   shadow_ubo.bias_and_default = {depth_factor.bias, depth_factor.default_value};
 
   ubo_shadow->write(shadow_ubo);
@@ -412,6 +412,7 @@ auto SceneRenderer::geometry_pass() -> void {
       material->set("u_EnvIrradianceTex",
                     *scene_environment.irradiance_texture);
       material->set("u_EnvRadianceTex", *scene_environment.radiance_texture);
+      material->set("u_BRDFLut", SceneRenderer::get_brdf_lookup_texture());
       update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
       material->bind(*command_buffer, *selected_pipeline, current_frame);
@@ -438,6 +439,9 @@ auto SceneRenderer::geometry_pass() -> void {
         .vertex_offset = submesh.base_vertex,
     });
   }
+
+  geometry_renderer.update_all_materials_for_rendering(*this);
+  geometry_renderer.flush(*command_buffer, current_frame);
 }
 
 auto SceneRenderer::debug_pass() -> void {
@@ -552,7 +556,7 @@ void SceneRenderer::push_constants(const GraphicsPipeline &pipeline,
 }
 
 void SceneRenderer::update_material_for_rendering(
-    FrameIndex frame_index, Material &material_for_update,
+    const FrameIndex frame_index, Material &material_for_update,
     BufferSet<Buffer::Type::Uniform> *ubo_set,
     BufferSet<Buffer::Type::Storage> *sbo_set) {
 
@@ -566,11 +570,11 @@ void SceneRenderer::update_material_for_rendering(
           Config::frame_count, ubo_set, material_for_update);
 
   if (sbo_set != nullptr) {
-    const auto &storage_buffer_write_sets =
-        create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-            Config::frame_count, sbo_set, material_for_update);
 
-    if (!storage_buffer_write_sets.empty()) {
+    if (const auto &storage_buffer_write_sets =
+            create_or_get_write_descriptor_for<Buffer::Type::Storage>(
+                Config::frame_count, sbo_set, material_for_update);
+        !storage_buffer_write_sets.empty()) {
       for (u32 frame = 0; frame < Config::frame_count; ++frame) {
         auto &ubo_frame_descriptors = write_descriptors[frame];
         const auto &sbo_frame_descriptors = storage_buffer_write_sets[frame];
@@ -707,6 +711,13 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   disarray_texture = Texture::construct(*device, FS::texture("D.png"));
 
+  brdf_lookup_texture = Texture::construct_shader(
+      *device, TextureProperties{
+                   .format = ImageFormat::UNORM_RGBA8,
+                   .path = FS::texture("BRDF_LUT.tga"),
+                   .address_mode = SamplerAddressMode::ClampToBorder,
+               });
+
   shader_cache.try_emplace(
       "Shadow", Shader::construct(*device, FS::shader("Shadow.vert.spv"),
                                   FS::shader("Shadow.frag.spv")));
@@ -823,6 +834,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   }
 
   create_pool_and_layout();
+
+  geometry_renderer.create(*geometry_framebuffer, 100);
 }
 
 auto SceneRenderer::create_pool_and_layout() -> void {

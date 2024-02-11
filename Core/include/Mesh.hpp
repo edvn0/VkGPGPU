@@ -122,7 +122,7 @@ private:
                          Material &submesh_material, aiString ai_tex_path);
 
   struct Deleter {
-    auto operator()(ImporterImpl *pimpl) -> void;
+    auto operator()(ImporterImpl *pimpl) const -> void;
   };
   Scope<ImporterImpl, Deleter> importer;
 

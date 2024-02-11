@@ -183,14 +183,28 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     const auto &view = camera.get_view_matrix();
     const auto &projection = camera.get_projection_matrix();
 
+    const auto payload =
+        UI::accept_drag_drop_payload(UI::Identifiers::fs_widget_identifier);
+    if (const std::filesystem::path path{payload}; !path.empty()) {
+      // Load scene if the file format is .scene
+      if (path.extension() == ".scene") {
+        ECS::SceneSerialiser serialiser;
+        scene->clear();
+        serialiser.deserialise(*scene, payload);
+        scene->initialise_device_dependent_objects(*get_device());
+        scene->sort();
+      }
+    }
+
     if (!selected_entity)
       return;
 
     auto maybe_entity = scene->get_entity(*selected_entity);
-    if (!maybe_entity)
+    if (!maybe_entity || !maybe_entity->valid())
       return;
 
     auto const &entity = *maybe_entity;
+
     auto &transform_component = entity.get_transform();
     auto transform = transform_component.compute();
 
@@ -221,42 +235,13 @@ void ClientApp::on_interface(InterfaceSystem &system) {
       glm::decompose(transform, scale, orientation, translation, skew,
                      perspective);
 
-      // Perform smooth updates
       switch (current_operation) {
       case GuizmoOperation::T: {
         transform_component.position = translation;
         break;
       }
       case GuizmoOperation::R: {
-        glm::vec3 original_rotation_euler_angles =
-            transform_component.get_rotation_in_euler_angles();
-
-        original_rotation_euler_angles.x =
-            fmodf(original_rotation_euler_angles.x + glm::pi<float>(),
-                  glm::two_pi<float>()) -
-            glm::pi<float>();
-        original_rotation_euler_angles.y =
-            fmodf(original_rotation_euler_angles.y + glm::pi<float>(),
-                  glm::two_pi<float>()) -
-            glm::pi<float>();
-        original_rotation_euler_angles.z =
-            fmodf(original_rotation_euler_angles.z + glm::pi<float>(),
-                  glm::two_pi<float>()) -
-            glm::pi<float>();
-
-        glm::vec3 deltaRotationEuler =
-            glm::eulerAngles(orientation) - original_rotation_euler_angles;
-
-        if (fabs(deltaRotationEuler.x) < 0.001)
-          deltaRotationEuler.x = 0.0f;
-        if (fabs(deltaRotationEuler.y) < 0.001)
-          deltaRotationEuler.y = 0.0f;
-        if (fabs(deltaRotationEuler.z) < 0.001)
-          deltaRotationEuler.z = 0.0f;
-
-        transform_component.set_rotation_as_euler_angles(
-            transform_component.get_rotation_in_euler_angles() +=
-            deltaRotationEuler);
+        transform_component.rotation = orientation;
         break;
       }
       case GuizmoOperation::S: {

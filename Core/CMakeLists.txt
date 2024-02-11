@@ -26,6 +26,7 @@ set(SOURCES
     include/Formatters.hpp
     include/Framebuffer.hpp
     include/GIFTexture.hpp
+    include/GeometryRenderer.hpp
     include/Mesh.hpp
     include/SceneRenderer.hpp
     include/GenericCache.hpp
@@ -69,6 +70,7 @@ set(SOURCES
     src/Formatters.cpp
     src/Framebuffer.cpp
     src/GIFTexture.cpp
+    src/GeometryRenderer.cpp
     src/Image.cpp
     src/Instance.cpp
     src/InterfaceSystem.cpp

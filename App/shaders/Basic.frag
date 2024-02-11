@@ -6,6 +6,7 @@
 
 layout(set = 1, binding = 29) uniform samplerCube u_EnvIrradianceTex;
 layout(set = 1, binding = 30) uniform samplerCube u_EnvRadianceTex;
+layout(set = 1, binding = 31) uniform sampler2D u_BRDFLut;
 
 layout(location = 0) in vec2 in_uvs;
 layout(location = 1) in vec4 in_fragment_pos;
@@ -60,7 +61,7 @@ void main() {
 
   // Light model
 
-  vec3 lightColor = renderer.light_colour.rgb;
+  vec3 light_colour = renderer.light_colour.rgb;
   vec3 lightDir = -normalize(renderer.light_dir.xyz);
   float NDF, G;
   vec3 kS, kD, specular;
@@ -90,19 +91,19 @@ void main() {
 
   // Calculate soft shadow factor
   vec3 projCoords = in_shadow_pos.xyz / in_shadow_pos.w;
-  vec2 shadowMapSize = vec2(4096, 4096); // Example, use actual size
-  float shadowFactor = calculateSoftShadow(
+  vec2 shadowMapSize = vec2(4096, 4096);
+  float shadow_factor = calculateSoftShadow(
       shadow_map, projCoords, normal, normalize(-renderer.light_dir.xyz),
-      shadowMapSize, 3); // Example filter size of 3
+      shadowMapSize, 3, shadow.bias_and_default.x); // Example filter size of 3
 
   // Incorporate the shadow factor into the diffuse and specular components
-  vec3 litColor = (diffuse + specular) * lightColor * shadowFactor;
+  vec3 litColor = (diffuse + specular) * light_colour * shadow_factor;
 
   // Combine results with ambient lighting unaffected by shadows
   vec3 ambient = vec3(0.03) * albedo * ao;
   vec3 iblContribution =
-      IBL(u_EnvIrradianceTex, u_EnvRadianceTex, normal, viewDir, F0, albedo,
-          roughness, metalness, 20.0F, reflect(-viewDir, normal));
+      IBL(u_EnvIrradianceTex, u_EnvRadianceTex, u_BRDFLut, normal, viewDir, F0,
+          albedo, roughness, metalness, 20.0F, reflect(-viewDir, normal));
   vec3 color = ambient + litColor + iblContribution;
 
   out_colour = vec4(gamma_correct(color), texture(albedo_map, in_uvs).a);

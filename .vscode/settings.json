@@ -3,6 +3,7 @@
   "C_Cpp.default.compileCommands": "${workspaceFolder}\\compile_commands.json",
   "C_Cpp.codeAnalysis.clangTidy.useBuildPath": true,
   "cSpell.words": [
+    "aabb",
     "blit",
     "databuffer",
     "librenderdoc",
@@ -119,6 +120,7 @@
     "xutility": "cpp",
     "coroutine": "cpp",
     "resumable": "cpp",
-    "execution": "cpp"
+    "execution": "cpp",
+    "valarray": "cpp"
   }
 }

@@ -42,7 +42,12 @@ public:
   [[nodiscard]] auto get_entity(Core::u64) -> std::optional<Entity>;
 
   auto clear() -> void { registry.clear(); }
+  auto sort(auto &&func) -> void {
+    registry.sort(std::forward<decltype(func)>(func));
+  }
+  auto sort() -> void;
   void set_scene_name(const std::string_view scene_name) { name = scene_name; }
+  void initialise_device_dependent_objects(const Core::Device &device);
 
 private:
   std::string name{};

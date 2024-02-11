@@ -26,6 +26,9 @@ class AABB {
 
 public:
   AABB() = default;
+  constexpr AABB(const glm::vec3 &min, const glm::vec3 &max) noexcept
+      : min_max_x(min.x, max.x), min_max_y(min.y, max.y),
+        min_max_z(min.z, max.z) {}
   constexpr AABB(const glm::vec2 &for_x, const glm::vec2 &for_y,
                  const glm::vec2 &for_z) noexcept
       : min_max_x(for_x.x, for_x.y), min_max_y(for_y.x, for_y.y),
@@ -65,17 +68,29 @@ public:
     min_max_z.max = glm::max(new_max.z, min_max_z.max);
   }
 
-  [[nodiscard]] auto max_vector() const {
+  [[nodiscard]] auto max_vector() const -> glm::vec4 {
     return glm::vec4{min_max_x.max, min_max_y.max, min_max_z.max, 1.0F};
   }
-  [[nodiscard]] auto min_vector() const {
+  [[nodiscard]] auto min_vector() const -> glm::vec4 {
     return glm::vec4{min_max_x.min, min_max_y.min, min_max_z.min, 1.0F};
   }
-  [[nodiscard]] auto min() const {
+  [[nodiscard]] auto min() const -> glm::vec3 {
     return glm::vec3{min_max_x.min, min_max_y.min, min_max_z.min};
   }
-  [[nodiscard]] auto max() const {
+  [[nodiscard]] auto max() const -> glm::vec3 {
     return glm::vec3{min_max_x.max, min_max_y.max, min_max_z.max};
+  }
+
+  [[nodiscard]] auto center() const -> glm::vec3 {
+    return (max() - min()) / 2.0F;
+  }
+  [[nodiscard]] auto center_vector() const -> glm::vec4 {
+    return (max_vector() - min_vector()) / 2.0F;
+  }
+
+  auto get_modifiable_min_max()
+      -> std::tuple<AABBRange &, AABBRange &, AABBRange &> {
+    return {min_max_x, min_max_y, min_max_z};
   }
 
 private:

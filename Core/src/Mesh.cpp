@@ -126,7 +126,9 @@ struct ImporterImpl {
   const aiScene *scene;
 };
 
-auto Mesh::Deleter::operator()(ImporterImpl *impl) -> void { delete impl; }
+auto Mesh::Deleter::operator()(ImporterImpl *impl) const -> void {
+  delete impl;
+}
 
 namespace {
 constexpr auto to_mat4_from_assimp(const aiMatrix4x4 &matrix) -> glm::mat4 {
@@ -179,20 +181,10 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 
 static constexpr u32 mesh_import_flags =
     aiProcess_CalcTangentSpace | // Create binormals/tangents just in case
-    aiProcess_Triangulate |      // Make sure we're triangles
-    aiProcess_FlipUVs |
-    aiProcess_SortByPType |    // Split meshes by primitive type
-    aiProcess_GenNormals |     // Make sure we have legit normals
-    aiProcess_GenUVCoords |    // Convert UVs if required
-                               //		aiProcess_OptimizeGraph |
-    aiProcess_OptimizeMeshes | // Batch draws where possible
-    aiProcess_JoinIdenticalVertices |
-    aiProcess_LimitBoneWeights | // If more than N (=4) bone weights, discard
-                                 // least influencing bones and renormalise sum
-                                 // to 1
-    aiProcess_ValidateDataStructure | // Validation
-    aiProcess_GlobalScale; // e.g. convert cm to m for fbx import (and other
-                           // formats where cm is native)
+    aiProcess_FlipUVs | aiProcess_ConvertToLeftHanded | aiProcess_GlobalScale |
+    aiProcess_GenNormals | aiProcess_GenUVCoords
+
+    ;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
@@ -263,26 +255,45 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     ensure(mesh->HasPositions(), "Meshes require positions.");
     ensure(mesh->HasNormals(), "Meshes require normals.");
 
+    auto rotation =
+        glm::rotate(glm::mat4{1.0F}, glm::radians(90.0F), glm::vec3{1, 0, 0});
+
     // Vertices
     auto &submesh_aabb = submesh.bounding_box;
     for (std::size_t i = 0; i < mesh->mNumVertices; i++) {
       Vertex vertex{};
-      vertex.pos = {mesh->mVertices[i].x, mesh->mVertices[i].y,
-                    mesh->mVertices[i].z};
-      vertex.normals = {mesh->mNormals[i].x, mesh->mNormals[i].y,
-                        mesh->mNormals[i].z};
+      vertex.pos = {
+          mesh->mVertices[i].x,
+          mesh->mVertices[i].y,
+          mesh->mVertices[i].z,
+      };
+      vertex.pos = rotation * glm::vec4{vertex.pos, 1.0F};
       submesh_aabb.update(vertex.pos);
+      vertex.normals = {
+          mesh->mNormals[i].x,
+          mesh->mNormals[i].y,
+          mesh->mNormals[i].z,
+      };
+      vertex.normals = rotation * glm::vec4{vertex.normals, 1.0F};
 
       if (mesh->HasTangentsAndBitangents()) {
-        vertex.tangents = {mesh->mTangents[i].x, mesh->mTangents[i].y,
-                           mesh->mTangents[i].z};
-        vertex.bitangents = {mesh->mBitangents[i].x, mesh->mBitangents[i].y,
-                             mesh->mBitangents[i].z};
+        vertex.tangents = {
+            mesh->mTangents[i].x,
+            mesh->mTangents[i].y,
+            mesh->mTangents[i].z,
+        };
+        vertex.bitangents = {
+            mesh->mBitangents[i].x,
+            mesh->mBitangents[i].y,
+            mesh->mBitangents[i].z,
+        };
       }
 
       if (mesh->HasTextureCoords(0)) {
-        vertex.uvs = {mesh->mTextureCoords[0][i].x,
-                      mesh->mTextureCoords[0][i].y};
+        vertex.uvs = {
+            mesh->mTextureCoords[0][i].x,
+            mesh->mTextureCoords[0][i].y,
+        };
       }
 
       vertices.push_back(vertex);
@@ -300,6 +311,8 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     }
   }
 
+  traverse_nodes(submeshes, importer, importer->scene->mRootNode);
+
   vertex_buffer = Buffer::construct(*device, vertices.size() * sizeof(Vertex),
                                     Buffer::Type::Vertex, 0);
   vertex_buffer->write(std::span{vertices});
@@ -307,15 +320,43 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
                                    Buffer::Type::Index, 0);
   index_buffer->write(std::span{indices});
 
-  traverse_nodes(submeshes, importer, importer->scene->mRootNode);
+  static constexpr auto transform_aabb = [](const auto &aabb,
+                                            const auto &transform) {
+    std::vector<glm::vec3> corners;
 
+    // Define all eight corners of the AABB
+    const glm::vec3 &min = aabb.min();
+    const glm::vec3 &max = aabb.max();
+    corners.push_back(transform * glm::vec4(min.x, min.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, min.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, max.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, max.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, min.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, min.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, max.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, max.y, max.z, 1.0));
+
+    // Calculate new AABB in world space
+    auto newMin = glm::vec3(std::numeric_limits<float>::max());
+    auto newMax = glm::vec3(std::numeric_limits<float>::lowest());
+    for (const auto &corner : corners) {
+      newMin = glm::min(newMin, glm::vec3(corner));
+      newMax = glm::max(newMax, glm::vec3(corner));
+    }
+
+    return AABB{newMin, newMax};
+  };
+  glm::vec3 globalMin(std::numeric_limits<float>::max());
+  glm::vec3 globalMax(std::numeric_limits<float>::lowest());
   for (const auto &submesh : submeshes) {
-    const auto &submesh_aabb = submesh.bounding_box;
-    const auto min = glm::vec3(submesh.transform * submesh_aabb.min_vector());
-    const auto max = glm::vec3(submesh.transform * submesh_aabb.max_vector());
 
-    bounding_box.update(min, max);
+    const auto &submesh_aabb = submesh.bounding_box;
+    AABB transformedAABB = transform_aabb(submesh_aabb, submesh.transform);
+    globalMin = glm::min(globalMin, transformedAABB.min());
+    globalMax = glm::max(globalMax, transformedAABB.max());
   }
+
+  bounding_box = AABB(globalMin, globalMax);
 
   // Materials
   const auto &white_texture = SceneRenderer::get_white_texture();

@@ -3,6 +3,7 @@
 #include "BufferSet.hpp"
 #include "Destructors.hpp"
 #include "Framebuffer.hpp"
+#include "GeometryRenderer.hpp"
 #include "Material.hpp"
 #include "Mesh.hpp"
 #include "Pipeline.hpp"
@@ -32,7 +33,8 @@ struct CommandKey {
 
 class SceneRenderer {
 public:
-  explicit SceneRenderer(const Device &dev) : device(&dev) {}
+  explicit SceneRenderer(const Device &dev)
+      : device(&dev), geometry_renderer({}, *device) {}
 
   auto destroy() -> void;
   auto begin_renderpass(const Framebuffer &framebuffer) -> void;
@@ -50,6 +52,7 @@ public:
   auto bind_vertex_buffer(const Buffer &vertex_buffer) const -> void;
   auto bind_vertex_buffer(const Buffer &vertex_buffer, u32 offset,
                           u32 index) const -> void;
+  auto submit_aabb(const AABB &aabb, const glm::mat4 &transform = {}) -> void;
   auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
       -> void;
   auto end_renderpass() -> void;
@@ -76,6 +79,7 @@ public:
   auto get_depth_factors() -> auto & { return depth_factor; }
   auto get_grid_configuration() -> auto & { return grid_ubo; }
   auto get_renderer_configuration() -> auto & { return renderer_ubo; }
+  auto get_shadow_configuration() -> auto & { return shadow_ubo; }
   auto create_pool_and_layout() -> void;
 
   [[nodiscard]] auto get_command_buffer() const -> const auto & {
@@ -92,12 +96,28 @@ public:
   [[nodiscard]] static auto get_black_texture() -> const Texture & {
     return *black_texture;
   }
+  [[nodiscard]] static auto get_brdf_lookup_texture() -> const Texture & {
+    return *brdf_lookup_texture;
+  }
+
+  [[nodiscard]] auto get_current_index() const -> FrameIndex {
+    return current_frame;
+  }
+
+  [[nodiscard]] auto get_ubos() -> Scope<BufferSet<Buffer::Type::Uniform>> & {
+    return ubos;
+  }
+  [[nodiscard]] auto get_ssbos() -> Scope<BufferSet<Buffer::Type::Storage>> & {
+    return ssbos;
+  }
 
 private:
   const Device *device;
   Scope<CommandBuffer> command_buffer{nullptr};
   Scope<CommandBuffer> compute_command_buffer{nullptr};
   FrameIndex current_frame{0};
+
+  GeometryRenderer geometry_renderer;
 
   Extent<u32> extent{};
 
@@ -123,6 +143,7 @@ private:
 
   static inline Scope<Texture> white_texture;
   static inline Scope<Texture> black_texture;
+  static inline Scope<Texture> brdf_lookup_texture;
   Scope<Texture> disarray_texture;
 
   glm::vec3 sun_position{3, -5, -3};

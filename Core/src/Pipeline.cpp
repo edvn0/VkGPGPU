@@ -317,6 +317,10 @@ auto GraphicsPipeline::destroy() -> void {
 GraphicsPipeline::~GraphicsPipeline() { destroy(); };
 
 auto GraphicsPipeline::bind(const CommandBuffer &buffer) const -> void {
+  if (configuration.polygon_mode == PolygonMode::Line) {
+    vkCmdSetLineWidth(buffer.get_command_buffer(), configuration.line_width);
+  }
+
   vkCmdBindPipeline(buffer.get_command_buffer(),
                     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }

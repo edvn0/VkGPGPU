@@ -34,7 +34,7 @@ struct TransformComponent {
   auto update(const glm::vec3 &position, const glm::quat &rotation,
               const glm::vec3 &scale) -> void;
 
-  auto get_rotation_in_euler_angles() const -> glm::vec3 {
+  [[nodiscard]] auto get_rotation_in_euler_angles() const -> glm::vec3 {
     return glm::eulerAngles(rotation);
   }
 
