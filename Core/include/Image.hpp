@@ -35,8 +35,8 @@ struct ImageProperties {
   ImageTiling tiling{ImageTiling::Optimal};
   ImageUsage usage{ImageUsage::Sampled};
   ImageLayout layout{ImageLayout::ColorAttachmentOptimal};
-  SamplerFilter min_filter{SamplerFilter::Nearest};
-  SamplerFilter max_filter{SamplerFilter::Nearest};
+  SamplerFilter min_filter{SamplerFilter::Linear};
+  SamplerFilter max_filter{SamplerFilter::Linear};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
   CompareOperation compare_op{CompareOperation::Less};

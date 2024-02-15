@@ -88,6 +88,7 @@ private:
 
   const Device &device;
   std::string name{};
+  usize hash_value{0};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
   Reflection::ReflectionData reflection_data{};
   std::unordered_map<Type, VkShaderModule> shader_modules{};

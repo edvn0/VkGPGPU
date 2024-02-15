@@ -20,7 +20,13 @@ layout(location = 3) out vec3 out_normals;
 layout(location = 4) out vec4 out_colour;
 layout(location = 5) out mat3 out_tbn;
 
-void main() {
+mat4 depthBias = mat4(0.5, 0.0, 0.0, 0.0,
+                      0.0, 0.5, 0.0, 0.0,
+                      0.0, 0.0, 0.5, 0.0,
+                      0.5, 0.5, 0.5, 1.0);
+
+void main()
+{
   mat4 transform = mat4(
       vec4(transform_row_zero.x, transform_row_one.x, transform_row_two.x, 0.0),
       vec4(transform_row_zero.y, transform_row_one.y, transform_row_two.y, 0.0),
@@ -30,7 +36,7 @@ void main() {
 
   vec4 computed = transform * vec4(pos, 1.0F);
   gl_Position = renderer.view_projection * computed;
-  out_shadow_pos = shadow.view_projection * computed;
+  out_shadow_pos = depthBias * shadow.view_projection * computed;
 
   out_uvs = uvs;
   out_fragment_pos = computed;

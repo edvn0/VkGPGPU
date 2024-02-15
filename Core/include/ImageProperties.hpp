@@ -118,12 +118,12 @@ enum class ImageFormat : std::uint8_t {
 auto to_vulkan_format(ImageFormat format) -> VkFormat;
 
 enum class SamplerFilter : std::uint8_t {
-  Nearest,
+  Nearest = 0,
   Linear,
 };
 
 enum class SamplerAddressMode : std::uint8_t {
-  Repeat,
+  Repeat = 0,
   MirroredRepeat,
   ClampToEdge,
   ClampToBorder,

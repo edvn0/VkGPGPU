@@ -163,7 +163,7 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
           entt::exclude<SunComponent, CameraComponent>);
   // Draw AABBS
   mesh_view.each([&](auto, const auto &transform, const auto &mesh) {
-    if (mesh.mesh) {
+    if (mesh.mesh && mesh.draw_aabb) {
       scene_renderer.submit_aabb(mesh.mesh->get_aabb(), transform.compute());
     }
   });
@@ -246,6 +246,16 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
   metahuman_model.add_component<MeshComponent>(
       Core::Mesh::reference_import_from(
           device, Core::FS::model("metahuman/metahuman.fbx")));
+
+  auto sponza_model = create_entity("Sponza");
+  auto &sponza_transform = sponza_model.add_component<TransformComponent>();
+  sponza_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
+  sponza_transform.scale = glm::vec3{1.F, 1.F, 1.F};
+  sponza_transform.rotation =
+      glm::rotate(sponza_transform.rotation, glm::radians(90.0F),
+                  glm::vec3{1.0F, 0.0F, 0.0F});
+  sponza_model.add_component<MeshComponent>(Core::Mesh::reference_import_from(
+      device, Core::FS::model("sponza/sponza.obj")));
 }
 
 auto Scene::on_destroy() -> void {

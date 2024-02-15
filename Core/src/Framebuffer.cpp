@@ -140,7 +140,7 @@ auto Framebuffer::create_framebuffer() -> void {
                   .usage =
                       ImageUsage::DepthStencilAttachment | ImageUsage::Sampled,
                   .layout = ImageLayout::DepthStencilReadOnlyOptimal,
-                  .address_mode = SamplerAddressMode::ClampToEdge,
+                  .address_mode = SamplerAddressMode::ClampToBorder,
                   .border_color = SamplerBorderColor::FloatOpaqueBlack,
                   .compare_op = CompareOperation::Less,
               });
@@ -188,8 +188,8 @@ auto Framebuffer::create_framebuffer() -> void {
         if (create_images) {
           ImageProperties spec{};
           spec.format = attachment_specification.format;
-          spec.min_filter = SamplerFilter::Nearest,
-          spec.max_filter = SamplerFilter::Nearest,
+          spec.min_filter = SamplerFilter::Linear,
+          spec.max_filter = SamplerFilter::Linear,
           spec.layout = ImageLayout::ShaderReadOnlyOptimal;
           spec.usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                        ImageUsage::TransferSrc | ImageUsage::TransferDst;

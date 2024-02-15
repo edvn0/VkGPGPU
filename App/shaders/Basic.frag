@@ -19,18 +19,21 @@ layout(location = 0) out vec4 out_colour;
 
 vec3 gamma_correct(vec3 color) { return pow(color, vec3(1.0 / 2.2)); }
 
-vec3 getAlbedo() {
+vec3 getAlbedo()
+{
   vec4 albedo_colour = pc.albedo_colour;
   vec3 sampled = texture(albedo_map, in_uvs).rgb;
   return albedo_colour.rgb * sampled * in_colour.rgb;
 }
 
-float getMetalness() {
+float getMetalness()
+{
   float metalness_from_texture = texture(metallic_map, in_uvs).r;
   return metalness_from_texture * pc.metalness;
 }
 
-float getRoughness() {
+float getRoughness()
+{
   float roughness_from_texture = texture(roughness_map, in_uvs).r;
   float computed = roughness_from_texture * pc.roughness;
   return max(computed, 0.05);
@@ -38,7 +41,8 @@ float getRoughness() {
 
 float getAO() { return texture(ao_map, in_uvs).r; }
 
-vec3 getNormal() {
+vec3 getNormal()
+{
   if (pc.use_normal_map < 0)
     return in_normals;
 
@@ -51,8 +55,12 @@ vec3 getNormal() {
   return worldNormal;
 }
 
-void main() {
+void main()
+{
   vec3 albedo = getAlbedo();
+  if (texture(albedo_map, in_uvs).a < 0.1)
+    discard;
+
   float metalness = getMetalness();
   float roughness = getRoughness();
   float ao = getAO();
@@ -62,7 +70,7 @@ void main() {
   // Light model
 
   vec3 light_colour = renderer.light_colour.rgb;
-  vec3 lightDir = -normalize(renderer.light_dir.xyz);
+  vec3 lightDir = renderer.light_dir.xyz;
   float NDF, G;
   vec3 kS, kD, specular;
 
@@ -72,9 +80,9 @@ void main() {
   vec3 halfDir = normalize(viewDir + lightDir);
   float cosTheta = max(dot(normal, lightDir), 0.0);
 
-  NDF = distributionGGX(normal, halfDir, roughness);
-  G = geometrySmith(normal, viewDir, lightDir, roughness);
-  vec3 F = fresnelSchlick(max(dot(halfDir, viewDir), 0.0), F0);
+  NDF = distribution_ggx(normal, halfDir, roughness);
+  G = geometry_smith(normal, viewDir, lightDir, roughness);
+  vec3 F = fresnel_schlick(max(dot(halfDir, viewDir), 0.0), F0);
 
   vec3 nominator = NDF * G * F;
   float denominator =
@@ -94,7 +102,7 @@ void main() {
   vec2 shadowMapSize = vec2(4096, 4096);
   float shadow_factor = calculateSoftShadow(
       shadow_map, projCoords, normal, normalize(-renderer.light_dir.xyz),
-      shadowMapSize, 3, shadow.bias_and_default.x); // Example filter size of 3
+      shadowMapSize, 0, shadow.bias_and_default.x);
 
   // Incorporate the shadow factor into the diffuse and specular components
   vec3 litColor = (diffuse + specular) * light_colour * shadow_factor;
@@ -102,7 +110,7 @@ void main() {
   // Combine results with ambient lighting unaffected by shadows
   vec3 ambient = vec3(0.03) * albedo * ao;
   vec3 iblContribution =
-      IBL(u_EnvIrradianceTex, u_EnvRadianceTex, u_BRDFLut, normal, viewDir, F0,
+      ibl(u_EnvIrradianceTex, u_EnvRadianceTex, u_BRDFLut, normal, viewDir, F0,
           albedo, roughness, metalness, 20.0F, reflect(-viewDir, normal));
   vec3 color = ambient + litColor + iblContribution;
 

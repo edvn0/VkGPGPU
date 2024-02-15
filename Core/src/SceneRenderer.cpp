@@ -525,7 +525,7 @@ auto SceneRenderer::flush() -> void {
     environment_pass();
     geometry_pass();
     debug_pass();
-    grid_pass();
+    // grid_pass();
     end_renderpass();
   }
   {

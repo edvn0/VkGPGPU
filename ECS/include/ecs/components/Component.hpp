@@ -54,6 +54,7 @@ struct TextureComponent {
 struct MeshComponent {
   Core::Ref<Core::Mesh> mesh;
   std::filesystem::path path;
+  bool draw_aabb{false};
 
   static constexpr std::string_view component_name{"Mesh"};
 };

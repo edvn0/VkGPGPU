@@ -201,14 +201,23 @@ auto Material::update_for_rendering(
   };
 
   std::unordered_map<u32, std::vector<VkWriteDescriptorSet>> split_by_type;
-  split_by_type.try_emplace(0, 0);
-  split_by_type.try_emplace(1, 0);
+  const auto buffer_wds_count =
+      buffer_set_write_descriptors.size() > 0
+          ? buffer_set_write_descriptors[frame_index].size()
+          : 0;
+  const auto image_wds_count =
+      frame_write_descriptors.size() - buffer_wds_count;
 
+  split_by_type.try_emplace(0, buffer_wds_count);
+  split_by_type.try_emplace(1, image_wds_count);
+
+  usize buffer_index = 0;
+  usize image_index = 0;
   for (const auto &write_set : frame_write_descriptors) {
     if (is_image(write_set)) {
-      split_by_type.at(1).push_back(write_set);
+      split_by_type.at(1).at(image_index++) = write_set;
     } else {
-      split_by_type.at(0).push_back(write_set);
+      split_by_type.at(0).at(buffer_index++) = write_set;
     }
   }
 

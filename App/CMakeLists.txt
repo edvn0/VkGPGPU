@@ -30,7 +30,7 @@ if(Vulkan_GLSLC_EXECUTABLE)
         set(SHADER_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SHADER_NAME}.spv")
         add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
-            COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${SHADER_OUTPUT} -I ${CMAKE_CURRENT_SOURCE_DIR}/shaders/include
+            COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${SHADER_OUTPUT} -I ${CMAKE_CURRENT_SOURCE_DIR}/shaders/include -g
             DEPENDS ${SHADER}
             COMMENT "Compiling shader: ${SHADER_NAME}"
         )

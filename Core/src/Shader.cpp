@@ -69,6 +69,20 @@ Shader::Shader(
   const Reflection::Reflector reflector{*this};
   reflector.reflect(descriptor_set_layouts, reflection_data);
   create_descriptor_set_layouts();
+
+  static constexpr std::hash<std::string> string_hasher;
+  auto name_hash = string_hasher(name);
+  if (parsed_spirv_per_stage.contains(Type::Compute)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Compute));
+  }
+  if (parsed_spirv_per_stage.contains(Type::Vertex)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Vertex));
+  }
+  if (parsed_spirv_per_stage.contains(Type::Fragment)) {
+    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Fragment));
+  }
+
+  hash_value = name_hash;
 }
 
 Shader::~Shader() {
@@ -81,20 +95,7 @@ Shader::~Shader() {
   debug("Destroyed Shader '{}'", name);
 }
 
-auto Shader::hash() const -> usize {
-  static constexpr std::hash<std::string> string_hasher;
-  auto name_hash = string_hasher(name);
-  if (parsed_spirv_per_stage.contains(Type::Compute)) {
-    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Compute));
-  }
-  if (parsed_spirv_per_stage.contains(Type::Vertex)) {
-    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Vertex));
-  }
-  if (parsed_spirv_per_stage.contains(Type::Fragment)) {
-    name_hash ^= string_hasher(parsed_spirv_per_stage.at(Type::Fragment));
-  }
-  return name_hash;
-}
+auto Shader::hash() const -> usize { return hash_value; }
 
 auto Shader::has_descriptor_set(u32 set) const -> bool {
   return set < descriptor_set_layouts.size() &&

@@ -16,7 +16,7 @@ enum class MipGenerationStrategy : std::uint8_t {
 };
 
 struct MipGeneration {
-  MipGenerationStrategy strategy{MipGenerationStrategy::Literal};
+  MipGenerationStrategy strategy{MipGenerationStrategy::FromSize};
   u32 mips{1};
 };
 
@@ -30,8 +30,8 @@ struct TextureProperties {
   ImageUsage usage{ImageUsage::Sampled | ImageUsage::TransferDst |
                    ImageUsage::TransferSrc};
   ImageLayout layout{ImageLayout::ShaderReadOnlyOptimal};
-  SamplerFilter min_filter{SamplerFilter::Nearest};
-  SamplerFilter max_filter{SamplerFilter::Nearest};
+  SamplerFilter min_filter{SamplerFilter::Linear};
+  SamplerFilter max_filter{SamplerFilter::Linear};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
   MipGeneration mip_generation{};

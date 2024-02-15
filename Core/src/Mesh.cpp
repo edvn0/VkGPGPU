@@ -180,11 +180,7 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcess_CalcTangentSpace | // Create binormals/tangents just in case
-    aiProcess_FlipUVs | aiProcess_ConvertToLeftHanded | aiProcess_GlobalScale |
-    aiProcess_GenNormals | aiProcess_GenUVCoords
-
-    ;
+    aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {

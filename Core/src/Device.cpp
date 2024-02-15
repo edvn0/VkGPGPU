@@ -237,6 +237,7 @@ auto Device::create_vulkan_device(
   device_features.logicOp = VK_TRUE;
   device_features.wideLines = VK_TRUE;
   device_features.fillModeNonSolid = VK_TRUE;
+  device_features.samplerAnisotropy = VK_TRUE;
 
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
   queue_infos.reserve(index_queue_type_pairs.size());

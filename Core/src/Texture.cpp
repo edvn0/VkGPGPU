@@ -88,10 +88,6 @@ Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
           .usage = ImageUsage::Sampled | ImageUsage::Storage |
                    ImageUsage::TransferDst | ImageUsage::TransferSrc,
           .layout = ImageLayout::General,
-          .min_filter = SamplerFilter::Linear,
-          .max_filter = SamplerFilter::Linear,
-          .address_mode = SamplerAddressMode::Repeat,
-          .border_color = SamplerBorderColor::FloatOpaqueBlack,
       },
       data_buffer);
   debug("Created texture '{}', {} with size: {}", properties.identifier,
