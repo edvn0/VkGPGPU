@@ -418,3 +418,73 @@ TEST_CASE("Complex type std serialisation") {
     }
   }
 }
+
+TEST_CASE("Enum serialization and deserialization", "[enum]") {
+  enum class ExampleEnum : int { First = 1, Second = 2, Third = 3 };
+  SECTION("Serialise and deserialise ExampleEnum") {
+    ExampleEnum originalValue = ExampleEnum::Second;
+    std::stringstream stream = create_stream();
+
+    bool writeSuccess = ECS::write(stream, originalValue);
+    REQUIRE(writeSuccess);
+
+    ExampleEnum deserializedValue;
+
+    bool readSuccess = ECS::read(stream, deserializedValue);
+    REQUIRE(readSuccess);
+
+    REQUIRE(deserializedValue == originalValue);
+  }
+
+  SECTION("Validate deserialization of invalid ExampleEnum value") {
+    int invalidValue = 100;
+    std::stringstream stream = create_stream();
+
+    ECS::write(stream, invalidValue);
+
+    ExampleEnum deserializedValue = ExampleEnum::First;
+    bool readSuccess = ECS::read(stream, deserializedValue);
+
+    REQUIRE_FALSE(readSuccess);
+  }
+}
+
+TEST_CASE("Enum serialization and deserialization") {
+  enum class ExampleEnum : int { First = 1, Value2 = 9, Value3 = 100 };
+
+  SECTION("Value2") {
+    std::stringstream stream = create_stream();
+    ExampleEnum originalValue = ExampleEnum::Value2;
+
+    REQUIRE(ECS::write(stream, originalValue));
+
+    ExampleEnum deserializedValue;
+    REQUIRE(ECS::read(stream, deserializedValue));
+
+    REQUIRE(deserializedValue == originalValue);
+  }
+
+  SECTION("First") {
+    std::stringstream stream = create_stream();
+    ExampleEnum originalValue = ExampleEnum::First;
+
+    REQUIRE(ECS::write(stream, originalValue));
+
+    ExampleEnum deserializedValue;
+    REQUIRE(ECS::read(stream, deserializedValue));
+
+    REQUIRE(deserializedValue == originalValue);
+  }
+
+  SECTION("Value3") {
+    std::stringstream stream = create_stream();
+    ExampleEnum originalValue = ExampleEnum::Value3;
+
+    REQUIRE(ECS::write(stream, originalValue));
+
+    ExampleEnum deserializedValue;
+    REQUIRE(ECS::read(stream, deserializedValue));
+
+    REQUIRE(deserializedValue == originalValue);
+  }
+}

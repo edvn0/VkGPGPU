@@ -1,11 +1,13 @@
 #pragma once
 
+#include "Concepts.hpp"
 #include "Logger.hpp"
 #include "Math.hpp"
 
 #include <bit>
 #include <entt/entt.hpp>
 #include <istream>
+#include <magic_enum.hpp>
 #include <ostream>
 
 #include "ecs/components/Component.hpp"
@@ -190,6 +192,42 @@ auto read(std::istream &in, std::unordered_map<T, U> &map) -> bool {
 }
 // End std
 
+// Enums?
+
+template <Core::IsEnum E>
+bool is_valid_enum_value(std::underlying_type_t<E> value) {
+  return magic_enum::enum_contains<E>(value);
+}
+
+template <Core::IsEnum E>
+auto write(std::ostream &out, const E &enumerated_value) -> bool {
+  static_assert(std::is_enum_v<E>, "E must be an enum type.");
+  auto underlying = static_cast<std::underlying_type_t<E>>(enumerated_value);
+  return write(out, underlying); // Reuse write for underlying type
+}
+
+template <Core::IsEnum E> bool read(std::istream &in, E &enumerated_value) {
+  static_assert(std::is_enum_v<E>, "E must be an enum type.");
+  std::underlying_type_t<E> underlying_value;
+  if (!read(in, underlying_value)) { // Reuse read for underlying type
+    return false;
+  }
+
+  if (!is_valid_enum_value<E>(underlying_value)) {
+    error("Invalid enum value read from stream.");
+    return false;
+  }
+
+  auto enum_value_opt = magic_enum::enum_cast<E>(underlying_value);
+  if (!enum_value_opt.has_value()) {
+    error("Invalid enum value read from stream.");
+    return false;
+  }
+
+  enumerated_value = enum_value_opt.value();
+  return true;
+}
+
 template <class T> struct ComponentSerialiser;
 
 template <> struct ComponentSerialiser<IdentityComponent> {
@@ -294,11 +332,23 @@ template <> struct ComponentSerialiser<CameraComponent> {
                         std::ostream &out_stream) -> bool {
     if (!write(out_stream, component.field_of_view))
       return false;
+    if (!write(out_stream, component.camera_type))
+      return false;
+    if (!write(out_stream, component.near))
+      return false;
+    if (!write(out_stream, component.far))
+      return false;
     return true;
   }
 
   static auto deserialise(std::istream &in, CameraComponent &out) -> bool {
     if (!read(in, out.field_of_view))
+      return false;
+    if (!read(in, out.camera_type))
+      return false;
+    if (!read(in, out.near))
+      return false;
+    if (!read(in, out.far))
       return false;
     return true;
   }

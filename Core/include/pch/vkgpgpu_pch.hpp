@@ -18,10 +18,12 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stack>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>

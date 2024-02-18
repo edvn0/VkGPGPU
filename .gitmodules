@@ -32,3 +32,6 @@
 [submodule "ThirdParty/ImGuizmo"]
 	path = ThirdParty/ImGuizmo
 	url = git@github.com:CedricGuillemet/ImGuizmo.git
+[submodule "ThirdParty/magic_enum"]
+	path = ThirdParty/magic_enum
+	url = git@github.com:Neargye/magic_enum.git

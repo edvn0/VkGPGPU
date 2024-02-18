@@ -27,10 +27,13 @@ public:
   auto operator=(const Buffer &) -> Buffer & = delete;
   // Make movable
 
+  void resize(u64 new_size);
+
   [[nodiscard]] auto get_type() const noexcept -> Type { return type; }
   [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
   [[nodiscard]] auto get_size() const noexcept -> u64 { return size; }
   [[nodiscard]] auto get_binding() const noexcept -> u32 { return binding; }
+  auto set_binding(u32 bind) { binding = bind; }
   [[nodiscard]] auto get_buffer() const noexcept -> VkBuffer;
 
   [[nodiscard]] auto get_descriptor_info() const noexcept

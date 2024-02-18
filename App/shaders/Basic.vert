@@ -20,7 +20,7 @@ layout(location = 3) out vec3 out_normals;
 layout(location = 4) out vec4 out_colour;
 layout(location = 5) out mat3 out_tbn;
 
-mat4 depthBias = mat4(0.5, 0.0, 0.0, 0.0,
+mat4 depth_bias = mat4(0.5, 0.0, 0.0, 0.0,
                       0.0, 0.5, 0.0, 0.0,
                       0.0, 0.0, 0.5, 0.0,
                       0.5, 0.5, 0.5, 1.0);
@@ -36,11 +36,12 @@ void main()
 
   vec4 computed = transform * vec4(pos, 1.0F);
   gl_Position = renderer.view_projection * computed;
-  out_shadow_pos = depthBias * shadow.view_projection * computed;
+  out_shadow_pos = depth_bias * shadow.view_projection * computed;
 
   out_uvs = uvs;
   out_fragment_pos = computed;
-  // Calculate TBN
+
+ // Calculate TBN
   vec3 T = normalize(computed * vec4(tangent, 0.0F)).xyz;
   vec3 N = normalize(computed * vec4(normals, 0.0F)).xyz;
   vec3 B = normalize(computed * vec4(bitangents, 0.0F)).xyz;

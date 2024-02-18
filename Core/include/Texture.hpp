@@ -6,18 +6,36 @@
 #include "Image.hpp"
 #include "ImageProperties.hpp"
 
+#include <variant>
+
 namespace Core {
 
-enum class TextureDataStrategy : std::uint8_t { None, Keep, Delete };
-enum class MipGenerationStrategy : std::uint8_t {
+enum class TextureDataStrategy : u8 { None, Keep, Delete };
+enum class MipGenerationStrategy : u8 {
   FromSize,
   Literal,
   Unused,
 };
 
+struct LiteralMipData {
+  u32 mips;
+};
+
 struct MipGeneration {
-  MipGenerationStrategy strategy{MipGenerationStrategy::FromSize};
-  u32 mips{1};
+  std::variant<MipGenerationStrategy, LiteralMipData> strategy;
+
+  MipGeneration() : strategy(MipGenerationStrategy::FromSize) {}
+
+  explicit MipGeneration(MipGenerationStrategy strategy) : strategy(strategy) {}
+  explicit MipGeneration(u32 mips) : strategy(LiteralMipData{mips}) {}
+
+  MipGeneration(MipGenerationStrategy strat, u32 mips) {
+    if (strat == MipGenerationStrategy::Literal) {
+      strategy = LiteralMipData{mips};
+    } else {
+      strategy = strat;
+    }
+  }
 };
 
 struct TextureProperties {
@@ -34,8 +52,12 @@ struct TextureProperties {
   SamplerFilter max_filter{SamplerFilter::Linear};
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
-  MipGeneration mip_generation{};
+  MipGeneration mip_generation{MipGenerationStrategy::FromSize};
 };
+
+auto determine_mip_count(const MipGeneration &mipGeneration,
+                         const Extent<u32> &extent) -> u32;
+auto calculate_mip_count(const Extent<u32> &extent) -> u32;
 
 class Texture {
 public:

@@ -20,14 +20,6 @@
 
 namespace Core {
 
-class CustomStream : public Assimp::LogStream {
-public:
-  CustomStream() = default;
-  ~CustomStream() override = default;
-  void write(const char *message) override {
-    ::info("Message from CustomStream: {}", message);
-  }
-};
 // Select the kinds of messages you want to receive on this log stream
 static constexpr unsigned int severity =
     Assimp::Logger::Debugging | Assimp::Logger::Info | Assimp::Logger::Err |
@@ -180,12 +172,14 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded;
+    aiProcess_OptimizeGraph | aiProcess_OptimizeMeshes | aiProcess_GenNormals |
+    aiProcess_GenUVCoords | aiProcess_CalcTangentSpace | aiProcess_FlipUVs;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
   return Scope<Mesh>(new Mesh{device, file_path});
 }
+
 auto Mesh::reference_import_from(const Device &device,
                                  const FS::Path &file_path) -> Ref<Mesh> {
   const std::string key = file_path.string();
@@ -199,13 +193,14 @@ auto Mesh::reference_import_from(const Device &device,
   return mesh_cache.at(key);
 }
 
+auto Mesh::get_cube() -> const Ref<Mesh> & {
+  static const auto path = FS::model("cube.gltf").string();
+  return mesh_cache.at(path);
+}
+
 Mesh::Mesh(const Device &dev, const FS::Path &path)
     : device(&dev), file_path(path) {
   importer = make_scope<ImporterImpl, Mesh::Deleter>();
-
-  // Setup logger with CustomStream
-  Assimp::DefaultLogger::create("", Assimp::Logger::VERBOSE, severity);
-  Assimp::DefaultLogger::get()->attachStream(new CustomStream(), severity);
 
   importer->importer = make_scope<Assimp::Importer>();
 
@@ -215,7 +210,9 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
   const aiScene *loaded_scene =
       importer->importer->ReadFile(file_path.string(), mesh_import_flags);
   if (loaded_scene == nullptr) {
-    error("Mesh", "Failed to load mesh file: {0}", file_path.string());
+    auto error_string = importer->importer->GetErrorString();
+    error("Mesh: Failed to load mesh file: {0}. Reason: {1}",
+          file_path.string(), error_string);
     return;
   }
 
@@ -377,7 +374,6 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("metallic_map", white_texture);
     submesh_material->set("roughness_map", white_texture);
     submesh_material->set("ao_map", white_texture);
-    submesh_material->set("specular_map", white_texture);
     materials.push_back(submesh_material);
 
     Assimp::DefaultLogger::kill();
@@ -401,7 +397,6 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("metallic_map", white_texture);
     submesh_material->set("roughness_map", white_texture);
     submesh_material->set("ao_map", white_texture);
-    submesh_material->set("specular_map", white_texture);
 
     aiString ai_tex_path;
     glm::vec4 albedo_colour{0.8F, 0.8F, 0.8F, 1.0F};
@@ -631,12 +626,21 @@ auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
     -> Scope<Texture> {
   using enum Core::ImageUsage;
   const auto path = load_path_from_texture_path(texture_path);
+  if (path.empty())
+    return nullptr;
+
+  static std::mutex mutex;
+  std::unique_lock lock{mutex};
   return Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = path,
-                   .layout = ImageLayout::ShaderReadOnlyOptimal,
-               });
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .path = path,
+          .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
+                   ImageUsage::TransferSrc | ImageUsage::TransferDst,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .mip_generation = MipGeneration(MipGenerationStrategy::FromSize),
+      });
 }
 
 } // namespace Core

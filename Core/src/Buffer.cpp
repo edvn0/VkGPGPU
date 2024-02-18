@@ -95,17 +95,12 @@ void Buffer::initialise_vertex_buffer() {
 
   const auto is_vertex = type == Buffer::Type::Vertex;
 
-  auto usage = is_vertex ? Usage::AUTO_PREFER_HOST : Usage::AUTO_PREFER_DEVICE;
-  auto creation = Creation::MAPPED_BIT;
-  if (is_vertex) {
-    creation |= Creation::HOST_ACCESS_RANDOM_BIT;
-  }
+  auto usage = Usage::AUTO_PREFER_DEVICE;
 
   buffer_data->allocation = allocator.allocate_buffer(
       buffer_data->buffer, buffer_data->allocation_info, buffer_create_info,
       {
           .usage = usage,
-          .creation = creation,
       });
 }
 
@@ -117,19 +112,12 @@ void Buffer::initialise_index_buffer() {
   buffer_create_info.size = get_size();
   buffer_create_info.usage = to_vulkan_usage(type);
 
-  const auto is_index = type == Buffer::Type::Index;
-
-  auto usage = is_index ? Usage::AUTO_PREFER_HOST : Usage::AUTO_PREFER_DEVICE;
-  auto creation = Creation::MAPPED_BIT;
-  if (is_index) {
-    creation |= Creation::HOST_ACCESS_RANDOM_BIT;
-  }
+  auto usage = Usage::AUTO_PREFER_DEVICE;
 
   buffer_data->allocation = allocator.allocate_buffer(
       buffer_data->buffer, buffer_data->allocation_info, buffer_create_info,
       {
           .usage = usage,
-          .creation = creation,
       });
 }
 
@@ -188,14 +176,12 @@ auto Buffer::read_raw(size_t offset, size_t data_size) -> std::vector<char> {
   const auto is_always_mapped =
       buffer_data->allocation_info.pMappedData != nullptr;
   if (is_always_mapped) {
-    // If the buffer is always mapped, copy the data directly
     std::memcpy(
         data.data(),
         static_cast<const char *>(buffer_data->allocation_info.pMappedData) +
             offset,
         data_size);
   } else {
-    // Otherwise, map the buffer, copy the data, then unmap
     void *mapped_data{};
     verify(vmaMapMemory(Allocator::get_allocator(), buffer_data->allocation,
                         &mapped_data),
@@ -237,6 +223,25 @@ void Buffer::write(const void *data, u64 data_size, u64 offset) {
 
 void Buffer::write(const void *data, u64 data_size) {
   write(data, data_size, 0);
+}
+
+void Buffer::resize(u64 new_size) {
+  if (size == new_size)
+    return;
+
+  // Step 1: Destroy the current buffer and its allocation
+  Allocator allocator{"Buffer"};
+  allocator.deallocate_buffer(buffer_data->allocation, buffer_data->buffer);
+
+  // Step 2: Update the size
+  size = new_size;
+
+  // Step 3: Recreate the buffer with the new size
+  initialise_vulkan_buffer();
+  initialise_descriptor_info();
+
+  // Optional: Debug message to indicate successful resize
+  debug("Resized Buffer (type: {}, new size: {})", type, new_size);
 }
 
 auto Buffer::get_vulkan_type() const noexcept -> VkDescriptorType {

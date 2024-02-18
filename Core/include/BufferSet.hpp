@@ -61,6 +61,17 @@ public:
     return frame_set_binding_buffers.at(frame_index).at(set).at(binding);
   }
 
+  auto try_get(DescriptorBinding binding, FrameIndex frame_index,
+               DescriptorSet set = 0) -> const Buffer * {
+    if (!frame_set_binding_buffers.contains(frame_index))
+      return nullptr;
+    if (!frame_set_binding_buffers.at(frame_index).contains(set))
+      return nullptr;
+    if (!frame_set_binding_buffers.at(frame_index).at(set).contains(binding))
+      return nullptr;
+    return frame_set_binding_buffers.at(frame_index).at(set).at(binding).get();
+  }
+
   auto set(Scope<Buffer> &&buffer, FrameIndex frame_index,
            DescriptorSet set = DescriptorSet{0}) -> void {
     ensure(frame_index < frame_count, "BufferSet frame index out of range");

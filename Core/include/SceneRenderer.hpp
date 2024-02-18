@@ -53,6 +53,8 @@ public:
   auto bind_vertex_buffer(const Buffer &vertex_buffer, u32 offset,
                           u32 index) const -> void;
   auto submit_aabb(const AABB &aabb, const glm::mat4 &transform = {}) -> void;
+  auto submit_cube(floating side_length, const glm::mat4 &transform = {},
+                   const glm::vec4 &colour = Colours::white) -> void;
   auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
       -> void;
   auto end_renderpass() -> void;
@@ -110,6 +112,7 @@ public:
   [[nodiscard]] auto get_ssbos() -> Scope<BufferSet<Buffer::Type::Storage>> & {
     return ssbos;
   }
+  [[nodiscard]] auto get_extent() const -> const auto & { return extent; }
 
 private:
   const Device *device;
@@ -120,8 +123,6 @@ private:
   GeometryRenderer geometry_renderer;
 
   Extent<u32> extent{};
-
-  Scope<Mesh> cube_mesh;
 
   Scope<GraphicsPipeline> geometry_pipeline;
   Scope<GraphicsPipeline> wireframed_geometry_pipeline;
@@ -144,7 +145,6 @@ private:
   static inline Scope<Texture> white_texture;
   static inline Scope<Texture> black_texture;
   static inline Scope<Texture> brdf_lookup_texture;
-  Scope<Texture> disarray_texture;
 
   glm::vec3 sun_position{3, -5, -3};
 

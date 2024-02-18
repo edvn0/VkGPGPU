@@ -41,6 +41,9 @@ public:
   [[nodiscard]] auto get_constant_buffer() const -> const auto & {
     return constant_buffer;
   }
+  [[nodiscard]] auto get_stored_buffer(u32 index) const -> const auto & {
+    return buffer_references.at(index);
+  }
 
   auto
   update_for_rendering(FrameIndex frame_index,
@@ -91,16 +94,18 @@ private:
     Texture2D = 1,
     TextureCube = 2,
     Image2D = 3,
+    Buffer = 4,
   };
 
   struct PendingDescriptor {
     PendingDescriptorType type = PendingDescriptorType::None;
     VkWriteDescriptorSet write_set{};
     VkDescriptorImageInfo image_info{};
+    VkDescriptorBufferInfo buffer_info{};
     const Texture *texture{nullptr};
     const Image *image{nullptr};
     const TextureCube *texture_cube{nullptr};
-    VkDescriptorImageInfo descriptor_image_info{};
+    const Buffer *buffer{nullptr};
   };
 
   struct PendingDescriptorArray {
@@ -125,6 +130,7 @@ private:
   std::vector<const Texture *> texture_references;
   std::vector<const TextureCube *> texture_cube_references;
   std::vector<const Image *> image_references;
+  std::vector<const Buffer *> buffer_references;
 
   std::vector<std::vector<VkWriteDescriptorSet>> write_descriptors;
   std::vector<bool> dirty_descriptor_sets;

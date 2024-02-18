@@ -243,7 +243,7 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER> {
           const spirv_cross::SmallVector<spirv_cross::Resource> &resources,
           ReflectionData &output) -> void {
     for (const auto &resource : resources) {
-      const auto &name = resource.name;
+      const auto &name = compiler.get_name(resource.base_type_id);
       const auto &buffer_type = compiler.get_type(resource.base_type_id);
       auto binding =
           compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -272,6 +272,7 @@ template <> struct DescriptorTypeReflector<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER> {
           storage_buffer.size = size;
         }
       }
+      output.resources[name] = ShaderResourceDeclaration(name, binding, 1);
 
       shader_descriptor_set.storage_buffers[binding] =
           global_storage_buffers.at(descriptor_set).at(binding);

@@ -172,75 +172,67 @@ auto TextureCube::generate_mips(bool readonly) -> void {
   auto extent_as_i32 = extent.as<i32>();
   uint32_t mipLevels = calculate_mips(extent);
   for (uint32_t face = 0; face < 6; face++) {
-    VkImageSubresourceRange mipSubRange = {};
-    mipSubRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    mipSubRange.baseMipLevel = 0;
-    mipSubRange.baseArrayLayer = face;
-    mipSubRange.levelCount = 1;
-    mipSubRange.layerCount = 1;
+    VkImageSubresourceRange mip_subrange = {};
+    mip_subrange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    mip_subrange.baseMipLevel = 0;
+    mip_subrange.baseArrayLayer = face;
+    mip_subrange.levelCount = 1;
+    mip_subrange.layerCount = 1;
 
-    // Prepare current mip level as image blit destination
     insert_image_memory_barrier(
         command_buffer.get_command_buffer(), impl->image, 0,
         VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, mipSubRange);
+        VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
   }
 
   for (uint32_t i = 1; i < mipLevels; i++) {
     for (uint32_t face = 0; face < 6; face++) {
-      VkImageBlit imageBlit{};
+      VkImageBlit image_blit{};
 
-      // Source
-      imageBlit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      imageBlit.srcSubresource.layerCount = 1;
-      imageBlit.srcSubresource.mipLevel = i - 1;
-      imageBlit.srcSubresource.baseArrayLayer = face;
-      imageBlit.srcOffsets[1].x = int32_t(extent_as_i32.width >> (i - 1));
-      imageBlit.srcOffsets[1].y = int32_t(extent_as_i32.height >> (i - 1));
-      imageBlit.srcOffsets[1].z = 1;
+      image_blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      image_blit.srcSubresource.layerCount = 1;
+      image_blit.srcSubresource.mipLevel = i - 1;
+      image_blit.srcSubresource.baseArrayLayer = face;
+      image_blit.srcOffsets[1].x = int32_t(extent_as_i32.width >> (i - 1));
+      image_blit.srcOffsets[1].y = int32_t(extent_as_i32.height >> (i - 1));
+      image_blit.srcOffsets[1].z = 1;
 
-      // Destination
-      imageBlit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      imageBlit.dstSubresource.layerCount = 1;
-      imageBlit.dstSubresource.mipLevel = i;
-      imageBlit.dstSubresource.baseArrayLayer = face;
-      imageBlit.dstOffsets[1].x = int32_t(extent_as_i32.width >> i);
-      imageBlit.dstOffsets[1].y = int32_t(extent_as_i32.height >> i);
-      imageBlit.dstOffsets[1].z = 1;
+      image_blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      image_blit.dstSubresource.layerCount = 1;
+      image_blit.dstSubresource.mipLevel = i;
+      image_blit.dstSubresource.baseArrayLayer = face;
+      image_blit.dstOffsets[1].x = int32_t(extent_as_i32.width >> i);
+      image_blit.dstOffsets[1].y = int32_t(extent_as_i32.height >> i);
+      image_blit.dstOffsets[1].z = 1;
 
-      VkImageSubresourceRange mipSubRange = {};
-      mipSubRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      mipSubRange.baseMipLevel = i;
-      mipSubRange.baseArrayLayer = face;
-      mipSubRange.levelCount = 1;
-      mipSubRange.layerCount = 1;
+      VkImageSubresourceRange mip_subrange = {};
+      mip_subrange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      mip_subrange.baseMipLevel = i;
+      mip_subrange.baseArrayLayer = face;
+      mip_subrange.levelCount = 1;
+      mip_subrange.layerCount = 1;
 
-      // Prepare current mip level as image blit destination
       insert_image_memory_barrier(
           command_buffer.get_command_buffer(), impl->image, 0,
           VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-          VK_PIPELINE_STAGE_TRANSFER_BIT, mipSubRange);
+          VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
 
-      // Blit from previous level
       vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageBlit,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_blit,
                      VK_FILTER_LINEAR);
 
-      // Prepare current mip level as image blit source for next level
       insert_image_memory_barrier(
           command_buffer.get_command_buffer(), impl->image,
           VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-          VK_PIPELINE_STAGE_TRANSFER_BIT, mipSubRange);
+          VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
     }
   }
 
-  // After the loop, all mip layers are in TRANSFER_SRC layout, so transition
-  // all to SHADER_READ
   VkImageSubresourceRange subresourceRange = {};
   subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   subresourceRange.layerCount = 6;
@@ -296,7 +288,6 @@ auto TextureCube::create_empty_texture_cube() -> void {
 
   Allocator allocator("TextureCube");
 
-  // Create optimal tiled target image on the device
   VkImageCreateInfo imageCreateInfo{};
   imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -336,10 +327,6 @@ auto TextureCube::create_empty_texture_cube() -> void {
                      VK_IMAGE_LAYOUT_GENERAL, subresourceRange);
   }
 
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // CREATE TEXTURE SAMPLER
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // Create a texture sampler
   VkSamplerCreateInfo sampler{};
   sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   sampler.maxAnisotropy = 1.0f;
@@ -360,20 +347,12 @@ auto TextureCube::create_empty_texture_cube() -> void {
   verify(vkCreateSampler(vulkanDevice, &sampler, nullptr, &impl->sampler),
          "vkCreateSampler", "Could not create sampler");
 
-  // Create image view
-  // Textures are not directly accessed by the shaders and
-  // are abstracted by image views containing additional
-  // information and sub resource ranges
   VkImageViewCreateInfo view{};
   view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
   view.format = format;
   view.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
                      VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
-  // The subresource range describes the set of mip levels (and array layers)
-  // that can be accessed through this image view It's possible to create
-  // multiple image views for a single image referring to different (and/or
-  // overlapping) ranges of the image
   view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   view.subresourceRange.baseMipLevel = 0;
   view.subresourceRange.baseArrayLayer = 0;

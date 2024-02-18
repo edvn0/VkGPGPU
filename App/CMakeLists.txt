@@ -8,7 +8,7 @@ add_executable(App ClientApp.hpp main.cpp ClientApp.cpp
     widgets/src/FilesystemWidget.cpp
     widgets/src/SceneWidget.cpp
 )
-target_link_libraries(App PRIVATE Core ECS fmt::fmt Vulkan::Vulkan imguizmo)
+target_link_libraries(App PRIVATE Core ECS fmt::fmt Vulkan::Vulkan imguizmo magic_enum)
 target_include_directories(App PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/widgets/include ${CMAKE_CURRENT_SOURCE_DIR}/widgets ${CMAKE_SOURCE_DIR}/ThirdParty/glm)
 target_sources(App PRIVATE version.rc)
 target_precompile_headers(App REUSE_FROM Core)

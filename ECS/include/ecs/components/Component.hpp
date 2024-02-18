@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Camera.hpp"
 #include "Mesh.hpp"
 #include "RenderingDefinitions.hpp"
 #include "TypeUtility.hpp"
@@ -54,13 +55,51 @@ struct TextureComponent {
 struct MeshComponent {
   Core::Ref<Core::Mesh> mesh;
   std::filesystem::path path;
-  bool draw_aabb{false};
+  bool draw_aabb{true};
 
   static constexpr std::string_view component_name{"Mesh"};
 };
 
+namespace BasicGeometry {
+enum class Type : Core::u8 { Quad, Triangle, Circle, Sphere, Cube };
+// Define structures for each geometry's parameters
+struct QuadParameters {
+  float width;
+  float height;
+};
+
+struct TriangleParameters {
+  float base;
+  float height;
+};
+
+struct CircleParameters {
+  float radius;
+};
+
+struct SphereParameters {
+  float radius;
+};
+
+struct CubeParameters {
+  float side_length;
+};
+
+// GeometryVariant to encapsulate all geometry types
+using GeometryVariant =
+    std::variant<QuadParameters, TriangleParameters, CircleParameters,
+                 SphereParameters, CubeParameters>;
+
+} // namespace BasicGeometry
+struct GeometryComponent {
+  BasicGeometry::GeometryVariant parameters;
+};
+
 struct CameraComponent {
   float field_of_view{glm::radians(90.0F)};
+  Core::CameraType camera_type{Core::CameraType::Perspective};
+  float near{0.1F};
+  float far{10000.0F};
 
   static constexpr std::string_view component_name{"Camera"};
 };

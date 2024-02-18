@@ -106,6 +106,8 @@ endfunction()
 
 add_assimp()
 
+add_subdirectory(magic_enum)
+
 if(ENABLE_TESTING)
     add_subdirectory(Catch2)
 endif()

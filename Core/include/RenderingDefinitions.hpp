@@ -42,6 +42,9 @@ struct RendererUBO {
   glm::mat4 view;
   glm::mat4 projection;
   glm::mat4 view_projection;
+  glm::mat4 inverse_view;
+  glm::mat4 inverse_projection;
+  glm::mat4 inverse_view_projection;
   glm::vec4 light_position;
   glm::vec4 light_direction;
   glm::vec4 camera_position;

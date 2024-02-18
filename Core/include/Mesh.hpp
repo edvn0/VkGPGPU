@@ -76,6 +76,8 @@ public:
     return file_path;
   }
 
+  static auto get_cube() -> const Ref<Mesh> &;
+
   static auto import_from(const Device &device, const FS::Path &file_path)
       -> Scope<Mesh>;
   static auto reference_import_from(const Device &device,

@@ -12,6 +12,7 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
                              dev, {
                                       .format = ImageFormat::UNORM_RGBA8,
                                       .path = FS::icon("loading.png"),
+                                      .mip_generation = MipGeneration(1),
                                   })) {
   history.push_back(current_path);
 
@@ -48,7 +49,10 @@ void FilesystemWidget::update_directory_cache(const Core::FS::Path &path) {
   entries.clear();
 
   for (const auto &entry : Core::FS::DirectoryIterator(path)) {
-    entries.push_back(entry);
+    if (!ignored_extensions.contains(entry.path().extension().string())) {
+      // If not ignored, add it to the cache
+      entries.push_back(entry);
+    }
   }
 }
 
@@ -155,6 +159,7 @@ void FilesystemWidget::render_directory_contents() {
             .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
             .layout = ImageLayout::ShaderReadOnlyOptimal,
+            .mip_generation = MipGeneration(1),
         });
 
         UI::image_button(*texture, {extent});
@@ -177,30 +182,29 @@ void FilesystemWidget::render_directory_contents() {
 
 void FilesystemWidget::load_icons() {
   back_icon =
-      Texture::construct_shader(*device, {
-                                             .format = ImageFormat::UNORM_RGBA8,
-                                             .path = FS::icon("back.png"),
-                                         });
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("back.png"),
+                                          .mip_generation = MipGeneration(1)});
   forward_icon =
-      Texture::construct_shader(*device, {
-                                             .format = ImageFormat::UNORM_RGBA8,
-                                             .path = FS::icon("forward.png"),
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("forward.png"),
+                                          .mip_generation = MipGeneration(1)
 
                                          });
   home_icon =
-      Texture::construct_shader(*device, {
-                                             .format = ImageFormat::UNORM_RGBA8,
-                                             .path = FS::icon("home.png"),
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("home.png"),
+                                          .mip_generation = MipGeneration(1)
 
                                          });
   file_icon =
-      Texture::construct_shader(*device, {
-                                             .format = ImageFormat::UNORM_RGBA8,
-                                             .path = FS::icon("file.png"),
-                                         });
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("file.png"),
+                                          .mip_generation = MipGeneration(1)});
   directory_icon =
       Texture::construct_shader(*device, {
                                              .format = ImageFormat::UNORM_RGBA8,
                                              .path = FS::icon("directory.png"),
+                                             .mip_generation = MipGeneration(1),
                                          });
 }

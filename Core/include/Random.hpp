@@ -32,6 +32,12 @@ public:
                      radius * cosTheta);
   }
 
+  static auto as_float(std::floating_point auto min = 0.0F,
+                       std::floating_point auto max = 1.0F) {
+    std::uniform_real_distribution<float> dis(min, max);
+    return dis(gen);
+  }
+
 private:
   static inline std::random_device rd{};
   static inline std::mt19937 gen{rd()};

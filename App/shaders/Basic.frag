@@ -19,21 +19,18 @@ layout(location = 0) out vec4 out_colour;
 
 vec3 gamma_correct(vec3 color) { return pow(color, vec3(1.0 / 2.2)); }
 
-vec3 getAlbedo()
-{
+vec3 getAlbedo() {
   vec4 albedo_colour = pc.albedo_colour;
   vec3 sampled = texture(albedo_map, in_uvs).rgb;
   return albedo_colour.rgb * sampled * in_colour.rgb;
 }
 
-float getMetalness()
-{
+float getMetalness() {
   float metalness_from_texture = texture(metallic_map, in_uvs).r;
   return metalness_from_texture * pc.metalness;
 }
 
-float getRoughness()
-{
+float getRoughness() {
   float roughness_from_texture = texture(roughness_map, in_uvs).r;
   float computed = roughness_from_texture * pc.roughness;
   return max(computed, 0.05);
@@ -41,22 +38,21 @@ float getRoughness()
 
 float getAO() { return texture(ao_map, in_uvs).r; }
 
-vec3 getNormal()
-{
+vec3 getNormal() {
   if (pc.use_normal_map < 0)
     return in_normals;
 
-  vec3 normalFromMap = texture(normal_map, in_uvs).rgb;
-  normalFromMap = normalFromMap * 2.0 - 1.0; // Transform from [0,1] to [-1,1]
+  vec3 sampled_normal_map = texture(normal_map, in_uvs).rgb;
+  sampled_normal_map =
+      sampled_normal_map * 2.0 - 1.0; // Transform from [0,1] to [-1,1]
 
   // Use the TBN matrix to transform the normal from tangent to world space
-  vec3 worldNormal = normalize(in_tbn * normalFromMap);
+  vec3 world_normal = normalize(in_tbn * sampled_normal_map);
 
-  return worldNormal;
+  return world_normal;
 }
 
-void main()
-{
+void main() {
   vec3 albedo = getAlbedo();
   if (texture(albedo_map, in_uvs).a < 0.1)
     discard;
@@ -65,29 +61,29 @@ void main()
   float roughness = getRoughness();
   float ao = getAO();
   vec3 normal = getNormal();
-  vec3 viewDir = normalize(renderer.camera_pos.xyz - in_fragment_pos.xyz);
+  vec3 view_direction =
+      normalize(renderer.camera_pos.xyz - in_fragment_pos.xyz);
 
   // Light model
-
   vec3 light_colour = renderer.light_colour.rgb;
-  vec3 lightDir = renderer.light_dir.xyz;
+  vec3 light_direction = renderer.light_dir.xyz;
   float NDF, G;
   vec3 kS, kD, specular;
 
   vec3 F0 = vec3(0.04);
   F0 = mix(F0, albedo, metalness);
 
-  vec3 halfDir = normalize(viewDir + lightDir);
-  float cosTheta = max(dot(normal, lightDir), 0.0);
+  vec3 half_direction = normalize(view_direction + light_direction);
+  float cosTheta = max(dot(normal, light_direction), 0.0);
 
-  NDF = distribution_ggx(normal, halfDir, roughness);
-  G = geometry_smith(normal, viewDir, lightDir, roughness);
-  vec3 F = fresnel_schlick(max(dot(halfDir, viewDir), 0.0), F0);
+  NDF = distribution_ggx(normal, half_direction, roughness);
+  G = geometry_smith(normal, view_direction, light_direction, roughness);
+  vec3 F = fresnel_schlick(max(dot(half_direction, view_direction), 0.0), F0);
 
   vec3 nominator = NDF * G * F;
-  float denominator =
-      4 * max(dot(normal, viewDir), 0.0) * max(dot(normal, lightDir), 0.0) +
-      0.001;
+  float denominator = 4 * max(dot(normal, view_direction), 0.0) *
+                          max(dot(normal, light_direction), 0.0) +
+                      0.001;
   specular = nominator / denominator;
 
   kS = F;
@@ -102,7 +98,7 @@ void main()
   vec2 shadowMapSize = vec2(4096, 4096);
   float shadow_factor = calculateSoftShadow(
       shadow_map, projCoords, normal, normalize(-renderer.light_dir.xyz),
-      shadowMapSize, 0, shadow.bias_and_default.x);
+      shadowMapSize, 1, shadow.bias_and_default.x);
 
   // Incorporate the shadow factor into the diffuse and specular components
   vec3 litColor = (diffuse + specular) * light_colour * shadow_factor;
@@ -110,9 +106,10 @@ void main()
   // Combine results with ambient lighting unaffected by shadows
   vec3 ambient = vec3(0.03) * albedo * ao;
   vec3 iblContribution =
-      ibl(u_EnvIrradianceTex, u_EnvRadianceTex, u_BRDFLut, normal, viewDir, F0,
-          albedo, roughness, metalness, 20.0F, reflect(-viewDir, normal));
-  vec3 color = ambient + litColor + iblContribution;
+      ibl(u_EnvIrradianceTex, u_EnvRadianceTex, u_BRDFLut, normal,
+          view_direction, F0, albedo, roughness, metalness, 20.0F,
+          reflect(-view_direction, normal));
+  vec3 color = ambient + litColor; //+ iblContribution;
 
   out_colour = vec4(gamma_correct(color), texture(albedo_map, in_uvs).a);
 }

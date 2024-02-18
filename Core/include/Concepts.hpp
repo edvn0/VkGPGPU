@@ -35,4 +35,9 @@ concept TypeDoesSupply = requires(const T &t) {
   { t.get_output() } -> std::same_as<OutputType>;
 };
 
+template <typename E>
+concept IsEnum =
+    std::is_enum_v<E> && (std::is_integral_v<std::underlying_type_t<E>> ||
+                          std::is_enum_v<std::underlying_type_t<E>>);
+
 } // namespace Core

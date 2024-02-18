@@ -86,6 +86,7 @@ set(SOURCES
     src/Timer.cpp
     src/UI.cpp
     src/Verify.cpp
+    src/Input.cpp
     src/Window.cpp
 )
 
@@ -106,12 +107,14 @@ target_compile_definitions(Core PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
+    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=4096)
     set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
     target_compile_definitions(Core PUBLIC GPGPU_RELEASE)
+    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=4096)
     set(GPGPU_FAST_LOGGING ON)
 endif()
 

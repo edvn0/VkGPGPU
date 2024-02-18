@@ -40,7 +40,7 @@ auto to_vulkan_format(ImageFormat format) -> VkFormat {
 
 bool transition_image(
     const ImmediateCommandBuffer &buffer, VkImage &to_transition,
-    VkImageLayout from, VkImageLayout to,
+    VkImageLayout from, VkImageLayout to, u32 mip_levels = 1,
     VkImageAspectFlags aspect_bit = VK_IMAGE_ASPECT_COLOR_BIT) {
   VkImageMemoryBarrier barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -51,7 +51,7 @@ bool transition_image(
   barrier.image = to_transition;
   barrier.subresourceRange.aspectMask = aspect_bit;
   barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.levelCount = mip_levels;
   barrier.subresourceRange.baseArrayLayer = 0;
   barrier.subresourceRange.layerCount = 1;
   VkPipelineStageFlags sourceStage;
@@ -257,12 +257,16 @@ Image::Image(const Device &dev, ImageProperties props)
          "Format cannot be undefined");
   ensure(properties.layout != ImageLayout::Undefined,
          "Layout cannot be undefined");
+  if (aspect_bit == VK_IMAGE_ASPECT_DEPTH_BIT) {
+    properties.mip_info.mips = 1;
+    properties.mip_info.use_mips = false;
+  }
 
   recreate();
   if (aspect_bit == VK_IMAGE_ASPECT_DEPTH_BIT) {
     transition_image(create_immediate(*device, Queue::Type::Graphics),
                      impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     to_vulkan_layout(properties.layout), aspect_bit);
+                     to_vulkan_layout(properties.layout), 1, aspect_bit);
   }
 }
 
@@ -277,9 +281,9 @@ auto Image::recreate() -> void {
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
-  // if (properties.mip_info.valid()) {
-  //  create_mips();
-  //}
+  if (properties.mip_info.valid()) {
+    create_mips();
+  }
 }
 
 auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
@@ -295,8 +299,10 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
   VmaAllocationInfo staging_allocation_info{};
   const auto allocation = allocator.allocate_buffer(
       staging_buffer, staging_allocation_info, buffer_create_info,
-      {.usage = Usage::AUTO_PREFER_DEVICE,
-       .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT});
+      {
+          .usage = Usage::AUTO_PREFER_DEVICE,
+          .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT,
+      });
   const std::span allocation_span{
       static_cast<u8 *>(staging_allocation_info.pMappedData),
       staging_allocation_info.size};
@@ -408,7 +414,8 @@ void Image::create_mips() {
 
   auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
   transition_image(command_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   properties.mip_info.mips);
   for (u32 i = 1; i < properties.mip_info.mips; i++) {
     barrier.subresourceRange.baseMipLevel = i - 1;
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;

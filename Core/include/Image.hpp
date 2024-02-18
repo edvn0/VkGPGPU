@@ -33,7 +33,8 @@ struct ImageProperties {
 
   ImageFormat format{ImageFormat::Undefined};
   ImageTiling tiling{ImageTiling::Optimal};
-  ImageUsage usage{ImageUsage::Sampled};
+  ImageUsage usage{ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc};
   ImageLayout layout{ImageLayout::ColorAttachmentOptimal};
   SamplerFilter min_filter{SamplerFilter::Linear};
   SamplerFilter max_filter{SamplerFilter::Linear};

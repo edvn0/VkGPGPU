@@ -2,6 +2,7 @@
 
 #include "ISceneObserver.hpp"
 #include "Math.hpp"
+#include "ThreadPool.hpp"
 #include "Types.hpp"
 
 #include <entt/entt.hpp>
@@ -53,6 +54,9 @@ private:
   std::string name{};
   entt::registry registry;
   std::vector<ISceneObserver *> observers{};
+
+  Core::ThreadPool pool;
+  std::queue<std::future<void>> futures;
 
   friend class Entity;
 };

@@ -138,6 +138,37 @@ auto Material::bind_impl(const CommandBuffer &command_buffer,
                           0, nullptr);
 }
 
+void count_write_sets(const std::vector<VkWriteDescriptorSet> &writeSets,
+                      u32 &image_count, u32 &buffer_count) {
+  image_count = 0;  // Reset count for image/texture write sets
+  buffer_count = 0; // Reset count for buffer write sets
+
+  for (const auto &writeSet : writeSets) {
+    switch (writeSet.descriptorType) {
+    // Add cases for image/texture types
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+      // Add more cases as needed for other image/texture types
+      image_count++;
+      break;
+
+    // Add cases for buffer types
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+      // Add more cases as needed for other buffer types
+      buffer_count++;
+      break;
+
+      // Optionally handle other descriptor types here
+
+    default:
+      // Optionally handle unexpected descriptor types
+      break;
+    }
+  }
+}
+
 auto Material::update_for_rendering(
     FrameIndex frame_index, const std::vector<std::vector<VkWriteDescriptorSet>>
                                 &buffer_set_write_descriptors) -> void {
@@ -160,9 +191,20 @@ auto Material::update_for_rendering(
   dirty_descriptor_sets[frame_index] = false;
   frame_write_descriptors.clear();
 
+  u32 additional_buffer_writes = 0;
   if (!buffer_set_write_descriptors.empty()) {
     for (const auto &write : buffer_set_write_descriptors[frame_index]) {
       frame_write_descriptors.push_back(write);
+    }
+
+    for (const auto &pd : resident_descriptors | std::views::values) {
+      if (pd->type == PendingDescriptorType::Buffer) {
+        auto &buffer = pd->buffer;
+        pd->buffer_info = buffer->get_descriptor_info();
+        pd->write_set.pBufferInfo = &pd->buffer_info;
+        frame_write_descriptors.push_back(pd->write_set);
+        additional_buffer_writes++;
+      }
     }
   }
 
@@ -180,7 +222,6 @@ auto Material::update_for_rendering(
       pd->image_info = image->get_descriptor_info();
       pd->write_set.pImageInfo = &pd->image_info;
     }
-
     frame_write_descriptors.push_back(pd->write_set);
   }
 
@@ -201,13 +242,9 @@ auto Material::update_for_rendering(
   };
 
   std::unordered_map<u32, std::vector<VkWriteDescriptorSet>> split_by_type;
-  const auto buffer_wds_count =
-      buffer_set_write_descriptors.size() > 0
-          ? buffer_set_write_descriptors[frame_index].size()
-          : 0;
-  const auto image_wds_count =
-      frame_write_descriptors.size() - buffer_wds_count;
-
+  u32 image_wds_count{};
+  u32 buffer_wds_count{};
+  count_write_sets(frame_write_descriptors, image_wds_count, buffer_wds_count);
   split_by_type.try_emplace(0, buffer_wds_count);
   split_by_type.try_emplace(1, image_wds_count);
 
@@ -276,12 +313,15 @@ auto Material::set(std::string_view name, const Texture &texture) -> bool {
   textures.at(binding) = &texture;
 
   auto wds = shader->get_descriptor_set(name, 1);
-  resident_descriptors[binding] = std::make_shared<PendingDescriptor>(
-      PendingDescriptor{PendingDescriptorType::Texture2D,
-                        *wds,
-                        {},
-                        textures.at(binding),
-                        nullptr});
+  PendingDescriptor descriptor{
+      .type = PendingDescriptorType::Texture2D,
+      .write_set = *wds,
+      .image_info = {},
+      .buffer_info = {},
+      .texture = textures.at(binding),
+  };
+  resident_descriptors[binding] =
+      std::make_shared<PendingDescriptor>(descriptor);
   pending_descriptors.push_back(resident_descriptors.at(binding));
 
   invalidate_descriptor_sets();
@@ -310,15 +350,15 @@ auto Material::set(const std::string_view name, const TextureCube &cube)
   cubes.at(index) = &cube;
 
   const auto *wds = shader->get_descriptor_set(name, 1);
+  PendingDescriptor descriptor{
+      .type = PendingDescriptorType::TextureCube,
+      .write_set = *wds,
+      .image_info = {},
+      .buffer_info = {},
+      .texture_cube = cubes.at(index),
+  };
   resident_descriptors[binding] =
-      std::make_shared<PendingDescriptor>(PendingDescriptor{
-          PendingDescriptorType::TextureCube,
-          *wds,
-          {},
-          nullptr,
-          nullptr,
-          cubes[found_resource->get_register()],
-      });
+      std::make_shared<PendingDescriptor>(descriptor);
   pending_descriptors.push_back(resident_descriptors.at(binding));
 
   invalidate_descriptor_sets();
@@ -339,20 +379,57 @@ auto Material::set(const std::string_view name, const Image &image) -> bool {
     return false;
   }
 
-  const auto index = found_resource->get_register();
-  if (index >= images.size()) {
-    images.resize(static_cast<usize>(index) + 1);
+  if (binding >= images.size()) {
+    images.resize(static_cast<usize>(binding) + 1);
   }
-  images.at(index) = &image;
+  images.at(binding) = &image;
 
   const auto *wds = shader->get_descriptor_set(name, 1);
+  PendingDescriptor descriptor{
+      .type = PendingDescriptorType::Image2D,
+      .write_set = *wds,
+      .image_info = {},
+      .buffer_info = {},
+      .image = images.at(binding),
+  };
+  resident_descriptors[binding] =
+      std::make_shared<PendingDescriptor>(descriptor);
+  pending_descriptors.push_back(resident_descriptors.at(binding));
+
+  invalidate_descriptor_sets();
+  return true;
+}
+
+auto Material::set(std::string_view name, const Buffer &buffer) -> bool {
+  const auto resource = find_resource(name);
+  if (!resource)
+    return false;
+
+  const auto &found_resource = *resource;
+
+  const u32 binding = found_resource->get_register();
+  auto &buffers = buffer_references;
+  if (binding < buffers.size() && buffers.at(binding) &&
+      resident_descriptors.contains(binding)) {
+    return false;
+  }
+
+  const auto index = found_resource->get_register();
+  if (index >= buffers.size()) {
+    buffers.resize(static_cast<usize>(index) + 1);
+  }
+  buffers.at(index) = &buffer;
+
+  const auto *wds = shader->get_descriptor_set(name, 0);
   resident_descriptors[binding] =
       std::make_shared<PendingDescriptor>(PendingDescriptor{
-          PendingDescriptorType::Image2D,
-          *wds,
-          {},
-          nullptr,
-          images[found_resource->get_register()],
+          .type = PendingDescriptorType::Buffer,
+          .write_set = *wds,
+          .image_info = {},
+          .texture = nullptr,
+          .image = nullptr,
+          .texture_cube = nullptr,
+          .buffer = buffers[found_resource->get_register()],
       });
   pending_descriptors.push_back(resident_descriptors.at(binding));
 

@@ -25,8 +25,6 @@ auto Texture::construct(const Device &device,
 auto Texture::construct_shader(const Device &device,
                                const TextureProperties &properties)
     -> Scope<Texture> {
-  ensure((properties.usage & ImageUsage::Sampled) != ImageUsage{0},
-         "Texture must be sampled");
   ensure(properties.layout == ImageLayout::ShaderReadOnlyOptimal,
          "Texture must be ShaderReadOnlyOptimal");
 
@@ -47,8 +45,7 @@ auto Texture::construct(const Device &device, const FS::Path &path)
   TextureProperties properties;
   properties.path = path;
   properties.format = ImageFormat::SRGB_RGBA8;
-  properties.usage =
-      ImageUsage::TransferDst | ImageUsage::TransferSrc | ImageUsage::Sampled;
+  properties.usage = ImageUsage::ColourAttachment;
   properties.layout = ImageLayout::ShaderReadOnlyOptimal;
   auto texture = construct(device, properties);
   return texture;
@@ -66,9 +63,28 @@ Texture::~Texture() {
         human_readable_size(cached_size));
 }
 
-static auto calculate_mips(const Extent<u32> &ext) {
+auto calculate_mip_count(const Extent<u32> &ext) -> u32 {
   auto max_dimension = std::max(ext.width, ext.height);
   return static_cast<u32>(std::ceil(std::log2(max_dimension))) + 1;
+}
+
+auto determine_mip_count(const MipGeneration &mipGeneration,
+                         const Extent<u32> &extent) -> u32 {
+  return std::visit(overloaded{
+                        [&ext = extent](MipGenerationStrategy strategy) -> u32 {
+                          switch (strategy) {
+                          case MipGenerationStrategy::FromSize:
+                            return calculate_mip_count(ext);
+                          case MipGenerationStrategy::Unused:
+                          default:
+                            return 1;
+                          }
+                        },
+                        [](const LiteralMipData &data) -> u32 {
+                          return data.mips > 0 ? data.mips : 1;
+                        },
+                    },
+                    mipGeneration.strategy);
 }
 
 auto Texture::on_resize(const Extent<u32> &new_extent) -> void {}
@@ -106,17 +122,8 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
     identifier = properties.path.filename().string();
   }
 
-  u32 mip_count = 1;
-  if (properties.mip_generation.strategy == MipGenerationStrategy::Unused) {
-    mip_count = 1;
-  } else if (properties.mip_generation.strategy ==
-             MipGenerationStrategy::Literal) {
-    mip_count =
-        properties.mip_generation.mips > 0 ? properties.mip_generation.mips : 1;
-  } else if (properties.mip_generation.strategy ==
-             MipGenerationStrategy::FromSize) {
-    mip_count = calculate_mips(properties.extent);
-  }
+  u32 mip_count =
+      determine_mip_count(properties.mip_generation, properties.extent);
 
   image = make_scope<Image>(*device,
                             ImageProperties{
@@ -152,17 +159,8 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
 
   properties.identifier = properties.path.filename().string();
 
-  u32 mip_count = 1;
-  if (properties.mip_generation.strategy == MipGenerationStrategy::Unused) {
-    mip_count = 1;
-  } else if (properties.mip_generation.strategy ==
-             MipGenerationStrategy::Literal) {
-    mip_count =
-        properties.mip_generation.mips > 0 ? properties.mip_generation.mips : 1;
-  } else if (properties.mip_generation.strategy ==
-             MipGenerationStrategy::FromSize) {
-    mip_count = calculate_mips(properties.extent);
-  }
+  u32 mip_count =
+      determine_mip_count(properties.mip_generation, properties.extent);
 
   image = make_scope<Image>(*device,
                             ImageProperties{

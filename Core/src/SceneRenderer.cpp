@@ -48,20 +48,32 @@ auto create_or_get_write_descriptor_for(u32 frames_in_flight,
   const auto &uniform_buffers = shader_descriptor_set.uniform_buffers;
 
   if constexpr (T == Buffer::Type::Storage) {
-    for (const auto &binding : storage_buffers | std::views::keys) {
+    for (const auto &[k, v] : storage_buffers) {
       auto &write_descriptors = get_descriptor_set_vector(
           buffer_set_write_descriptor_cache, buffer_set, shader_hash);
       write_descriptors.resize(frames_in_flight);
       for (auto frame = FrameIndex{0}; frame < frames_in_flight; ++frame) {
-        const auto &stored_buffer = buffer_set->get(DescriptorBinding(binding),
-                                                    frame, DescriptorSet(0));
+        auto *maybe_buffer =
+            buffer_set->try_get(DescriptorBinding(k), frame, DescriptorSet(0));
 
         VkWriteDescriptorSet wds = {};
+        if (maybe_buffer != nullptr) {
+          auto &stored_buffer = *maybe_buffer;
+          auto &buffer_info = stored_buffer.get_descriptor_info();
+          auto binding = stored_buffer.get_binding();
+          wds.pBufferInfo = &buffer_info;
+          wds.dstBinding = binding;
+        } else {
+          auto &stored_buffer = material.get_stored_buffer(k);
+          auto &buffer_info = stored_buffer->get_descriptor_info();
+          auto binding = stored_buffer->get_binding();
+          wds.pBufferInfo = &buffer_info;
+          wds.dstBinding = binding;
+        }
+
         wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         wds.descriptorCount = 1;
         wds.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        wds.pBufferInfo = &stored_buffer->get_descriptor_info();
-        wds.dstBinding = stored_buffer->get_binding();
         write_descriptors[frame].push_back(wds);
       }
     }
@@ -145,6 +157,7 @@ auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
   shadow_framebuffer->on_resize(extent);
   fullscreen_framebuffer->on_resize(extent);
 
+  skybox_material->on_resize(extent);
   shadow_material->on_resize(extent);
   grid_material->on_resize(extent);
   fullscreen_material->on_resize(extent);
@@ -289,9 +302,16 @@ auto SceneRenderer::bind_vertex_buffer(const Buffer &vertex_buffer,
   vkCmdBindVertexBuffers(command_buffer->get_command_buffer(), index, 1,
                          buffers.data(), offset.data());
 }
+
 auto SceneRenderer::submit_aabb(const AABB &aabb, const glm::mat4 &transform)
     -> void {
   geometry_renderer.submit_aabb(aabb, transform);
+}
+
+auto SceneRenderer::submit_cube(const floating side_length,
+                                const glm::mat4 &transform,
+                                const glm::vec4 &colour) -> void {
+  geometry_renderer.submit_cube(side_length, transform, colour);
 }
 
 auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
@@ -328,6 +348,11 @@ auto SceneRenderer::end_renderpass() -> void {
 }
 
 auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
+  /*auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
+   auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
+   scene_environment.radiance_texture = texture_cube;
+   scene_environment.irradiance_texture = texture_cube;*/
+
   const auto &ubo = ubos->get(0, current_frame);
   ubo->write(renderer_ubo);
 
@@ -565,15 +590,14 @@ void SceneRenderer::update_material_for_rendering(
     return;
   }
 
-  auto write_descriptors =
-      create_or_get_write_descriptor_for<Buffer::Type::Uniform>(
-          Config::frame_count, ubo_set, material_for_update);
+  auto write_descriptors = create_or_get_write_descriptor_for(
+      Config::frame_count, ubo_set, material_for_update);
 
   if (sbo_set != nullptr) {
 
     if (const auto &storage_buffer_write_sets =
-            create_or_get_write_descriptor_for<Buffer::Type::Storage>(
-                Config::frame_count, sbo_set, material_for_update);
+            create_or_get_write_descriptor_for(Config::frame_count, sbo_set,
+                                               material_for_update);
         !storage_buffer_write_sets.empty()) {
       for (u32 frame = 0; frame < Config::frame_count; ++frame) {
         auto &ubo_frame_descriptors = write_descriptors[frame];
@@ -599,6 +623,9 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   extent = swapchain.get_extent();
+
+  Mesh::reference_import_from(*device, FS::model("cube.gltf"));
+  Mesh::reference_import_from(*device, FS::model("sphere.fbx"));
 
   const auto default_vertex_layout = VertexLayout{
       {
@@ -645,6 +672,10 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
                                             .owned_by_swapchain = false,
                                             .record_stats = true,
                                         });
+  auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
+  auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
+  scene_environment.radiance_texture = texture_cube;
+  scene_environment.irradiance_texture = texture_cube;
 
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
@@ -709,14 +740,14 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       },
       std::move(white_data));
 
-  disarray_texture = Texture::construct(*device, FS::texture("D.png"));
-
   brdf_lookup_texture = Texture::construct_shader(
-      *device, TextureProperties{
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::texture("BRDF_LUT.tga"),
-                   .address_mode = SamplerAddressMode::ClampToBorder,
-               });
+      *device,
+      TextureProperties{
+          .format = ImageFormat::UNORM_RGBA8,
+          .path = FS::texture("BRDF_LUT.tga"),
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .mip_generation = MipGeneration(MipGenerationStrategy::FromSize),
+      });
 
   shader_cache.try_emplace(
       "Shadow", Shader::construct(*device, FS::shader("Shadow.vert.spv"),
@@ -738,6 +769,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   geometry_pipeline = GraphicsPipeline::construct(*device, config);
   config.polygon_mode = PolygonMode::Line;
+  config.name = "WireframeGeometry";
   wireframed_geometry_pipeline = GraphicsPipeline::construct(*device, config);
 
   shader_cache.try_emplace(
@@ -753,7 +785,6 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .face_mode = FaceMode::CounterClockwise,
   };
   grid_pipeline = GraphicsPipeline::construct(*device, grid_config);
-  cube_mesh = Mesh::import_from(*device, FS::model("cube.fbx"));
 
   GraphicsPipelineConfiguration shadow_config{
       .name = "ShadowGraphicsPipeline",
@@ -761,9 +792,9 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = shadow_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
-      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
-      .cull_mode = CullMode::Back,
-      .face_mode = FaceMode::CounterClockwise,
+      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .cull_mode = CullMode::Front,
+      .face_mode = FaceMode::Clockwise,
   };
   shadow_pipeline = GraphicsPipeline::construct(*device, shadow_config);
 
@@ -810,11 +841,6 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   skybox_material = Material::construct(*device, *shader_cache.at("Skybox"));
   skybox_pipeline = GraphicsPipeline::construct(*device, skybox_config);
-
-  auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
-  auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
-  scene_environment.radiance_texture = texture_cube;
-  scene_environment.irradiance_texture = texture_cube;
 
   ubos = make_scope<BufferSet<Buffer::Type::Uniform>>(*device);
   ubos->create(sizeof(RendererUBO), SetBinding(0));

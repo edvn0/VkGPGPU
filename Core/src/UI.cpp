@@ -119,12 +119,14 @@ auto image_drop_button(Scope<Core::Texture> &texture,
       auto path = std::filesystem::path{dropped_file_path};
       device.perform([&](auto &device) {
         auto new_text = Texture::construct_shader(
-            device, {
-                        .format = ImageFormat::UNORM_RGBA8,
-                        .path = path,
-                        .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                                 ImageUsage::TransferDst,
-                    });
+            device,
+            {
+                .format = ImageFormat::UNORM_RGBA8,
+                .path = path,
+                .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
+                         ImageUsage::TransferSrc | ImageUsage::TransferDst,
+                .mip_generation = MipGeneration(1),
+            });
         texture = std::move(new_text);
       });
     } catch (const std::exception &exc) {

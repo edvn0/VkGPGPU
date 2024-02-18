@@ -13,6 +13,9 @@ layout(std140, set = 0, binding = 0) uniform RendererData {
   mat4 view;
   mat4 projection;
   mat4 view_projection;
+  mat4 inverse_view;
+  mat4 inverse_projection;
+  mat4 inverse_view_projection;
   vec4 light_pos;
   vec4 light_dir;
   vec4 camera_pos;
@@ -25,15 +28,13 @@ layout(std140, set = 0, binding = 2) readonly buffer VertexTransforms {
 }
 transforms;
 
-layout(std140, set = 0, binding = 3) uniform GridData
-{
+layout(std140, set = 0, binding = 3) uniform GridData {
   vec4 grid_colour;
   vec4 plane_colour;
   vec4 grid_size;
   vec4 fog_colour;
 }
 grid;
-
 
 layout(push_constant) uniform PushConstants {
   vec4 albedo_colour;
@@ -51,6 +52,5 @@ layout(set = 1, binding = 12) uniform sampler2D normal_map;
 layout(set = 1, binding = 13) uniform sampler2D metallic_map;
 layout(set = 1, binding = 14) uniform sampler2D roughness_map;
 layout(set = 1, binding = 15) uniform sampler2D ao_map;
-layout(set = 1, binding = 16) uniform sampler2D specular_map;
 
 #endif

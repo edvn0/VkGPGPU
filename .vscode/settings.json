@@ -121,6 +121,7 @@
     "coroutine": "cpp",
     "resumable": "cpp",
     "execution": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "expected": "cpp"
   }
 }

@@ -1,8 +1,6 @@
-#version 460 core
+#version 460
 
-layout(location = 0)in vec4 fragment_colour; // Received color from vertex shader
-layout(location = 0)out vec4 out_colour; // Output color of the fragment
+layout(location = 0) in vec4 fragment_colour;
+layout(location = 0) out vec4 out_colour;
 
-void main() {
-    out_colour = fragment_colour; // Set the fragment's color
-}
+void main() { out_colour = fragment_colour; }

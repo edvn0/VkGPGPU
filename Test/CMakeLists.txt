@@ -7,11 +7,12 @@ add_executable(Test
     units/bus/bus_test.cpp
     units/demo_test.cpp
     units/image/construct_image.cpp
+    units/image/mip_generation.cpp
     units/data_buffer/data_buffer_tests.cpp
     units/generic_cache/texture_cache_tests.cpp
     units/containers/combine_into_one.cpp
     units/serialisation/scene_serialisation_test.cpp
-        units/aabb/aabb_tests.cpp
+    units/aabb/aabb_tests.cpp
 )
 
 target_include_directories(Test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../Core/include ../Platform/include ${CMAKE_SOURCE_DIR}/ThirdParty/glm)

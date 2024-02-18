@@ -6,6 +6,9 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <magic_enum.hpp>
+#include <string>
+#include <string_view>
 
 #include "ecs/Entity.hpp"
 #include "ecs/components/Component.hpp"
@@ -173,6 +176,11 @@ void SceneWidget::draw_component_widget(Entity &entity) {
         auto &texture_vector4 = texture.colour;
         ImGui::ColorEdit4("Colour", &texture_vector4.x);
       });
+
+  draw_component<CameraComponent>(entity, "Camera",
+                                  [](CameraComponent &component) {
+#include "inline/camera/camera_type.inl"
+                                  });
 
   draw_component<SunComponent>(entity, "Sun", [](SunComponent &sun) {
     ImGui::DragFloat3("Direction", &sun.direction.x, 0.1F);

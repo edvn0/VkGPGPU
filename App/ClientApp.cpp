@@ -9,6 +9,7 @@
 #include "Input.hpp"
 #include "Material.hpp"
 #include "Mesh.hpp"
+#include "Random.hpp"
 #include "SceneWidget.hpp"
 #include "UI.hpp"
 
@@ -28,7 +29,7 @@
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), camera(75.0F, get_swapchain()->get_extent().as<float>().width,
                          get_swapchain()->get_extent().as<float>().height, 0.1F,
-                         1000.0F, nullptr),
+                         10000.0F, nullptr),
       timer(*get_messaging_client()), scene_renderer(*get_device()){};
 
 auto ClientApp::on_update(floating ts) -> void {
@@ -72,6 +73,8 @@ void ClientApp::on_create() {
   for (const auto &w : widgets) {
     w->on_create(*get_device(), *get_window(), *get_swapchain());
   }
+
+  create_dummy_scene();
 }
 
 void ClientApp::on_destroy() {
@@ -323,4 +326,49 @@ auto ClientApp::cycle(GuizmoOperation current) -> GuizmoOperation {
   default:
     return GuizmoOperation::T; // Default to T if not currently T, R, or S
   }
+}
+
+void ClientApp::create_dummy_scene() {
+  const int grid_size = 10;
+  // Assuming max random size is known, add a margin
+  const float max_cube_size = 100.0f; // Max size from your random range
+  const float margin = 5.0f;          // Additional space between cubes
+  const float spacing =
+      max_cube_size + margin; // Adjust spacing based on max size and margin
+
+  constexpr glm::vec3 color_start(0.0f, 0.0f, 1.0f); // Blue
+  constexpr glm::vec3 color_end(1.0f, 0.65f, 0.0f);  // Orange
+
+  auto little_tokyo = scene->create_entity("Tokyo");
+  little_tokyo.add_component<ECS::MeshComponent>(Mesh::reference_import_from(
+      *get_device(), FS::model("little_tokyo/scene.gltf")));
+
+#if 0
+  for (int x = 0; x < grid_size; ++x) {
+    for (int y = 0; y < grid_size; ++y) {
+      for (int z = 0; z < grid_size; ++z) {
+        std::string entity_name = "Cube_" + std::to_string(x) + "_" +
+                                  std::to_string(y) + "_" + std::to_string(z);
+        auto entity = scene->create_entity(entity_name);
+
+        float gradient_factor =
+            static_cast<float>(x + y + z) / (grid_size * 3 - 3);
+        glm::vec3 gradient_color = color_start * (1.0f - gradient_factor) +
+                                   color_end * gradient_factor;
+
+        auto &transform = entity.get_transform();
+        transform.position = glm::vec3(x * spacing, y * spacing, z * spacing);
+
+        auto &geom = entity.add_component<ECS::GeometryComponent>();
+        float randomSize = Random::as_float(0.5, 100.0F);
+        geom.parameters = ECS::BasicGeometry::CubeParameters{randomSize};
+
+        entity.add_component<ECS::TextureComponent>(
+            glm::vec4{gradient_color, 1.0F});
+        entity.add_component<ECS::MeshComponent>(Mesh::reference_import_from(
+            *get_device(), FS::model("sphere.gltf")));
+      }
+    }
+  }
+#endif
 }

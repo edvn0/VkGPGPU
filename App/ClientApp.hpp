@@ -97,4 +97,6 @@ private:
   Timer timer;
 
   SceneRenderer scene_renderer;
+
+  void create_dummy_scene();
 };
