@@ -20,7 +20,8 @@ class Mesh;
 class Instance;
 class Logger;
 class Material;
-class Pipeline;
+class ComputePipeline;
+class GraphicsPipeline;
 class Window;
 class QueueUnknownException;
 class Shader;
@@ -34,7 +35,8 @@ struct BufferDataImpl;
 struct Colour;
 struct ImageProperties;
 struct ImageStorageImpl;
-struct PipelineConfiguration;
+struct GraphicsPipelineConfiguration;
+struct ComputePipelineConfiguration;
 
 template <IsNumber T> struct Extent;
 

@@ -7,6 +7,9 @@ find_package(Vulkan REQUIRED)
 
 find_program(CCACHE_FOUND ccache)
 
+add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
 if(CCACHE_FOUND)
     message("CCACHE is found")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
@@ -15,8 +18,8 @@ else(CCACHE_FOUND)
     message("CCACHE is NOT found")
 endif(CCACHE_FOUND)
 
-add_subdirectory(ThirdParty)
 add_subdirectory(Core)
+add_subdirectory(ThirdParty)
 add_subdirectory(App)
 add_subdirectory(Platform)
 add_subdirectory(ECS)

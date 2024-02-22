@@ -1,11 +1,15 @@
 #pragma once
 
+#include "Concepts.hpp"
+#include "InputCodes.hpp"
 #include "Types.hpp"
 
 #include <fmt/core.h>
 #include <functional>
+#include <magic_enum.hpp>
 #include <string>
 #include <string_view>
+#include <tuple>
 
 namespace Core {
 
@@ -187,6 +191,86 @@ public:
 private:
   floating x_offset{0.0F};
   floating y_offset{0.0F};
+};
+
+class MouseButtonPressedEvent final : public Event {
+public:
+  MouseButtonPressedEvent(MouseCode input_button, floating input_x,
+                          floating input_y)
+      : button{input_button}, x{input_x}, y{input_y} {}
+  ~MouseButtonPressedEvent() override = default;
+
+  [[nodiscard]] auto get_event_type() const -> EventType override {
+    return EventType::MouseButtonPressed;
+  }
+  [[nodiscard]] auto get_name() const -> std::string_view override {
+    return "MouseButtonPressedEvent";
+  }
+  [[nodiscard]] auto get_category_flags() const -> i32 override {
+    return EventCategoryMouse | EventCategoryInput;
+  }
+
+  [[nodiscard]] auto get_x() const -> floating { return x; }
+  [[nodiscard]] auto get_y() const -> floating { return y; }
+  [[nodiscard]] auto get_button() const -> MouseCode { return button; }
+
+  template <IsNumber T> auto get_position() -> std::tuple<T, T> {
+    return {static_cast<T>(get_x()), static_cast<T>(get_y())};
+  }
+
+  auto get_position() -> std::tuple<floating, floating> {
+    return {get_x(), get_y()};
+  }
+
+  [[nodiscard]] auto to_string() const -> std::string override {
+    return fmt::format("MouseButtonPressedEvent: (Button{}, {}, {})",
+                       magic_enum::enum_name(button), x, y);
+  }
+
+  static auto get_static_type() -> EventType {
+    return EventType::MouseButtonPressed;
+  }
+
+private:
+  MouseCode button{0};
+  floating x{0.0F};
+  floating y{0.0F};
+};
+
+class MouseButtonReleasedEvent final : public Event {
+public:
+  MouseButtonReleasedEvent(MouseCode input_button, floating input_x,
+                           floating input_y)
+      : button{input_button}, x{input_x}, y{input_y} {}
+  ~MouseButtonReleasedEvent() override = default;
+
+  [[nodiscard]] auto get_event_type() const -> EventType override {
+    return EventType::MouseButtonReleased;
+  }
+  [[nodiscard]] auto get_name() const -> std::string_view override {
+    return "MouseButtonReleasedEvent";
+  }
+  [[nodiscard]] auto get_category_flags() const -> i32 override {
+    return EventCategoryMouse | EventCategoryInput;
+  }
+
+  [[nodiscard]] auto get_x() const -> floating { return x; }
+  [[nodiscard]] auto get_y() const -> floating { return y; }
+  [[nodiscard]] auto get_button() const -> MouseCode { return button; }
+
+  [[nodiscard]] auto to_string() const -> std::string override {
+    return fmt::format("MouseButtonReleasedEvent: (Button{}, {}, {})",
+                       magic_enum::enum_name(button), x, y);
+  }
+
+  static auto get_static_type() -> EventType {
+    return EventType::MouseButtonReleased;
+  }
+
+private:
+  MouseCode button{0};
+  floating x{0.0F};
+  floating y{0.0F};
 };
 
 template <class T>

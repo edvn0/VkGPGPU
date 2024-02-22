@@ -70,6 +70,7 @@ set(REPONAME_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thread-pool/include)
 add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
+add_subdirectory(imgui-notify)
 add_imguizmo()
 
 function(add_glm)

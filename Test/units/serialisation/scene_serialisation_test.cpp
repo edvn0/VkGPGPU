@@ -488,3 +488,53 @@ TEST_CASE("Enum serialization and deserialization") {
     REQUIRE(deserializedValue == originalValue);
   }
 }
+
+TEST_CASE("GeometryComponent Serialization and Deserialization",
+          "[serialization][GeometryComponent]") {
+  using namespace ECS;
+
+  SECTION("QuadParameters Serialization and Deserialization") {
+    GeometryComponent originalComponent;
+    originalComponent.parameters = BasicGeometry::QuadParameters{2.0f, 3.0f};
+
+    std::stringstream stream = create_stream();
+    ComponentSerialiser<GeometryComponent>::serialise(originalComponent,
+                                                      stream);
+
+    GeometryComponent deserializedComponent;
+    ComponentSerialiser<GeometryComponent>::deserialise(stream,
+                                                        deserializedComponent);
+
+    auto &originalQuad =
+        std::get<BasicGeometry::QuadParameters>(originalComponent.parameters);
+    auto &deserializedQuad = std::get<BasicGeometry::QuadParameters>(
+        deserializedComponent.parameters);
+
+    REQUIRE(deserializedQuad.width == originalQuad.width);
+    REQUIRE(deserializedQuad.height == originalQuad.height);
+  }
+
+  SECTION("TriangleParameters Serialization and Deserialization") {
+    GeometryComponent originalComponent;
+    originalComponent.parameters =
+        BasicGeometry::TriangleParameters{4.0f, 5.0f};
+
+    std::stringstream stream = create_stream();
+    ComponentSerialiser<GeometryComponent>::serialise(originalComponent,
+                                                      stream);
+
+    GeometryComponent deserializedComponent;
+    ComponentSerialiser<GeometryComponent>::deserialise(stream,
+                                                        deserializedComponent);
+
+    auto &originalTriangle = std::get<BasicGeometry::TriangleParameters>(
+        originalComponent.parameters);
+    auto &deserializedTriangle = std::get<BasicGeometry::TriangleParameters>(
+        deserializedComponent.parameters);
+
+    REQUIRE(deserializedTriangle.base == originalTriangle.base);
+    REQUIRE(deserializedTriangle.height == originalTriangle.height);
+  }
+
+  // Repeat for CircleParameters, SphereParameters, and CubeParameters
+}

@@ -9,87 +9,6 @@
 
 namespace Core {
 
-auto LineRenderer::create(const Device &dev, Framebuffer &framebuffer,
-                          usize input_max) -> void {
-  device = &dev;
-  max_geometry_count = input_max * 2;
-
-  line_vertices.reserve(max_geometry_count);
-
-  shader = Shader::construct(*device, FS::shader("Line.vert.spv"),
-                             FS::shader("Line.frag.spv"));
-
-  // Create pipeline
-  const GraphicsPipelineConfiguration config{
-      .name = "LinePipeline",
-      .shader = shader.get(),
-      .framebuffer = &framebuffer,
-      .polygon_mode = PolygonMode::Line,
-      .line_width = 5.0F,
-      .cull_mode = CullMode::Back,
-      .face_mode = FaceMode::CounterClockwise,
-  };
-
-  pipeline = GraphicsPipeline::construct(*device, config);
-
-  // Create material
-  material = Material::construct(*device, *shader);
-  recreate_buffers();
-}
-
-auto LineRenderer::flush(const CommandBuffer &command_buffer, FrameIndex index)
-    -> void {
-  if (line_vertices.empty()) {
-    return;
-  }
-
-  const auto vertex_buffer_size = line_vertices.size() * sizeof(LineVertex);
-
-  instance_buffer->write(line_vertices.data(), vertex_buffer_size);
-
-  // Bind pipeline
-  pipeline->bind(command_buffer);
-  material->bind(command_buffer, *pipeline, index);
-
-  vkCmdDraw(command_buffer.get_command_buffer(), 2, line_vertices.size(), 0, 0);
-
-  line_vertices.clear();
-}
-
-auto LineRenderer::recreate_buffers(bool increase) -> void {
-  // Resize vertex and index buffer
-  if (increase) {
-    max_geometry_count =
-        2 * static_cast<u32>(load_factor *
-                             static_cast<floating>(max_geometry_count));
-  }
-  const auto storage_buffer_size = max_geometry_count * sizeof(LineVertex);
-  if (instance_buffer) {
-    instance_buffer->resize(storage_buffer_size);
-  } else {
-    instance_buffer =
-        Buffer::construct(*device, storage_buffer_size, Buffer::Type::Storage);
-  }
-
-  instance_buffer->set_binding(20);
-  material->set("LineVertices", *instance_buffer);
-}
-
-auto LineRenderer::submit_vertex(const LineVertex &vertex) -> void {
-  if (line_vertices.size() >= max_geometry_count) {
-    recreate_buffers(true);
-  }
-
-  line_vertices.push_back(vertex);
-}
-
-auto LineRenderer::update_material_for_rendering(
-    SceneRenderer &scene_renderer) const -> void {
-  scene_renderer.update_material_for_rendering(
-      scene_renderer.get_current_index(), *material,
-      scene_renderer.get_ubos().get(), scene_renderer.get_ssbos().get());
-}
-
 GeometryRenderer::GeometryRenderer(Badge<SceneRenderer>, const Device &dev)
     : device(&dev) {}
 
@@ -101,6 +20,11 @@ auto GeometryRenderer::create(Framebuffer &framebuffer,
         (subrenderers.create(*device, framebuffer, max_geometry_count), ...);
       },
       subrenderers);
+}
+
+auto GeometryRenderer::clear() -> void {
+  std::apply([&](auto &...subrenderers) { (subrenderers.clear(), ...); },
+             subrenderers);
 }
 
 auto GeometryRenderer::submit_aabb(const AABB &aabb,
@@ -121,28 +45,64 @@ auto GeometryRenderer::submit_aabb(const AABB &aabb,
       full_transform * glm::vec4{max_aabb.x, max_aabb.y, min_aabb.z, 1.0f},
       full_transform * glm::vec4{max_aabb.x, min_aabb.y, min_aabb.z, 1.0f}};
 
-  for (u32 i = 0; i < 4; i++) {
-    line_renderer.submit_vertex({.position = corners[i], .colour = colour});
-    line_renderer.submit_vertex(
-        {.position = corners[(i + 1) % 4], .colour = colour});
-  }
+  // Define the line indices for the AABB edges
+  static constexpr std::array<u32, 24> indices = {
+      0, 1, 1, 2, 2, 3, 3, 0, // Top face
+      4, 5, 5, 6, 6, 7, 7, 4, // Bottom face
+      0, 4, 1, 5, 2, 6, 3, 7  // Sides
+  };
 
-  for (u32 i = 0; i < 4; i++) {
-    line_renderer.submit_vertex({.position = corners[i + 4], .colour = colour});
-    line_renderer.submit_vertex(
-        {.position = corners[(i + 1) % 4 + 4], .colour = colour});
-  }
-
-  for (u32 i = 0; i < 4; i++) {
-    line_renderer.submit_vertex({.position = corners[i], .colour = colour});
-    line_renderer.submit_vertex({.position = corners[i + 4], .colour = colour});
+  for (u32 i = 0; i < indices.size(); i += 2) {
+    line_renderer.submit({
+        .start_position = corners[indices[i]],
+        .end_position = corners[indices[i + 1]],
+        .colour = colour,
+    });
   }
 }
-auto GeometryRenderer::submit_cube(Core::floating side_length,
-                                   const glm::mat4 &transform,
-                                   const glm::vec4 &colour) -> void {
-  auto &cube_renderer = std::get<CubeRenderer>(subrenderers);
-  cube_renderer.submit(side_length, transform, colour);
+
+auto GeometryRenderer::submit_frustum(const glm::mat4 &inverse_view_projection,
+                                      const glm::mat4 &transform,
+                                      const glm::vec4 &colour) -> void {
+  auto &line_renderer = std::get<LineRenderer>(subrenderers);
+  // Corners in NDC
+  constexpr std::array<glm::vec3, 8> ndc_corners = {
+      glm::vec3{-1.0F, -1.0F, 0.0F}, // Near Top Left (Y-axis is inverted)
+      glm::vec3{1.0F, -1.0F, 0.0F},  // Near Top Right
+      glm::vec3{-1.0F, 1.0F, 0.0F},  // Near Bottom Left
+      glm::vec3{1.0F, 1.0F, 0.0F},   // Near Bottom Right
+      glm::vec3{-1.0F, -1.0F, 1.0F}, // Far Top Left
+      glm::vec3{1.0F, -1.0F, 1.0F},  // Far Top Right
+      glm::vec3{-1.0F, 1.0F, 1.0F},  // Far Bottom Left
+      glm::vec3{1.0F, 1.0F, 1.0F}    // Far Bottom Right
+  };
+
+  std::array<glm::vec4, 8> world_corners{};
+  for (int i = 0; i < 8; ++i) {
+    glm::vec4 worldCorner =
+        inverse_view_projection * glm::vec4(ndc_corners[i], 1.0);
+    world_corners[i] = worldCorner / worldCorner.w; // Perspective divide
+  }
+
+  // Define lines based on world corners
+  const std::array<LineRenderer::LineInstance, 12> lines = {
+      LineRenderer::LineInstance{world_corners[0], world_corners[1], colour},
+      {world_corners[1], world_corners[3], colour},
+      {world_corners[3], world_corners[2], colour},
+      {world_corners[2], world_corners[0], colour},
+      {world_corners[4], world_corners[5], colour},
+      {world_corners[5], world_corners[7], colour},
+      {world_corners[7], world_corners[6], colour},
+      {world_corners[6], world_corners[4], colour},
+      {world_corners[0], world_corners[4], colour},
+      {world_corners[1], world_corners[5], colour},
+      {world_corners[2], world_corners[6], colour},
+      {world_corners[3], world_corners[7], colour}};
+
+  // Submit lines to the renderer
+  for (auto &&line : lines) {
+    line_renderer.submit(line);
+  }
 }
 
 auto GeometryRenderer::update_all_materials_for_rendering(
@@ -154,11 +114,16 @@ auto GeometryRenderer::update_all_materials_for_rendering(
       subrenderers);
 }
 
-auto GeometryRenderer::flush(const CommandBuffer &buffer, FrameIndex index)
-    -> void {
+auto GeometryRenderer::flush(const CommandBuffer &buffer, FrameIndex index,
+                             const GraphicsPipeline *preferred_pipeline,
+                             const Material *preferred_material) -> void {
   // Assume we are in an active renderpass?
   std::apply(
-      [&](auto &...subrenderers) { (subrenderers.flush(buffer, index), ...); },
+      [&](auto &...subrenderers) {
+        (subrenderers.flush(buffer, index, preferred_pipeline,
+                            preferred_material),
+         ...);
+      },
       subrenderers);
 }
 auto GeometryRenderer::get_all_materials() -> std::vector<Material *> {
@@ -171,35 +136,23 @@ auto GeometryRenderer::get_all_materials() -> std::vector<Material *> {
   return materials;
 }
 
-auto QuadRenderer::create(const Device &dev, Framebuffer &framebuffer,
+auto LineRenderer::create(const Device &dev, Framebuffer &framebuffer,
                           usize input_max) -> void {
   device = &dev;
-  max_geometry_count = input_max;
-  const auto vertex_buffer_size = max_geometry_count * sizeof(QuadVertex);
-  const auto index_buffer_size = max_geometry_count * sizeof(u32);
+  max_geometry_count = input_max * 2;
 
-  vertex_buffer =
-      Buffer::construct(*device, vertex_buffer_size, Buffer::Type::Vertex);
+  lines.reserve(max_geometry_count);
 
-  index_buffer =
-      Buffer::construct(*device, index_buffer_size, Buffer::Type::Index);
-
-  quad_vertices.reserve(max_geometry_count);
-
-  shader = Shader::construct(*device, FS::shader("Quad.vert.spv"),
-                             FS::shader("Quad.frag.spv"));
+  shader = Shader::construct(*device, FS::shader("Line.vert.spv"),
+                             FS::shader("Line.frag.spv"));
 
   // Create pipeline
   const GraphicsPipelineConfiguration config{
-      .name = "QuadPipeline",
+      .name = "LinePipeline",
       .shader = shader.get(),
       .framebuffer = &framebuffer,
-      .layout =
-          {
-              LayoutElement{ElementType::Float3},
-              LayoutElement{ElementType::Float4},
-          },
       .polygon_mode = PolygonMode::Line,
+      .line_width = 5.0F,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
   };
@@ -208,162 +161,69 @@ auto QuadRenderer::create(const Device &dev, Framebuffer &framebuffer,
 
   // Create material
   material = Material::construct(*device, *shader);
-}
-
-auto QuadRenderer::flush(const CommandBuffer &command_buffer, FrameIndex index)
-    -> void {
-  if (quad_vertices.empty()) {
-    return;
-  }
-
-  const auto vertex_buffer_size = quad_vertices.size() * sizeof(QuadVertex);
-  const auto index_buffer_size = quad_vertices.size() * sizeof(u32);
-
-  vertex_buffer->write(quad_vertices.data(), vertex_buffer_size);
-
-  std::vector<u32> indices(quad_vertices.size());
-  for (u32 i = 0; i < quad_vertices.size(); i++) {
-    indices[i] = i;
-  }
-
-  index_buffer->write(indices.data(), index_buffer_size);
-
-  // Bind pipeline
-  pipeline->bind(command_buffer);
-  material->bind(command_buffer, *pipeline, index);
-
-  vkCmdSetLineWidth(command_buffer.get_command_buffer(), 5.0f);
-
-  const auto vertex_buffers = std::array{vertex_buffer->get_buffer()};
-  constexpr std::array<VkDeviceSize, 1> offsets = std::array{VkDeviceSize{0u}};
-  vkCmdBindVertexBuffers(command_buffer.get_command_buffer(), 0, 1,
-                         vertex_buffers.data(), offsets.data());
-
-  const auto index_buffer_handle = index_buffer->get_buffer();
-  vkCmdBindIndexBuffer(command_buffer.get_command_buffer(), index_buffer_handle,
-                       0, VK_INDEX_TYPE_UINT32);
-
-  const auto &material_pc_buffer = material->get_constant_buffer();
-  vkCmdPushConstants(command_buffer.get_command_buffer(),
-                     pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
-                     material_pc_buffer.size(), material_pc_buffer.raw());
-
-  vkCmdDrawIndexed(command_buffer.get_command_buffer(), quad_vertices.size(), 1,
-                   0, 0, 0);
-
-  quad_vertices.clear();
-}
-
-auto QuadRenderer::submit_vertex(const QuadVertex &vertex) -> void {
-  if (quad_vertices.size() >= max_geometry_count) {
-    recreate_buffers(true);
-  }
-
-  quad_vertices.push_back(vertex);
-}
-
-auto QuadRenderer::update_material_for_rendering(
-    SceneRenderer &scene_renderer) const -> void {
-  scene_renderer.update_material_for_rendering(
-      scene_renderer.get_current_index(), *material,
-      scene_renderer.get_ubos().get(), scene_renderer.get_ssbos().get());
-}
-
-auto QuadRenderer::recreate_buffers(bool increase_by_load_factor) -> void {
-  // Resize vertex and index buffer
-  vertex_buffer.reset();
-  index_buffer.reset();
-
-  if (increase_by_load_factor) {
-    max_geometry_count = static_cast<u32>(
-        load_factor * static_cast<floating>(max_geometry_count));
-  }
-  const auto vertex_buffer_size = max_geometry_count * sizeof(QuadVertex);
-  const auto index_buffer_size = max_geometry_count * sizeof(u32);
-  vertex_buffer =
-      Buffer::construct(*device, vertex_buffer_size, Buffer::Type::Vertex);
-
-  index_buffer =
-      Buffer::construct(*device, index_buffer_size, Buffer::Type::Index);
-}
-
-auto CubeRenderer::create(const Device &dev, Framebuffer &framebuffer,
-                          usize input_max) -> void {
-  device = &dev;
-  max_geometry_count = input_max;
-
-  shader = Shader::construct(*device, FS::shader("Cube.vert.spv"),
-                             FS::shader("Cube.frag.spv"));
-
-  // Create pipeline
-  const GraphicsPipelineConfiguration config{
-      .name = "CubePipeline",
-      .shader = shader.get(),
-      .framebuffer = &framebuffer,
-      .polygon_mode = PolygonMode::Fill,
-      .cull_mode = CullMode::Back,
-      .face_mode = FaceMode::CounterClockwise,
-  };
-
-  pipeline = GraphicsPipeline::construct(*device, config);
-
-  // Create material
-  material = Material::construct(*device, *shader);
+  material->default_initialisation();
   recreate_buffers();
 }
 
-auto CubeRenderer::flush(const CommandBuffer &command_buffer, FrameIndex index)
-    -> void {
-  if (instance_data.empty()) {
+auto LineRenderer::flush(const CommandBuffer &command_buffer, FrameIndex index,
+                         const GraphicsPipeline *shadow_pipeline,
+                         const Material *shadow_material) -> void {
+  if (shadow_pipeline != nullptr || shadow_material != nullptr)
+    return;
+
+  if (lines.empty()) {
     return;
   }
 
-  const auto vertex_buffer_size = instance_data.size() * sizeof(CubeInstance);
+  // Lines never care about preferred_pipeline (i.e. shadows)
 
-  instance_buffer->write(instance_data.data(), vertex_buffer_size);
+  const auto write_size = lines.size() * sizeof(LineInstance);
+
+  instance_buffer->write(lines.data(), write_size);
 
   // Bind pipeline
   pipeline->bind(command_buffer);
   material->bind(command_buffer, *pipeline, index);
 
-  vkCmdDraw(command_buffer.get_command_buffer(), 36, instance_data.size(), 0,
-            0);
-
-  instance_data.clear();
+  vkCmdDraw(command_buffer.get_command_buffer(), 2, lines.size(), 0, 0);
 }
 
-auto CubeRenderer::recreate_buffers(bool increase) -> void {
+auto LineRenderer::recreate_buffers(bool increase) -> void {
+  // Resize vertex and index buffer
   if (increase) {
-    max_geometry_count = static_cast<u32>(
-        load_factor * static_cast<floating>(max_geometry_count));
+    max_geometry_count =
+        2 * static_cast<u32>(load_factor *
+                             static_cast<floating>(max_geometry_count));
   }
-  const auto storage_buffer_size = max_geometry_count * sizeof(glm::mat4);
+  const auto storage_buffer_size = max_geometry_count * sizeof(LineInstance);
   if (instance_buffer) {
     instance_buffer->resize(storage_buffer_size);
   } else {
     instance_buffer =
         Buffer::construct(*device, storage_buffer_size, Buffer::Type::Storage);
   }
-  instance_buffer->set_binding(21);
-  material->set("CubeInstances", *instance_buffer);
+
+  instance_buffer->set_binding(20);
+  material->set("LineVertices", *instance_buffer);
 }
 
-auto CubeRenderer::submit(Core::floating side_length,
-                          const glm::mat4 &transform, const glm::vec4 &colour)
-    -> void {
-  if (instance_data.size() >= max_geometry_count) {
+auto LineRenderer::submit(const LineInstance &vertex) -> void {
+  if (lines.size() >= max_geometry_count) {
     recreate_buffers(true);
   }
 
-  instance_data.push_back(CubeInstance{
-      .transform = transform,
-      .colour = colour,
-      .side_length = glm::vec4{side_length},
-  });
+  lines.push_back(vertex);
 }
 
-auto CubeRenderer::update_material_for_rendering(
+auto LineRenderer::update_material_for_rendering(
     SceneRenderer &scene_renderer) const -> void {
+
+  material->set("shadow_map", scene_renderer.get_depth_image());
+  material->set("irradiance_texture",
+                *scene_renderer.get_scene_environment().irradiance_texture);
+  material->set("radiance_texture",
+                *scene_renderer.get_scene_environment().radiance_texture);
+  material->set("brdf_lookup", SceneRenderer::get_brdf_lookup_texture());
   scene_renderer.update_material_for_rendering(
       scene_renderer.get_current_index(), *material,
       scene_renderer.get_ubos().get(), scene_renderer.get_ssbos().get());

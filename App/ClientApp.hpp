@@ -77,13 +77,11 @@ public:
 
 private:
   Scope<ECS::Scene> scene;
-  Scope<CommandDispatcher> dispatcher;
-  Scope<DynamicLibraryLoader> loader;
 
   std::optional<entt::entity> selected_entity;
-
+  std::tuple<u32, u32> main_position{};
+  Extent<float> main_size{};
   GuizmoOperation current_operation{GuizmoOperation::T};
-  static auto cycle(GuizmoOperation) -> GuizmoOperation;
 
   EditorCamera camera;
 
@@ -93,6 +91,14 @@ private:
       widget->on_notify(message);
     }
   }
+
+  std::array<glm::vec2, 2> viewport_bounds{};
+
+  auto load_entity() -> std::optional<ECS::Entity>;
+  auto copy_selected_entity() -> void;
+  auto delete_selected_entity() -> void;
+  [[nodiscard]] auto pick_object(const glm::vec3 &, const glm::vec3 &)
+      -> entt::entity;
 
   Timer timer;
 

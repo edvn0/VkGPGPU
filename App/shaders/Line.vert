@@ -2,20 +2,28 @@
 
 #include <ShaderResources.glsl>
 
-layout(location = 0) out vec4 out_colour; // Pass color to fragment shader
+layout(location = 0) out vec4 colour;
 
-struct LineVertex {
-  vec4 pos;
+struct LineInstance
+{
+  vec4 start_pos;
+  vec4 end_pos;
   vec4 col;
 };
-layout(std140, set = 0, binding = 20) readonly buffer LineVertices {
-  LineVertex vertices[];
+layout(std140, set = 0, binding = 20) readonly buffer LineVertices
+{
+  LineInstance vertices[];
 }
 verts;
 
-void main() {
-  LineVertex vert = verts.vertices[gl_InstanceIndex];
-  out_colour = vert.col; // Pass color to fragment shader
-  gl_Position = renderer.view_projection *
-                vec4(vert.pos.xyz, 1.0); // Transform vertex position
+void main()
+{
+  LineInstance line_instance = verts.vertices[gl_InstanceIndex];
+
+  vec4 position = (gl_VertexIndex % 2 == 0) ? line_instance.start_pos
+                                            : line_instance.end_pos;
+  vec4 computed = vec4(position.xyz, 1.0F);
+
+  gl_Position = renderer.view_projection * computed;
+  colour = line_instance.col;
 }

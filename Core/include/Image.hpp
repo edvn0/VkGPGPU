@@ -31,6 +31,8 @@ struct ImageProperties {
 
   MipInfo mip_info{};
 
+  bool generate_per_mip_image_views{true};
+
   ImageFormat format{ImageFormat::Undefined};
   ImageTiling tiling{ImageTiling::Optimal};
   ImageUsage usage{ImageUsage::Sampled | ImageUsage::TransferDst |
@@ -65,6 +67,10 @@ public:
   [[nodiscard]] auto get_extent() const noexcept -> const Extent<u32> &;
   [[nodiscard]] auto hash() const noexcept -> usize;
 
+  auto get_mip_image_view_at(u32) const -> VkImageView;
+  auto get_mip_size(u32) const -> std::pair<u32, u32>;
+  auto get_image() const -> VkImage;
+
   static auto construct_reference(const Device &device,
                                   const ImageProperties &properties)
       -> Ref<Image>;
@@ -80,6 +86,7 @@ private:
   auto load_image_data_from_buffer(const DataBuffer &) const -> void;
   auto initialise_vulkan_image() -> void;
   auto initialise_vulkan_descriptor_info() -> void;
+  auto initialise_per_mip_image_views() -> void;
 
 public:
   Image(const Image &) = delete;

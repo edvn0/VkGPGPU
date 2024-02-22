@@ -108,7 +108,7 @@ auto Framebuffer::create_framebuffer() -> void {
     attachment_images.clear();
 
   u32 attachment_index = 0;
-  for (auto attachment_specification : attachments) {
+  for (const auto &attachment_specification : attachments) {
     if (is_depth_format(attachment_specification.format)) {
       if (properties.existing_image) {
         depth_attachment_image = properties.existing_image;
@@ -137,11 +137,12 @@ auto Framebuffer::create_framebuffer() -> void {
                           .height = static_cast<u32>(height * properties.scale),
                       },
                   .format = attachment_specification.format,
-                  .usage =
-                      ImageUsage::DepthStencilAttachment | ImageUsage::Sampled,
+                  .usage = ImageUsage::DepthStencilAttachment |
+                           ImageUsage::Sampled | ImageUsage::TransferSrc |
+                           ImageUsage::TransferDst,
                   .layout = ImageLayout::DepthStencilReadOnlyOptimal,
-                  .address_mode = SamplerAddressMode::ClampToEdge,
-                  .border_color = SamplerBorderColor::FloatOpaqueBlack,
+                  .address_mode = SamplerAddressMode::ClampToBorder,
+                  .border_color = SamplerBorderColor::FloatOpaqueWhite,
                   .compare_op = CompareOperation::Less,
               });
         }

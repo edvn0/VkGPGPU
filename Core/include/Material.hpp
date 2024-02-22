@@ -31,7 +31,7 @@ public:
 
   auto set(const std::string_view identifier, Math::IsGLM auto &value) -> bool {
     const auto &copy = value;
-    return set(identifier, Math::value_ptr(copy));
+    return set(identifier, glm::value_ptr(copy));
   }
 
   auto set(std::string_view, const Texture &) -> bool;
@@ -65,6 +65,10 @@ public:
   }
 
   [[nodiscard]] auto get_shader() const -> const auto & { return *shader; }
+
+  /// @brief Sets all the default materials for a functioning material in this
+  /// engine.
+  auto default_initialisation() -> void;
 
 private:
   Material(const Device &, const Shader &);

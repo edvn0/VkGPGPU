@@ -189,19 +189,19 @@ auto save_cache(auto &device, auto pipeline_cache, const std::string &name) {
 }
 } // namespace PipelineHelpers
 
-auto Pipeline::construct(const Device &dev,
-                         const PipelineConfiguration &configuration)
-    -> Scope<Pipeline> {
-  return Scope<Pipeline>(new Pipeline(dev, configuration));
+auto ComputePipeline::construct(
+    const Device &dev, const ComputePipelineConfiguration &configuration)
+    -> Scope<ComputePipeline> {
+  return Scope<ComputePipeline>(new ComputePipeline(dev, configuration));
 }
 
-Pipeline::Pipeline(const Device &dev,
-                   const PipelineConfiguration &configuration)
+ComputePipeline::ComputePipeline(
+    const Device &dev, const ComputePipelineConfiguration &configuration)
     : device(dev), name(configuration.name) {
   construct_pipeline(configuration);
 }
 
-Pipeline::~Pipeline() {
+ComputePipeline::~ComputePipeline() {
   if constexpr (Config::use_pipeline_cache) {
     try {
       PipelineHelpers::save_cache(device, pipeline_cache, name);
@@ -215,14 +215,14 @@ Pipeline::~Pipeline() {
   vkDestroyPipeline(device.get_device(), pipeline, nullptr);
 }
 
-auto Pipeline::bind(const CommandBuffer &command_buffer) -> void {
+auto ComputePipeline::bind(const CommandBuffer &command_buffer) -> void {
   vkCmdBindPipeline(command_buffer.get_command_buffer(),
                     static_cast<VkPipelineBindPoint>(PipelineStage::Compute),
                     pipeline);
 }
 
-auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
-    -> void {
+auto ComputePipeline::construct_pipeline(
+    const ComputePipelineConfiguration &configuration) -> void {
 
   VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
   pipeline_layout_create_info.sType =

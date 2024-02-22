@@ -8,6 +8,7 @@
     "databuffer",
     "librenderdoc",
     "metalness",
+    "quat",
     "rdoc",
     "renderpass",
     "Serialiser",
@@ -15,7 +16,8 @@
     "ssbos",
     "SUBPASS",
     "subresource",
-    "ubos"
+    "ubos",
+    "Unremovable"
   ],
   "files.associations": {
     "*.frag": "hlsl",

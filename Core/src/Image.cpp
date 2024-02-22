@@ -229,6 +229,8 @@ struct Image::ImageStorageImpl {
   VkImageView image_view{};
   VkSampler sampler{};
 
+  std::unordered_map<u32, VkImageView> per_mip_image_views{};
+
   explicit ImageStorageImpl(const Device *dev) : device(dev) {}
 
   ~ImageStorageImpl() {
@@ -236,6 +238,10 @@ struct Image::ImageStorageImpl {
     vkDestroyImageView(device->get_device(), image_view, nullptr);
     Allocator allocator{"Image"};
     allocator.deallocate_image(allocation, image);
+
+    for (auto &&[k, img] : per_mip_image_views) {
+      vkDestroyImageView(device->get_device(), img, nullptr);
+    }
   }
 };
 
@@ -281,6 +287,10 @@ auto Image::recreate() -> void {
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
+  if (properties.generate_per_mip_image_views) {
+    initialise_per_mip_image_views();
+  }
+
   if (properties.mip_info.valid()) {
     create_mips();
   }
@@ -356,6 +366,33 @@ auto Image::initialise_vulkan_descriptor_info() -> void {
   descriptor_image_info.imageLayout = to_vulkan_layout(properties.layout);
 }
 
+auto Image::initialise_per_mip_image_views() -> void {
+  for (auto mip = 0U; mip < properties.mip_info.mips; mip++) {
+    VkImageAspectFlags aspectMask = aspect_bit;
+    if (properties.format == ImageFormat::DEPTH24STENCIL8)
+      aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+    VkFormat vulkanFormat = to_vulkan_format(properties.format);
+
+    VkImageViewCreateInfo image_view_create_info = {};
+    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    image_view_create_info.format = vulkanFormat;
+    image_view_create_info.flags = 0;
+    image_view_create_info.subresourceRange = {};
+    image_view_create_info.subresourceRange.aspectMask = aspectMask;
+    image_view_create_info.subresourceRange.baseMipLevel = mip;
+    image_view_create_info.subresourceRange.levelCount = 1;
+    image_view_create_info.subresourceRange.baseArrayLayer = 0;
+    image_view_create_info.subresourceRange.layerCount = 1;
+    image_view_create_info.image = impl->image;
+
+    verify(vkCreateImageView(device->get_device(), &image_view_create_info,
+                             nullptr, &impl->per_mip_image_views[mip]),
+           "vkCreateImageView", "failed to create");
+  }
+}
+
 auto Image::get_descriptor_info() const -> const VkDescriptorImageInfo & {
   return descriptor_image_info;
 }
@@ -382,6 +419,21 @@ auto Image::get_vulkan_type() const noexcept -> VkDescriptorType {
 auto Image::get_extent() const noexcept -> const Extent<u32> & {
   return properties.extent;
 }
+
+auto Image::get_mip_image_view_at(u32 mip) const -> VkImageView {
+  return impl->per_mip_image_views.at(mip);
+}
+
+auto Image::get_mip_size(u32 mip) const -> std::pair<u32, u32> {
+  Extent<u32> final_extent{properties.extent};
+  while (mip > 0) {
+    final_extent /= 2;
+    mip /= 2;
+  }
+  return final_extent.as_pair();
+}
+
+auto Image::get_image() const -> VkImage { return impl->image; }
 
 namespace {
 auto hash_combine(usize &seed, const void *value) noexcept -> void {
@@ -463,7 +515,7 @@ void Image::create_mips() {
                    VK_FILTER_LINEAR);
 
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.newLayout = to_vulkan_layout(properties.layout);
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 

@@ -7,6 +7,7 @@
 #include "Config.hpp"
 #include "Containers.hpp"
 #include "Pipeline.hpp"
+#include "SceneRenderer.hpp"
 
 #include <string_view>
 #include <unordered_map>
@@ -24,6 +25,23 @@ auto Material::construct(const Device &device, const Shader &shader)
 auto Material::construct_reference(const Device &device, const Shader &shader)
     -> Ref<Material> {
   return Ref<Material>(new Material(device, shader));
+}
+
+auto Material::default_initialisation() -> void {
+  static constexpr auto default_roughness_and_albedo = 0.8F;
+  auto vec_default_roughness_and_albedo = glm::vec3(0.8F);
+  set("pc.albedo_colour", vec_default_roughness_and_albedo);
+  set("pc.emission", 0.1F);
+  set("pc.metalness", 0.1F);
+  set("pc.roughness", default_roughness_and_albedo);
+  set("pc.use_normal_map", 0.0F);
+
+  set("albedo_map", SceneRenderer::get_white_texture());
+  set("diffuse_map", SceneRenderer::get_white_texture());
+  set("normal_map", SceneRenderer::get_white_texture());
+  set("metallic_map", SceneRenderer::get_white_texture());
+  set("roughness_map", SceneRenderer::get_white_texture());
+  set("ao_map", SceneRenderer::get_white_texture());
 }
 
 Material::Material(const Device &dev, const Shader &input_shader)

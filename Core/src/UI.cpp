@@ -7,6 +7,8 @@
 #include <backends/imgui_impl_vulkan.h>
 #include <fmt/format.h>
 
+#include "imgui-notify/ImGuiNotify.hpp"
+
 template <typename... Args> auto make_id(Args &&...data) {
   // Use a fold expression to concatenate the formatted pointer strings
   return fmt::format(
@@ -49,18 +51,31 @@ auto begin(const std::string_view name) -> bool {
 
 auto end() -> void { return ImGui::End(); }
 
-auto window_size() -> Extent<u32> {
-  Extent<u32> output;
+auto window_size() -> Extent<float> {
+  Extent<float> output;
 
-  auto content_min = ImGui::GetWindowContentRegionMin();
-  auto content_max = ImGui::GetWindowContentRegionMax();
-
-  output.width =
-      static_cast<u32>(content_max.x) - static_cast<u32>(content_min.x);
-  output.height =
-      static_cast<u32>(content_max.y) - static_cast<u32>(content_min.y);
-
+  auto content = ImGui::GetContentRegionAvail();
+  output.width = content.x;
+  output.height = content.y;
   return output;
+}
+
+auto window_position() -> std::tuple<u32, u32> {
+  ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+  ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+  vMin.x += ImGui::GetWindowPos().x;
+  vMin.y += ImGui::GetWindowPos().y;
+  vMax.x += ImGui::GetWindowPos().x;
+  vMax.y += ImGui::GetWindowPos().y;
+
+  ImGui::GetForegroundDrawList()->AddRect(vMin, vMax,
+                                          IM_COL32(255, 255, 0, 255));
+
+  return {
+      static_cast<u32>(vMin.x),
+      static_cast<u32>(vMin.y),
+  };
 }
 
 auto image(const Texture &texture, InterfaceImageProperties properties)
@@ -163,6 +178,16 @@ auto text_wrapped_impl(const std::string_view data) -> void {
 auto set_drag_drop_payload_impl(const std::string_view payload_identifier,
                                 const std::string_view data) -> bool {
   return Platform::set_drag_drop_payload(payload_identifier, data);
+}
+
+constexpr auto to_imgui_notify_type(Toast::Type type) {
+  return static_cast<ImGuiToastType>(type);
+}
+
+auto toast(Toast::Type type, u32 duration_ms, std::string_view data) -> void {
+  ImGuiToast toast{to_imgui_notify_type(type), static_cast<i32>(duration_ms),
+                   "%s", data.data()};
+  ImGui::InsertNotification(toast);
 }
 
 } // namespace Core::UI::Detail

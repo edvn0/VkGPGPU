@@ -113,6 +113,29 @@ Window::Window(const Instance &inst, const WindowProperties &props)
         MouseScrolledEvent event{static_cast<float>(x), static_cast<float>(y)};
         self.user_data.event_callback(event);
       });
+
+  glfwSetMouseButtonCallback(
+      window, +[](GLFWwindow *win, int button, int action, int mods) {
+        auto &self = *static_cast<Window *>(glfwGetWindowUserPointer(win));
+
+        // Assuming you have a way to get the current mouse position
+        double mouse_x;
+        double mouse_y;
+        glfwGetCursorPos(win, &mouse_x, &mouse_y);
+
+        if (action == GLFW_PRESS) {
+          MouseButtonPressedEvent event(static_cast<MouseCode>(button),
+                                        static_cast<floating>(mouse_x),
+                                        static_cast<floating>(mouse_y));
+          self.user_data.event_callback(event);
+        }
+        if (action == GLFW_RELEASE) {
+          MouseButtonReleasedEvent event(static_cast<MouseCode>(button),
+                                         static_cast<floating>(mouse_x),
+                                         static_cast<floating>(mouse_y));
+          self.user_data.event_callback(event);
+        }
+      });
 }
 
 auto Window::toggle_fullscreen() -> void {

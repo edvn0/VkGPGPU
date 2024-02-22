@@ -86,6 +86,10 @@ public:
     return properties.path;
   }
 
+  auto get_mip_size(u32 mip) -> std::pair<u32, u32> {
+    return image->get_mip_size(mip);
+  }
+
   static auto empty_with_size(const Device &, usize, const Extent<u32> &)
       -> Scope<Texture>;
   static auto construct(const Device &, const TextureProperties &)

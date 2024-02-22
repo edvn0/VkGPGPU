@@ -66,24 +66,14 @@ void SceneWidget::on_interface(InterfaceSystem &) {
       }
     } else if (!has_parent) {
 
+      ImGui::PushID(static_cast<i32>(identity.id));
       if (ImGui::Selectable(identity.name.c_str(), &is_selected)) {
         selected = entity;
         selected_name = identity.name;
       }
+      ImGui::PopID();
     }
     ImGui::PopID();
-  }
-
-  // If i click outside of the list, deselect the entity
-  // Must also be inside the SceneContext window
-  if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
-    selected = entt::null;
-    if (last_selected != selected) {
-      on_notify(Events::SelectedEntityUpdateEvent::empty());
-    }
-
-    selected_name.clear();
-    last_selected = entt::null;
   }
 
   // Create a right click menu for adding entities
@@ -184,16 +174,95 @@ void SceneWidget::draw_component_widget(Entity &entity) {
 
   draw_component<SunComponent>(entity, "Sun", [](SunComponent &sun) {
     ImGui::DragFloat3("Direction", &sun.direction.x, 0.1F);
-    ImGui::ColorEdit3("Colour", &sun.colour.x);
+    ImGui::ColorEdit4("Colour", &sun.colour.x);
+    ImGui::ColorEdit4("Specular Colour", &sun.specular_colour.x);
 
     Core::DepthParameters &depth = sun.depth_params;
-    ImGui::DragFloat("Near", &depth.near, 0.1F);
-    ImGui::DragFloat("Far", &depth.far, 0.1F);
     ImGui::DragFloat("Bias", &depth.bias, 0.1F, 0.0F, 1.0F);
-    ImGui::DragFloat("Value", &depth.value, 0.1F, -100.0F, 100.0F);
-    ImGui::DragFloat("Default Value", &depth.default_value, 0.1F, -100.0F,
-                     100.0F);
+    ImGui::DragFloat("Default Value", &depth.default_value, 0.01F, .01F, 0.2F);
   });
+
+  draw_component<GeometryComponent>(
+      entity, "Basic Geometry", [](GeometryComponent &comp) {
+        const char *items[] = {"Quad", "Triangle", "Circle", "Sphere", "Cube"};
+        int currentItem = comp.parameters.index();
+
+        if (ImGui::Combo("Geometry Type", &currentItem, items,
+                         IM_ARRAYSIZE(items))) {
+        }
+
+        // Update the variant to reflect the new selection, if changed
+        switch (currentItem) {
+        case 0: // Quad
+          if (!std::holds_alternative<BasicGeometry::QuadParameters>(
+                  comp.parameters)) {
+            comp.parameters = BasicGeometry::QuadParameters{
+                1.0f, 1.0f}; // Default QuadParameters
+          }
+          break;
+        case 1: // Triangle
+          if (!std::holds_alternative<BasicGeometry::TriangleParameters>(
+                  comp.parameters)) {
+            comp.parameters = BasicGeometry::TriangleParameters{
+                1.0f, 1.0f}; // Default TriangleParameters
+          }
+          break;
+        case 2: // Circle
+          if (!std::holds_alternative<BasicGeometry::CircleParameters>(
+                  comp.parameters)) {
+            comp.parameters = BasicGeometry::CircleParameters{
+                1.0f}; // Default CircleParameters
+          }
+          break;
+        case 3: // Sphere
+          if (!std::holds_alternative<BasicGeometry::SphereParameters>(
+                  comp.parameters)) {
+            comp.parameters = BasicGeometry::SphereParameters{
+                1.0f}; // Default SphereParameters
+          }
+          break;
+        case 4: // Cube
+          if (!std::holds_alternative<BasicGeometry::CubeParameters>(
+                  comp.parameters)) {
+            comp.parameters =
+                BasicGeometry::CubeParameters{1.0f}; // Default CubeParameters
+          }
+          break;
+        }
+
+        // Draw UI based on the selected Geometry Type
+        std::visit(overloaded{[](BasicGeometry::QuadParameters &quad) {
+                                ImGui::Text("Quad Parameters");
+                                ImGui::DragFloat("Width", &quad.width, 0.1f,
+                                                 0.0f, FLT_MAX, "%.3f");
+                                ImGui::DragFloat("Height", &quad.height, 0.1f,
+                                                 0.0f, FLT_MAX, "%.3f");
+                              },
+                              [](BasicGeometry::TriangleParameters &triangle) {
+                                ImGui::Text("Triangle Parameters");
+                                ImGui::DragFloat("Base", &triangle.base, 0.1f,
+                                                 0.0f, FLT_MAX, "%.3f");
+                                ImGui::DragFloat("Height", &triangle.height,
+                                                 0.1f, 0.0f, FLT_MAX, "%.3f");
+                              },
+                              [](BasicGeometry::CircleParameters &circle) {
+                                ImGui::Text("Circle Parameters");
+                                ImGui::DragFloat("Radius", &circle.radius, 0.1f,
+                                                 0.0f, FLT_MAX, "%.3f");
+                              },
+                              [](BasicGeometry::SphereParameters &sphere) {
+                                ImGui::Text("Sphere Parameters");
+                                ImGui::DragFloat("Radius", &sphere.radius, 0.1f,
+                                                 0.0f, FLT_MAX, "%.3f");
+                              },
+                              [](BasicGeometry::CubeParameters &cube) {
+                                ImGui::Text("Cube Parameters");
+                                ImGui::DragFloat("Side Length",
+                                                 &cube.side_length, 0.1f, 0.0f,
+                                                 FLT_MAX, "%.3f");
+                              }},
+                   comp.parameters);
+      });
 
   draw_component<MeshComponent>(
       entity, "Mesh", [&dev = device](MeshComponent &mesh) {
@@ -203,6 +272,9 @@ void SceneWidget::draw_component_widget(Entity &entity) {
           UI::text("Path: {}", mesh.mesh->get_file_path().string());
         } else {
           UI::text("No mesh selected");
+        }
+
+        if (ImGui::Checkbox("AABB", &mesh.draw_aabb)) {
         }
 
         ImGui::NewLine();

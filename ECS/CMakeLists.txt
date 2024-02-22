@@ -9,6 +9,8 @@ set(SOURCES
     include/ecs/Scene.hpp
     src/ecs/Entity.cpp
     src/ecs/Scene.cpp
+    include/ecs/serialisation/Serialisers.hpp
+    src/ecs/serialisation/Serialisers.cpp
     include/ecs/serialisation/SceneSerialiser.hpp
     src/ecs/serialisation/SceneSerialiser.cpp
 )
@@ -23,3 +25,11 @@ target_include_directories(ECS PUBLIC
     ${CMAKE_SOURCE_DIR}/ThirdParty/glm
     ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
 target_precompile_headers(App REUSE_FROM Core)
+
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(ECS PRIVATE GPGPU_DEBUG)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(ECS PRIVATE GPGPU_RELEASE)
+endif()

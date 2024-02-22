@@ -81,7 +81,8 @@ public:
   static auto import_from(const Device &device, const FS::Path &file_path)
       -> Scope<Mesh>;
   static auto reference_import_from(const Device &device,
-                                    const FS::Path &file_path) -> Ref<Mesh>;
+                                    const FS::Path &file_path)
+      -> const Ref<Mesh> &;
 
   static auto clear_cache() -> void { mesh_cache.clear(); }
 
@@ -109,18 +110,14 @@ private:
   [[nodiscard]] auto
   read_texture_from_file_path(const std::string &texture_path) const
       -> Scope<Texture>;
-  void handle_normal_map(const Texture &white_texture,
-                         const aiMaterial *ai_material,
+  void handle_normal_map(const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
-  void handle_roughness_map(const Texture &white_texture,
-                            const aiMaterial *ai_material,
+  void handle_roughness_map(const aiMaterial *ai_material,
                             Material &submesh_material, aiString ai_tex_path,
                             float roughness);
-  void handle_metalness_map(const Texture &white_texture,
-                            const aiMaterial *ai_material,
+  void handle_metalness_map(const aiMaterial *ai_material,
                             Material &submesh_material, float metalness);
-  void handle_albedo_map(const Texture &white_texture,
-                         const aiMaterial *ai_material,
+  void handle_albedo_map(const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
 
   struct Deleter {

@@ -1,6 +1,9 @@
 #ifndef BUFFER_VKGPU
 #define BUFFER_VKGPU
 
+mat4 depth_bias = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
+                       0.0, 0.5, 0.5, 0.5, 1.0);
+
 layout(std140, set = 0, binding = 1) uniform ShadowData {
   mat4 view;
   mat4 projection;
@@ -20,6 +23,7 @@ layout(std140, set = 0, binding = 0) uniform RendererData {
   vec4 light_dir;
   vec4 camera_pos;
   vec4 light_colour;
+  vec4 specular_colour;
 }
 renderer;
 
@@ -35,15 +39,6 @@ layout(std140, set = 0, binding = 3) uniform GridData {
   vec4 fog_colour;
 }
 grid;
-
-layout(push_constant) uniform PushConstants {
-  vec4 albedo_colour;
-  float emission;
-  float metalness;
-  float roughness;
-  float use_normal_map;
-}
-pc;
 
 layout(set = 1, binding = 9) uniform sampler2D shadow_map;
 layout(set = 1, binding = 10) uniform sampler2D albedo_map;

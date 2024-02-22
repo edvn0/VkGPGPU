@@ -2,6 +2,7 @@
 
 #include "SceneRenderer.hpp"
 
+#include "CommandDispatcher.hpp"
 #include "Input.hpp"
 #include "Random.hpp"
 
@@ -113,14 +114,16 @@ auto SceneRenderer::create_preetham_sky(float turbidity, float azimuth,
       TextureCube::construct(*device, ImageFormat::SRGB_RGBA32, cubemap_extent);
 
   auto preetham_sky_shader = shader_cache.at("PreethamSky").get();
-  auto preetham_sky_compute_pipeline = Pipeline::construct(
-      *device,
-      PipelineConfiguration{"PreethamSkyComputePipeline",
-                            PipelineStage::Compute, *preetham_sky_shader});
+  auto preetham_sky_compute_pipeline =
+      ComputePipeline::construct(*device, ComputePipelineConfiguration{
+                                              "PreethamSkyComputePipeline",
+                                              PipelineStage::Compute,
+                                              *preetham_sky_shader,
+                                          });
 
   glm::vec3 params = {turbidity, azimuth, inclination};
 
-  std::array<VkWriteDescriptorSet, 1> write_descriptors;
+  std::array<VkWriteDescriptorSet, 1> write_descriptors{};
   auto descriptor_set = preetham_sky_shader->allocate_descriptor_set(0);
   write_descriptors[0] =
       *preetham_sky_shader->get_descriptor_set("output_cubemap", 0);
@@ -308,14 +311,20 @@ auto SceneRenderer::submit_aabb(const AABB &aabb, const glm::mat4 &transform)
   geometry_renderer.submit_aabb(aabb, transform);
 }
 
-auto SceneRenderer::submit_cube(const floating side_length,
-                                const glm::mat4 &transform,
+auto SceneRenderer::submit_cube(const glm::mat4 &transform,
                                 const glm::vec4 &colour) -> void {
-  geometry_renderer.submit_cube(side_length, transform, colour);
+  const auto &mesh = Mesh::get_cube();
+  submit_static_mesh(mesh.get(), transform, colour);
+}
+
+auto SceneRenderer::submit_frustum(const glm::mat4 &inverse_view_projection,
+                                   const glm::mat4 &transform) -> void {
+  geometry_renderer.submit_frustum(inverse_view_projection, transform);
 }
 
 auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
-                                       const glm::mat4 &transform) -> void {
+                                       const glm::mat4 &transform,
+                                       const glm::vec4 &colour) -> void {
   for (const auto &submesh : mesh->get_submeshes()) {
     CommandKey key{mesh, submesh};
 
@@ -326,6 +335,8 @@ auto SceneRenderer::submit_static_mesh(const Mesh *mesh,
                                         transform[2][1], transform[3][1]};
     mesh_transform.transform_rows[2] = {transform[0][2], transform[1][2],
                                         transform[2][2], transform[3][2]};
+    // We also instance the colour :)
+    mesh_transform.transform_rows[3] = colour;
 
     auto &command = draw_commands[key];
     command.mesh_ptr = mesh;
@@ -352,6 +363,15 @@ auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
    auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
    scene_environment.radiance_texture = texture_cube;
    scene_environment.irradiance_texture = texture_cube;*/
+
+  // Bloom
+  {
+    glm::uvec2 bloomSize = (glm::uvec2{extent.width, extent.height} + 1u) / 2u;
+    bloomSize += bloom_workgroup_size - bloomSize % bloom_workgroup_size;
+    bloom_textures[0]->on_resize({bloomSize.x, bloomSize.y});
+    bloom_textures[1]->on_resize({bloomSize.x, bloomSize.y});
+    bloom_textures[2]->on_resize({bloomSize.x, bloomSize.y});
+  }
 
   const auto &ubo = ubos->get(0, current_frame);
   ubo->write(renderer_ubo);
@@ -394,11 +414,9 @@ auto SceneRenderer::shadow_pass() -> void {
 
     const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
-    if (material) {
-      update_material_for_rendering(current_frame, *material, ubos.get(),
-                                    ssbos.get());
-      material->bind(*command_buffer, *shadow_pipeline, current_frame);
-    }
+    update_material_for_rendering(current_frame, *shadow_material, ubos.get(),
+                                  ssbos.get());
+    shadow_material->bind(*command_buffer, *shadow_pipeline, current_frame);
 
     const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
     const auto &transform_vertex_buffer =
@@ -416,6 +434,9 @@ auto SceneRenderer::shadow_pass() -> void {
         .vertex_offset = submesh.base_vertex,
     });
   }
+
+  geometry_renderer.flush(*command_buffer, current_frame, shadow_pipeline.get(),
+                          shadow_material.get());
 }
 
 auto SceneRenderer::geometry_pass() -> void {
@@ -434,10 +455,10 @@ auto SceneRenderer::geometry_pass() -> void {
 
     if (material) {
       material->set("shadow_map", *shadow_framebuffer->get_depth_image());
-      material->set("u_EnvIrradianceTex",
+      material->set("irradiance_texture",
                     *scene_environment.irradiance_texture);
-      material->set("u_EnvRadianceTex", *scene_environment.radiance_texture);
-      material->set("u_BRDFLut", SceneRenderer::get_brdf_lookup_texture());
+      material->set("radiance_texture", *scene_environment.radiance_texture);
+      material->set("brdf_lookup", SceneRenderer::get_brdf_lookup_texture());
       update_material_for_rendering(current_frame, *material, ubos.get(),
                                     ssbos.get());
       material->bind(*command_buffer, *selected_pipeline, current_frame);
@@ -467,6 +488,403 @@ auto SceneRenderer::geometry_pass() -> void {
 
   geometry_renderer.update_all_materials_for_rendering(*this);
   geometry_renderer.flush(*command_buffer, current_frame);
+}
+
+void SceneRenderer::bloom_pass() {
+  if (!bloom_settings.enabled)
+    return;
+
+  struct {
+    glm::vec4 params;
+    float LOD = 0.0f;
+    // 0 = prefilter, 1 = downsample, 2 = firstUpsample, 3 = upsample
+    int mode = 0;
+  } bloom_compute_push_constants;
+
+  bloom_compute_push_constants.params = {
+      bloom_settings.threshold, bloom_settings.threshold - bloom_settings.knee,
+      bloom_settings.knee * 2.0f, 0.25f / bloom_settings.knee};
+  bloom_compute_push_constants.mode = 0;
+
+  const auto &inputImage = geometry_framebuffer->get_image();
+
+  // m_GPUTimeQueries.BloomComputePassQuery =
+  //    m_CommandBuffer->BeginTimestampQuery();
+
+  std::array images = {
+      &bloom_textures.at(0)->get_image(),
+      &bloom_textures.at(1)->get_image(),
+      &bloom_textures.at(2)->get_image(),
+  };
+
+  const auto &shader = bloom_material->get_shader();
+
+  auto descriptorImageInfo = images[0]->get_descriptor_info();
+  descriptorImageInfo.imageView = images[0]->get_mip_image_view_at(0);
+
+  std::array<VkWriteDescriptorSet, 3> writeDescriptors{};
+
+  VkDescriptorSetLayout descriptorSetLayout =
+      shader.get_descriptor_set_layouts().at(0);
+
+  VkDescriptorSetAllocateInfo allocInfo = {};
+  allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocInfo.descriptorSetCount = 1;
+  allocInfo.pSetLayouts = &descriptorSetLayout;
+
+  compute_command_buffer->begin(current_frame);
+
+#if 0
+  if (false) {
+    VkImageMemoryBarrier imageMemoryBarrier = {};
+    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageMemoryBarrier.image = inputImage->get_image_info().image;
+    imageMemoryBarrier.subresourceRange = {
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        0,
+        inputImage->get_properties().mip_info.mips,
+        0,
+        1,
+    };
+    imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(command_buffer->get_command_buffer(),
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &imageMemoryBarrier);
+  }
+#endif
+
+  // Output image
+  VkDescriptorSet descriptorSet =
+      device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
+  writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+  writeDescriptors[0].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[0].pImageInfo = &descriptorImageInfo;
+
+  // Input image
+  writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+  writeDescriptors[1].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[1].pImageInfo = &inputImage->get_descriptor_info();
+
+  writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+  writeDescriptors[2].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+
+  vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
+                         writeDescriptors.data(), 0, nullptr);
+
+  u32 workGroupsX =
+      bloom_textures[0]->get_extent().width / bloom_workgroup_size;
+  u32 workGroupsY =
+      bloom_textures[0]->get_extent().height / bloom_workgroup_size;
+
+  // Renderer::RT_BeginGPUPerfMarker(commandBuffer, "Bloom-Prefilter");
+  bloom_pipeline->bind(*compute_command_buffer);
+  vkCmdPushConstants(compute_command_buffer->get_command_buffer(),
+                     bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL,
+                     0, sizeof(bloom_compute_push_constants),
+                     &bloom_compute_push_constants);
+  vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                          bloom_pipeline->get_bind_point(),
+                          bloom_pipeline->get_pipeline_layout(), 0, 1,
+                          &descriptorSet, 0, 0);
+  vkCmdDispatch(compute_command_buffer->get_command_buffer(), workGroupsX,
+                workGroupsY, 1);
+  // Renderer::RT_EndGPUPerfMarker(commandBuffer);
+
+  {
+    VkImageMemoryBarrier imageMemoryBarrier = {};
+    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageMemoryBarrier.image = images[0]->get_image();
+    imageMemoryBarrier.subresourceRange = {
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        0,
+        images[0]->get_properties().mip_info.mips,
+        0,
+        1,
+    };
+    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &imageMemoryBarrier);
+  }
+
+  bloom_compute_push_constants.mode = 1;
+
+  u32 offset = 2;
+  u32 mips =
+      bloom_textures[0]->get_image().get_properties().mip_info.mips - offset;
+  // Renderer::RT_BeginGPUPerfMarker(commandBuffer, "Bloom-DownSample");
+  for (u32 i = 1; i < mips; i++) {
+    auto [mip_width, mip_height] = bloom_textures[0]->get_mip_size(i);
+    workGroupsX =
+        (u32)glm::ceil((float)mip_width / (float)bloom_workgroup_size);
+    workGroupsY =
+        (u32)glm::ceil((float)mip_height / (float)bloom_workgroup_size);
+
+    {
+      // Output image
+      descriptorImageInfo.imageView = images[1]->get_mip_image_view_at(i);
+
+      descriptorSet =
+          device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
+      writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+      writeDescriptors[0].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      writeDescriptors[0].pImageInfo = &descriptorImageInfo;
+
+      // Input image
+      writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+      writeDescriptors[1].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      auto descriptor = bloom_textures[0]->get_image().get_descriptor_info();
+      // descriptor.sampler = samplerClamp;
+      writeDescriptors[1].pImageInfo = &descriptor;
+
+      writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+      writeDescriptors[2].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+
+      vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
+                             writeDescriptors.data(), 0, nullptr);
+
+      bloom_compute_push_constants.LOD = i - 1.0f;
+      vkCmdPushConstants(
+          compute_command_buffer->get_command_buffer(),
+          bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
+          sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
+      vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                              bloom_pipeline->get_bind_point(),
+                              bloom_pipeline->get_pipeline_layout(), 0, 1,
+                              &descriptorSet, 0, 0);
+      vkCmdDispatch(compute_command_buffer->get_command_buffer(), workGroupsX,
+                    workGroupsY, 1);
+    }
+
+    {
+      VkImageMemoryBarrier imageMemoryBarrier = {};
+      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.image = images[1]->get_image();
+      imageMemoryBarrier.subresourceRange = {
+          VK_IMAGE_ASPECT_COLOR_BIT,
+          0,
+          images[1]->get_properties().mip_info.mips,
+          0,
+          1,
+      };
+      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                           0, nullptr, 1, &imageMemoryBarrier);
+    }
+
+    {
+      descriptorImageInfo.imageView = images[0]->get_mip_image_view_at(i);
+
+      // Output image
+      descriptorSet =
+          device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
+      writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+      writeDescriptors[0].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      writeDescriptors[0].pImageInfo = &descriptorImageInfo;
+
+      // Input image
+      writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+      writeDescriptors[1].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      auto descriptor = bloom_textures[1]->get_image().get_descriptor_info();
+      // descriptor.sampler = samplerClamp;
+      writeDescriptors[1].pImageInfo = &descriptor;
+
+      writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+      writeDescriptors[2].dstSet =
+          descriptorSet; // Should this be set inside the shader?
+      writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+
+      vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
+                             writeDescriptors.data(), 0, nullptr);
+
+      bloom_compute_push_constants.LOD = (float)i;
+      vkCmdPushConstants(
+          compute_command_buffer->get_command_buffer(),
+          bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
+          sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
+      vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                              bloom_pipeline->get_bind_point(),
+                              bloom_pipeline->get_pipeline_layout(), 0, 1,
+                              &descriptorSet, 0, 0);
+      vkCmdDispatch(compute_command_buffer->get_command_buffer(), workGroupsX,
+                    workGroupsY, 1);
+    }
+
+    {
+      VkImageMemoryBarrier imageMemoryBarrier = {};
+      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.image = images[0]->get_image();
+      imageMemoryBarrier.subresourceRange = {
+          VK_IMAGE_ASPECT_COLOR_BIT, 0,
+          images[0]->get_properties().mip_info.mips, 0, 1};
+      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                           0, nullptr, 1, &imageMemoryBarrier);
+    }
+  }
+  // Renderer::RT_EndGPUPerfMarker(commandBuffer);
+
+  // Renderer::RT_BeginGPUPerfMarker(commandBuffer, "Bloom-FirstUpsamle");
+  bloom_compute_push_constants.mode = 2;
+  workGroupsX *= 2;
+  workGroupsY *= 2;
+
+  // Output image
+  descriptorSet =
+      device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
+  descriptorImageInfo.imageView = images[2]->get_mip_image_view_at(mips - 2);
+
+  writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+  writeDescriptors[0].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[0].pImageInfo = &descriptorImageInfo;
+
+  // Input image
+  writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+  writeDescriptors[1].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[1].pImageInfo =
+      &bloom_textures[0]->get_image().get_descriptor_info();
+
+  writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+  writeDescriptors[2].dstSet =
+      descriptorSet; // Should this be set inside the shader?
+  writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+
+  vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
+                         writeDescriptors.data(), 0, nullptr);
+
+  bloom_compute_push_constants.LOD--;
+  vkCmdPushConstants(compute_command_buffer->get_command_buffer(),
+                     bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL,
+                     0, sizeof(bloom_compute_push_constants),
+                     &bloom_compute_push_constants);
+
+  auto [mip_width, mip_height] = bloom_textures[2]->get_mip_size(mips - 2);
+  workGroupsX = (u32)glm::ceil((float)mip_width / (float)bloom_workgroup_size);
+  workGroupsY = (u32)glm::ceil((float)mip_height / (float)bloom_workgroup_size);
+  vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                          bloom_pipeline->get_bind_point(),
+                          bloom_pipeline->get_pipeline_layout(), 0, 1,
+                          &descriptorSet, 0, 0);
+  vkCmdDispatch(compute_command_buffer->get_command_buffer(), workGroupsX,
+                workGroupsY, 1);
+  {
+    VkImageMemoryBarrier imageMemoryBarrier = {};
+    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageMemoryBarrier.image = images[2]->get_image();
+    imageMemoryBarrier.subresourceRange = {
+        VK_IMAGE_ASPECT_COLOR_BIT, 0, images[2]->get_properties().mip_info.mips,
+        0, 1};
+    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &imageMemoryBarrier);
+  }
+
+  // Renderer::RT_EndGPUPerfMarker(commandBuffer);
+
+  // Renderer::RT_BeginGPUPerfMarker(commandBuffer, "Bloom-Upsample");
+  bloom_compute_push_constants.mode = 3;
+
+  // Upsample
+  for (int32_t mip = mips - 3; mip >= 0; mip--) {
+    auto [mip_width, mip_height] = bloom_textures[2]->get_mip_size(mip);
+    workGroupsX =
+        (u32)glm::ceil((float)mip_width / (float)bloom_workgroup_size);
+    workGroupsY =
+        (u32)glm::ceil((float)mip_height / (float)bloom_workgroup_size);
+
+    // Output image
+    descriptorImageInfo.imageView = images[2]->get_mip_image_view_at(mip);
+    auto descriptorSet =
+        device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
+    writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+    writeDescriptors[0].dstSet =
+        descriptorSet; // Should this be set inside the shader?
+    writeDescriptors[0].pImageInfo = &descriptorImageInfo;
+
+    // Input image
+    writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+    writeDescriptors[1].dstSet =
+        descriptorSet; // Should this be set inside the shader?
+    writeDescriptors[1].pImageInfo =
+        &bloom_textures[0]->get_image().get_descriptor_info();
+
+    writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+    writeDescriptors[2].dstSet =
+        descriptorSet; // Should this be set inside the shader?
+    writeDescriptors[2].pImageInfo = &images[2]->get_descriptor_info();
+
+    vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
+                           writeDescriptors.data(), 0, nullptr);
+
+    bloom_compute_push_constants.LOD = (float)mip;
+    vkCmdPushConstants(
+        compute_command_buffer->get_command_buffer(),
+        bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
+        sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
+    vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
+                            bloom_pipeline->get_bind_point(),
+                            bloom_pipeline->get_pipeline_layout(), 0, 1,
+                            &descriptorSet, 0, 0);
+    vkCmdDispatch(compute_command_buffer->get_command_buffer(), workGroupsX,
+                  workGroupsY, 1);
+
+    {
+      VkImageMemoryBarrier imageMemoryBarrier = {};
+      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+      imageMemoryBarrier.image = images[2]->get_image();
+      imageMemoryBarrier.subresourceRange = {
+          VK_IMAGE_ASPECT_COLOR_BIT, 0,
+          images[2]->get_properties().mip_info.mips, 0, 1};
+      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                           0, nullptr, 1, &imageMemoryBarrier);
+    }
+  }
+  // Renderer::RT_EndGPUPerfMarker(commandBuffer);
+
+  compute_command_buffer->end_and_submit();
+
+  // m_CommandBuffer->EndTimestampQuery(m_GPUTimeQueries.BloomComputePassQuery);
 }
 
 auto SceneRenderer::debug_pass() -> void {
@@ -504,8 +922,29 @@ auto SceneRenderer::grid_pass() -> void {
 auto SceneRenderer::fullscreen_pass() -> void {
   bind_pipeline(*fullscreen_pipeline);
 
-  fullscreen_material->set("colour_texture",
-                           *geometry_framebuffer->get_image(0));
+  float Exposure = 0.8F;
+  float BloomIntensity = bloom_settings.intensity;
+  float BloomDirtIntensity = bloom_settings.dirt_intensity;
+  float Opacity = 1.0F;
+
+  fullscreen_material->set("u_Texture", *geometry_framebuffer->get_image(0));
+  fullscreen_material->set("u_DepthTexture", get_depth_image());
+
+  if (!bloom_settings.enabled) {
+    BloomIntensity = 0.0f;
+    BloomDirtIntensity = 0.0f;
+    fullscreen_material->set("u_BloomTexture",
+                             SceneRenderer::get_white_texture());
+  }
+  fullscreen_material->set("u_BloomTexture", *bloom_textures[2]);
+  fullscreen_material->set("u_BloomDirtTexture",
+                           SceneRenderer::get_black_texture());
+
+  const auto data =
+      glm::vec4{Exposure, BloomIntensity, BloomDirtIntensity, Opacity};
+  fullscreen_material->set("u_Uniforms.values", data);
+
+  push_constants(*fullscreen_pipeline, *fullscreen_material);
 
   update_material_for_rendering(current_frame, *fullscreen_material, ubos.get(),
                                 ssbos.get());
@@ -550,7 +989,10 @@ auto SceneRenderer::flush() -> void {
     environment_pass();
     geometry_pass();
     debug_pass();
-    // grid_pass();
+
+    bloom_pass();
+
+    //    grid_pass();
     end_renderpass();
   }
   {
@@ -563,6 +1005,7 @@ auto SceneRenderer::flush() -> void {
   draw_commands.clear();
   shadow_draw_commands.clear();
   mesh_transform_map.clear();
+  geometry_renderer.clear();
 }
 
 auto SceneRenderer::end_frame() -> void {}
@@ -622,6 +1065,55 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 }
 
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
+  DataBuffer white_data(sizeof(u32));
+  u32 white = 0xFFFFFFFF;
+  white_data.write(&white, sizeof(u32));
+  white_texture = Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent =
+              {
+                  1,
+                  1,
+              },
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueWhite,
+      },
+      std::move(white_data));
+
+  DataBuffer black_data(sizeof(u32));
+  u32 black = 0;
+  black_data.write(&black, sizeof(u32));
+  black_texture = Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent =
+              {
+                  1,
+                  1,
+              },
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueBlack,
+      },
+      std::move(black_data));
+
+  brdf_lookup_texture = Texture::construct_shader(
+      *device,
+      TextureProperties{
+          .format = ImageFormat::UNORM_RGBA8,
+          .path = FS::texture("BRDF_LUT.tga"),
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .mip_generation = MipGeneration(MipGenerationStrategy::FromSize),
+      });
+
   extent = swapchain.get_extent();
 
   Mesh::reference_import_from(*device, FS::model("cube.gltf"));
@@ -644,6 +1136,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
           LayoutElement{ElementType::Float4, "row_zero"},
           LayoutElement{ElementType::Float4, "row_one"},
           LayoutElement{ElementType::Float4, "row_two"},
+          LayoutElement{ElementType::Float4, "instance_colour"},
       },
       VertexBinding{1, sizeof(TransformVertexData)},
   };
@@ -672,8 +1165,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
                                             .owned_by_swapchain = false,
                                             .record_stats = true,
                                         });
-  auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
-  auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
+  auto vector = Random::vec3(-2 * glm::pi<float>(), 2 * glm::pi<float>());
+  auto texture_cube = create_preetham_sky(3.1, vector.y, vector.z);
   scene_environment.radiance_texture = texture_cube;
   scene_environment.irradiance_texture = texture_cube;
 
@@ -722,33 +1215,6 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   shadow_framebuffer = Framebuffer::construct(*device, shadow_props);
 
-  DataBuffer white_data(sizeof(u32));
-  u32 white = 0xFFFFFFFF;
-  white_data.write(&white, sizeof(u32));
-  white_texture = Texture::construct_from_buffer(
-      *device,
-      {
-          .format = ImageFormat::UNORM_RGBA8,
-          .extent =
-              {
-                  1,
-                  1,
-              },
-          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
-                   ImageUsage::TransferSrc,
-          .layout = ImageLayout::ShaderReadOnlyOptimal,
-      },
-      std::move(white_data));
-
-  brdf_lookup_texture = Texture::construct_shader(
-      *device,
-      TextureProperties{
-          .format = ImageFormat::UNORM_RGBA8,
-          .path = FS::texture("BRDF_LUT.tga"),
-          .address_mode = SamplerAddressMode::ClampToEdge,
-          .mip_generation = MipGeneration(MipGenerationStrategy::FromSize),
-      });
-
   shader_cache.try_emplace(
       "Shadow", Shader::construct(*device, FS::shader("Shadow.vert.spv"),
                                   FS::shader("Shadow.frag.spv")));
@@ -794,13 +1260,14 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .instance_layout = default_instance_layout,
       .depth_comparison_operator = DepthCompareOperator::Greater,
       .cull_mode = CullMode::Front,
-      .face_mode = FaceMode::Clockwise,
+      .face_mode = FaceMode::CounterClockwise,
   };
   shadow_pipeline = GraphicsPipeline::construct(*device, shadow_config);
 
   shader_cache.try_emplace(
-      "Fullscreen", Shader::construct(*device, FS::shader("Triangle.vert.spv"),
-                                      FS::shader("Triangle.frag.spv")));
+      "Fullscreen",
+      Shader::construct(*device, FS::shader("Fullscreen.vert.spv"),
+                        FS::shader("Fullscreen.frag.spv")));
   fullscreen_material =
       Material::construct(*device, *shader_cache.at("Fullscreen"));
   FramebufferProperties fullscreen_props{
@@ -860,6 +1327,43 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   }
 
   create_pool_and_layout();
+
+  shader_cache.try_emplace(
+      "Bloom", Shader::construct(*device, FS::shader("Bloom.comp.spv")));
+  bloom_pipeline = ComputePipeline::construct(
+      *device, {"Bloom", PipelineStage::Compute, *shader_cache.at("Bloom")});
+  bloom_material = Material::construct(*device, *shader_cache.at("Bloom"));
+
+  TextureProperties bloom_texture_props;
+  bloom_texture_props.address_mode = SamplerAddressMode::ClampToBorder;
+  bloom_texture_props.extent = {1, 1};
+  bloom_texture_props.format = ImageFormat::SRGB_RGBA32;
+  bloom_texture_props.usage = ImageUsage::Storage | ImageUsage::TransferSrc |
+                              ImageUsage::TransferDst | ImageUsage::Sampled;
+  bloom_texture_props.layout = ImageLayout::General;
+  bloom_texture_props.mip_generation =
+      MipGeneration(MipGenerationStrategy::FromSize);
+  {
+    DataBuffer buffer(4 * sizeof(float));
+    buffer.fill_zero();
+    bloom_texture_props.identifier = "BloomCompute-0";
+    bloom_textures[0] = Texture::construct_from_buffer(
+        *device, bloom_texture_props, std::move(buffer));
+  }
+  {
+    DataBuffer buffer(4 * sizeof(float));
+    buffer.fill_zero();
+    bloom_texture_props.identifier = "BloomCompute-1";
+    bloom_textures[1] = Texture::construct_from_buffer(
+        *device, bloom_texture_props, std::move(buffer));
+  }
+  {
+    DataBuffer buffer(4 * sizeof(float));
+    buffer.fill_zero();
+    bloom_texture_props.identifier = "BloomCompute-2";
+    bloom_textures[2] = Texture::construct_from_buffer(
+        *device, bloom_texture_props, std::move(buffer));
+  }
 
   geometry_renderer.create(*geometry_framebuffer, 100);
 }

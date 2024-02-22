@@ -42,6 +42,8 @@ template <IsNumber T> struct Extent {
     return width > 0 && height > 0;
   }
 
+  [[nodiscard]] auto size() const noexcept -> T { return width * height; }
+
   // Cast to another type Other, not the same as T
   template <typename Other>
     requires(!std::is_same_v<Other, T> &&
@@ -52,6 +54,8 @@ template <IsNumber T> struct Extent {
         .height = static_cast<Other>(height),
     };
   }
+
+  auto as_pair() const { return std::pair<T, T>{width, height}; }
 
   template <IsNumber U>
     requires(!std::is_same_v<U, T>)
@@ -65,6 +69,29 @@ template <IsNumber T> struct Extent {
   }
   auto operator==(const Extent &rhs) const -> bool = default;
   auto operator!=(const Extent &rhs) const -> bool = default;
+
+  auto operator/=(IsNumber auto number) -> Extent & {
+    width /= number;
+    height /= number;
+    return *this;
+  }
+  auto operator+=(const Extent &other) -> Extent & {
+    width += other.width;
+    height += other.height;
+    return *this;
+  }
+  auto operator+(IsNumber auto number) -> Extent {
+    return {
+        .width = width + number,
+        .height = height + number,
+    };
+  }
+  auto operator/(IsNumber auto number) -> Extent {
+    return {
+        .width = width / number,
+        .height = height / number,
+    };
+  }
 };
 
 enum class ImageTiling : std::uint8_t {

@@ -52,11 +52,14 @@ public:
   auto bind_vertex_buffer(const Buffer &vertex_buffer) const -> void;
   auto bind_vertex_buffer(const Buffer &vertex_buffer, u32 offset,
                           u32 index) const -> void;
-  auto submit_aabb(const AABB &aabb, const glm::mat4 &transform = {}) -> void;
-  auto submit_cube(floating side_length, const glm::mat4 &transform = {},
+  auto submit_aabb(const AABB &aabb,
+                   const glm::mat4 &transform = glm::mat4{1.0F}) -> void;
+  auto submit_cube(const glm::mat4 &transform = glm::mat4{1.0F},
                    const glm::vec4 &colour = Colours::white) -> void;
-  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {})
-      -> void;
+  auto submit_frustum(const glm::mat4 &inverse_view_projection,
+                      const glm::mat4 &transform = glm::mat4{1.0F}) -> void;
+  auto submit_static_mesh(const Mesh *mesh, const glm::mat4 &transform = {},
+                          const glm::vec4 &colour = Colours::white) -> void;
   auto end_renderpass() -> void;
   auto create(const Swapchain &swapchain) -> void;
   auto set_frame_index(FrameIndex frame_index) -> void {
@@ -82,6 +85,8 @@ public:
   auto get_grid_configuration() -> auto & { return grid_ubo; }
   auto get_renderer_configuration() -> auto & { return renderer_ubo; }
   auto get_shadow_configuration() -> auto & { return shadow_ubo; }
+  auto get_scene_environment() -> auto & { return scene_environment; }
+  auto get_bloom_configuration() -> auto & { return bloom_settings; }
   auto create_pool_and_layout() -> void;
 
   [[nodiscard]] auto get_command_buffer() const -> const auto & {
@@ -132,6 +137,20 @@ private:
   Scope<Framebuffer> fullscreen_framebuffer;
   Scope<Material> fullscreen_material;
 
+  struct BloomSettings {
+    bool enabled = true;
+    floating threshold = 1.0f;
+    floating knee = 0.1f;
+    floating upsample_scale = 1.0f;
+    floating intensity = 1.0f;
+    floating dirt_intensity = 0.0f;
+  };
+  u32 bloom_workgroup_size = 4;
+  BloomSettings bloom_settings{};
+  Scope<ComputePipeline> bloom_pipeline;
+  std::array<Scope<Texture>, 3> bloom_textures{};
+  Scope<Material> bloom_material;
+
   Scope<GraphicsPipeline> skybox_pipeline;
   Scope<Material> skybox_material;
 
@@ -181,6 +200,7 @@ private:
   auto shadow_pass() -> void;
   auto grid_pass() -> void;
   auto geometry_pass() -> void;
+  auto bloom_pass() -> void;
   auto debug_pass() -> void;
   auto environment_pass() -> void;
   auto fullscreen_pass() -> void;

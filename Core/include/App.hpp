@@ -12,7 +12,7 @@
 
 namespace Core {
 
-template <Core::usize N = 10000> struct FPSAverage {
+template <Core::usize N = 100> struct FPSAverage {
   std::array<Core::floating, N> frame_times{};
   Core::floating frame_time_sum = 0.0;
   Core::usize frame_time_index = 0;
@@ -124,7 +124,7 @@ private:
   Scope<Swapchain> swapchain;
 
   Extent<u32> extent{1280, 720};
-  FPSAverage<144> fps_average{};
+  FPSAverage<15 * 144> fps_average{};
 
   ApplicationProperties properties{};
 

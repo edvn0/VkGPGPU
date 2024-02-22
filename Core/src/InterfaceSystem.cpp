@@ -10,11 +10,15 @@
 #include "Verify.hpp"
 #include "Window.hpp"
 
+#include <fstream>
+
 // clang-format off
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <imgui-notify/ImGuiNotify.hpp>
+#include <imgui-notify/IconsFontAwesome6.h>
 // clang-format on
 
 namespace Core {
@@ -99,19 +103,44 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 
   ImGui_ImplVulkan_Init(&init_info, swapchain->get_renderpass());
 
+  constexpr float base_font_size = 12.0f;
+  constexpr float icon_font_size = base_font_size * 2.0f / 3.0f;
   {
     FS::for_each_in_directory(
         FS::font_directory(),
-        [&fonts = io.Fonts](const auto &entry) {
+        [&chosen_font = font, &fonts = io.Fonts](const auto &entry) {
           static constexpr auto font_sizes = std::array{12.F, 11.F};
           for (const auto &size : font_sizes) {
-            fonts->AddFontFromFileTTF(entry.path().string().c_str(), size);
+            auto *loaded =
+                fonts->AddFontFromFileTTF(entry.path().string().c_str(), size);
+            if (chosen_font == nullptr) {
+              chosen_font = loaded;
+            }
           }
         },
         [](const std::filesystem::directory_entry &entry) {
-          return entry.path().extension() == ".ttf";
+          return entry.path().extension() == ".ttf" &&
+                 entry.path().string().find("fa") == std::string::npos;
         });
   }
+
+  // Check if FONT_ICON_FILE_NAME_FAS is a valid path
+  const auto path = FS::Path{FONT_ICON_FILE_NAME_FAS};
+  ensure(std::filesystem::exists(path), "Could not find font awesome file");
+  std::ifstream font_awesome_file(path);
+
+  if (!font_awesome_file) {
+    error("Could not find FA file. {}", path);
+    throw Core::NotFoundException(path.string());
+  }
+
+  static const ImWchar icons_range[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
+  ImFontConfig iconsConfig;
+  iconsConfig.MergeMode = true;
+  iconsConfig.PixelSnapH = true;
+  iconsConfig.GlyphMinAdvanceX = icon_font_size;
+  auto *font = io.Fonts->AddFontFromFileTTF(
+      FONT_ICON_FILE_NAME_FAS, icon_font_size, &iconsConfig, icons_range);
 }
 
 auto InterfaceSystem::begin_frame() -> void {
@@ -120,10 +149,23 @@ auto InterfaceSystem::begin_frame() -> void {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+  if (font) {
+    ImGui::PushFont(font);
+  }
   ImGuizmo::BeginFrame();
 }
 
 auto InterfaceSystem::end_frame() -> void {
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.10f, 0.10f, 1.00f));
+  ImGui::RenderNotifications();
+  ImGui::PopStyleVar(2);
+  ImGui::PopStyleColor(1);
+
+  if (font) {
+    ImGui::PopFont();
+  }
   ImGui::Render();
   static constexpr VkClearColorValue clear_colour{
       {

@@ -9,6 +9,10 @@
 
 #include "core/Forward.hpp"
 
+extern "C" {
+struct ImFont;
+}
+
 using VkDescriptorPool = struct VkDescriptorPool_T *;
 
 namespace Core {
@@ -40,6 +44,7 @@ private:
   VkDescriptorPool pool{};
 
   Scope<CommandBuffer> command_executor;
+  ImFont *font{nullptr};
 
   std::string system_name;
 

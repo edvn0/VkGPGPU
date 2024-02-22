@@ -24,7 +24,7 @@ struct SubmeshTransformBuffer {
   Scope<DataBuffer> transform_buffer;
 };
 struct TransformVertexData {
-  std::array<glm::vec4, 3> transform_rows{};
+  std::array<glm::vec4, 4> transform_rows{};
 };
 struct TransformMapData {
   std::vector<TransformVertexData> transforms;
@@ -48,7 +48,8 @@ struct RendererUBO {
   glm::vec4 light_position;
   glm::vec4 light_direction;
   glm::vec4 camera_position;
-  glm::vec4 light_colour;
+  glm::vec4 light_ambient_colour;
+  glm::vec4 light_specular_colour;
 };
 
 struct ShadowUBO {
@@ -67,9 +68,6 @@ struct GridUBO {
 };
 
 struct DepthParameters {
-  float value = 9.0F;
-  float near = -10.0F;
-  float far = 21.F;
   float bias = 0.005F;
   float default_value = 0.1F;
 };

@@ -118,7 +118,7 @@ public:
     if (viewport == extent) {
       return;
     }
-    viewport = extent;
+    viewport = extent.as<u32>();
     aspect_ratio = glm::radians(static_cast<float>(viewport.width) /
                                 static_cast<float>(viewport.height));
     set_perspective_projection_matrix(

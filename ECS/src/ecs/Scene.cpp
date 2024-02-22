@@ -6,6 +6,7 @@
 #include "Formatters.hpp"
 #include "Logger.hpp"
 #include "SceneRenderer.hpp"
+#include "UI.hpp"
 
 #include <entt/entt.hpp>
 #include <execution>
@@ -16,10 +17,116 @@
 
 namespace ECS {
 
-static auto compute_middle_of_scene(Scene &scene)
-    -> std::tuple<glm::vec3, float> {
-  glm::vec3 sceneMin(std::numeric_limits<float>::max());
-  glm::vec3 sceneMax(std::numeric_limits<float>::lowest());
+static Core::AABB
+get_aabb_for_geometry(const BasicGeometry::GeometryVariant &geom,
+                      const glm::mat4 &transform) {
+  Core::AABB aabb;
+
+  std::visit(
+      [&](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        std::vector<glm::vec3>
+            points; // Used for geometries defined by vertices
+
+        if constexpr (std::is_same_v<T, BasicGeometry::QuadParameters>) {
+          // Assuming Quad is centered at origin; adjust if not
+          float halfWidth = arg.width / 2.0f;
+          float halfHeight = arg.height / 2.0f;
+          points = {{-halfWidth, -halfHeight, 0.0f},
+                    {halfWidth, halfHeight, 0.0f}};
+        } else if constexpr (std::is_same_v<
+                                 T, BasicGeometry::TriangleParameters>) {
+          // Assuming Triangle is equilateral and centered at origin; adjust if
+          // not
+          float halfBase = arg.base / 2.0f;
+          points = {{-halfBase, 0.0f, 0.0f},
+                    {halfBase, 0.0f, 0.0f},
+                    {0.0f, arg.height, 0.0f}};
+        } else if constexpr (std::is_same_v<T,
+                                            BasicGeometry::CircleParameters> ||
+                             std::is_same_v<T,
+                                            BasicGeometry::SphereParameters>) {
+          // For Circle/Sphere, adjust AABB based on radius and scale; assuming
+          // centered at origin
+          glm::vec3 scaleFactors =
+              glm::vec3(transform[0][0], transform[1][1], transform[2][2]) *
+              arg.radius;
+          glm::vec3 center =
+              glm::vec3(transform[3]); // Translation component of the matrix
+          glm::vec3 min = center - scaleFactors;
+          glm::vec3 max = center + scaleFactors;
+          aabb.update(min, max);
+          return; // Early return as we've already calculated AABB
+        } else if constexpr (std::is_same_v<T, BasicGeometry::CubeParameters>) {
+          float halfSide = arg.side_length / 2.0f;
+          points = {{-halfSide, -halfSide, -halfSide},
+                    {halfSide, halfSide, halfSide}};
+        }
+
+        // Transform points and update AABB for non-spherical objects
+        for (auto &point : points) {
+          glm::vec4 worldPoint = transform * glm::vec4(point, 1.0f);
+          aabb.update(glm::vec3(worldPoint));
+        }
+      },
+      geom);
+
+  return aabb;
+}
+
+static std::tuple<glm::vec3, float, glm::vec3, glm::vec3>
+compute_scene_center_and_radius(Scene &scene) {
+  glm::vec3 scene_min(std::numeric_limits<float>::max());
+  glm::vec3 scene_max(std::numeric_limits<float>::lowest());
+
+  auto &registry = scene.get_registry();
+  // Process mesh components
+  for (const auto &[entity, transform, mesh] :
+       registry
+           .view<const TransformComponent, const MeshComponent>(
+               entt::exclude<SunComponent, CameraComponent>)
+           .each()) {
+    if (!mesh.mesh)
+      continue;
+
+    const auto &aabb = mesh.mesh->get_aabb();
+    glm::vec3 min_corners = transform.compute() * aabb.min_vector();
+    glm::vec3 max_corners = transform.compute() * aabb.max_vector();
+
+    scene_min = glm::min(scene_min, min_corners);
+    scene_max = glm::max(scene_max, max_corners);
+  }
+
+  // Process geometry components
+  for (const auto &[entity, transform, geometry] :
+       registry.view<const TransformComponent, const GeometryComponent>()
+           .each()) {
+    // Hypothetical function to get AABB for geometry
+    auto aabb = get_aabb_for_geometry(geometry.parameters, transform.compute());
+    glm::vec3 min_corners = aabb.min(); // Assuming first is min_vector
+    glm::vec3 max_corners = aabb.max(); // Assuming second is max_vector
+
+    scene_min = glm::min(scene_min, min_corners);
+    scene_max = glm::max(scene_max, max_corners);
+  }
+
+  glm::vec3 center = (scene_min + scene_max) / 2.0f;
+  float radius = glm::distance(scene_min, scene_max) / 2.0f;
+
+  return {center, radius, scene_min, scene_max};
+}
+
+static glm::mat4 compute_light_view_matrix(const glm::vec3 &light_position,
+                                           const glm::vec3 &scene_center) {
+  return glm::lookAt(
+      light_position, scene_center,
+      glm::vec3(0, -1, 0)); // Assuming Y-up in your coordinate system
+}
+
+static std::pair<glm::vec3, glm::vec3>
+compute_light_space_bounds(const glm::mat4 &light_view_matrix, Scene &scene) {
+  glm::vec3 scene_min(std::numeric_limits<float>::max());
+  glm::vec3 scene_max(std::numeric_limits<float>::lowest());
 
   for (const auto &[entity, transform, mesh] :
        scene.get_registry()
@@ -30,16 +137,34 @@ static auto compute_middle_of_scene(Scene &scene)
       continue;
 
     const auto &aabb = mesh.mesh->get_aabb();
-    glm::vec3 min_corners = aabb.min() * transform.scale + transform.position;
-    glm::vec3 max_corners = aabb.max() * transform.scale + transform.position;
+    std::array<glm::vec4, 8> corners = {{
+        // Define all 8 corners of the AABB in local space
+        glm::vec4(aabb.min().x, aabb.min().y, aabb.min().z, 1.0),
+        glm::vec4(aabb.min().x, aabb.min().y, aabb.max().z, 1.0),
+        glm::vec4(aabb.min().x, aabb.max().y, aabb.min().z, 1.0),
+        glm::vec4(aabb.min().x, aabb.max().y, aabb.max().z, 1.0),
+        glm::vec4(aabb.max().x, aabb.min().y, aabb.min().z, 1.0),
+        glm::vec4(aabb.max().x, aabb.min().y, aabb.max().z, 1.0),
+        glm::vec4(aabb.max().x, aabb.max().y, aabb.min().z, 1.0),
+        glm::vec4(aabb.max().x, aabb.max().y, aabb.max().z, 1.0),
+    }};
 
-    sceneMin = glm::min(sceneMin, min_corners);
-    sceneMax = glm::max(sceneMax, max_corners);
+    glm::mat4 modelMatrix =
+        glm::translate(glm::mat4(1.0), transform.position) *
+        glm::scale(glm::mat4(1.0),
+                   transform.scale); // Assuming rotation is part of
+                                     // transform.position for simplicity
+
+    for (auto &corner : corners) {
+      glm::vec4 transformedCorner = light_view_matrix * modelMatrix * corner;
+      scene_min = glm::min(scene_min,
+                           glm::vec3(transformedCorner) / transformedCorner.w);
+      scene_max = glm::max(scene_max,
+                           glm::vec3(transformedCorner) / transformedCorner.w);
+    }
   }
-  const auto sceneCenter = (sceneMin + sceneMax) / 2.0f;
-  const auto sceneRadius = glm::distance(sceneMin, sceneMax) / 2.0f;
 
-  return {sceneCenter, sceneRadius};
+  return {scene_min, scene_max};
 }
 
 Scene::Scene(std::string_view scene_name) : name{scene_name} {}
@@ -60,19 +185,32 @@ auto Scene::create_entity(const std::string_view entity_name, bool add_observer)
   return entity;
 }
 
-auto Scene::delete_entity(const Core::u64 identifier) -> void {
-
-  registry.view<IdentityComponent>().each([&](auto entity, auto &identity) {
+auto Scene::delete_entity(const Core::u64 identifier) -> bool {
+  auto view = registry.view<IdentityComponent>();
+  entt::entity found = entt::null;
+  view.each([&](auto entity, auto &identity) {
     if (identity.id == identifier) {
-      registry.destroy(entity);
+      found = entity;
     }
   });
+
+  if (found == entt::null) {
+    Core::UI::Toast::error(3000, "Invalid entity {} tried to be deleted.",
+                           identifier);
+    return false;
+  }
+
+  registry.destroy(found);
 
   for (auto observer : observers) {
     observer->on_notify(Events::EntityRemovedEvent{
         .id = identifier,
     });
   }
+
+  sort();
+
+  return true;
 }
 
 auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
@@ -87,13 +225,25 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
     }
   }
 
-  const auto other_view =
+  const auto geometry_view_without_camera_and_texture =
       registry.view<const TransformComponent, const MeshComponent>(
-          entt::exclude<CameraComponent>);
-  other_view.each(
+          entt::exclude<CameraComponent, TextureComponent>);
+  geometry_view_without_camera_and_texture.each(
       [&renderer](auto, const auto &transform, const MeshComponent &mesh) {
         if (mesh.mesh != nullptr) {
           renderer.submit_static_mesh(mesh.mesh.get(), transform.compute());
+        }
+      });
+
+  const auto geometry_view_without_camera_including_texture =
+      registry.view<const TransformComponent, const MeshComponent,
+                    const TextureComponent>(entt::exclude<CameraComponent>);
+  geometry_view_without_camera_including_texture.each(
+      [&renderer](auto, const auto &transform, const MeshComponent &mesh,
+                  const TextureComponent &text) {
+        if (mesh.mesh != nullptr) {
+          renderer.submit_static_mesh(mesh.mesh.get(), transform.compute(),
+                                      text.colour);
         }
       });
 
@@ -110,7 +260,7 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
         [&](auto &&arg) {
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, ECS::BasicGeometry::CubeParameters>) {
-            renderer.submit_cube(arg.side_length, computed, col);
+            renderer.submit_cube(computed, col);
           }
         },
         geom.parameters);
@@ -162,44 +312,65 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
   const auto sun_view =
       registry.view<const SunComponent, const TransformComponent>();
   sun_view.each([&](auto, const SunComponent &sun, const auto &transform) {
+    // Update the scene renderer with the sun's position and depth factors
     scene_renderer.get_sun_position() = transform.position;
     scene_renderer.get_depth_factors() = sun.depth_params;
 
+    // Update renderer configuration
     auto &renderer_config = scene_renderer.get_renderer_configuration();
     renderer_config.view = view_matrix;
     renderer_config.projection = projection_matrix;
     renderer_config.view_projection = projection_matrix * view_matrix;
     renderer_config.inverse_view = glm::inverse(view_matrix);
     renderer_config.inverse_projection = glm::inverse(projection_matrix);
-    // Shoelace theorem
     renderer_config.inverse_view_projection =
         renderer_config.inverse_view * renderer_config.inverse_projection;
     renderer_config.light_position = glm::vec4{transform.position, 1.0F};
-    const auto &&[center, radius] = compute_middle_of_scene(*this);
 
-    renderer_config.light_direction = glm::normalize(
-        renderer_config.light_position - glm::vec4{center, 1.0F});
+    // Step 1: Compute the Scene's Center and Radius
+    auto &&[scene_center, scene_radius, scene_min, scene_max] =
+        compute_scene_center_and_radius(*this);
+
+    // Update light direction based on the scene center
+    renderer_config.light_direction = -glm::normalize(
+        renderer_config.light_position - glm::vec4{scene_center, 1.0F});
     renderer_config.camera_position = glm::inverse(view_matrix)[3];
-    renderer_config.light_colour = sun.colour;
+    renderer_config.light_ambient_colour = sun.colour;
+    renderer_config.light_specular_colour = sun.specular_colour;
+
+    // Step 2: Compute the Light View Matrix
+    glm::mat4 light_view_matrix =
+        compute_light_view_matrix(transform.position, scene_center);
+
+    // Step 3: Compute Light Space Bounds
+    auto &&[light_space_min, light_space_max] =
+        compute_light_space_bounds(light_view_matrix, *this);
 
     auto &shadow_ubo = scene_renderer.get_shadow_configuration();
-#if 0
-    const float left = -radius;
-    const float right = radius;
-    const float bottom = -radius;
-    const float top = radius;
-    constexpr float near = 0.1F;
-    const float far = radius * 2; // Enough to cover the scene depth
-    const glm::mat4 light_proj =
-        glm::ortho(left, right, bottom, top, near, far);
-#else
-#endif
-    shadow_ubo.projection = glm::ortho(
-        -sun.depth_params.value * 0.5F, sun.depth_params.value * 0.5F,
-        -sun.depth_params.value * 0.5F, sun.depth_params.value * 0.5F,
-        sun.depth_params.near, sun.depth_params.far);
-    shadow_ubo.view = glm::lookAt(transform.position, center, {0, 1, 0});
-    shadow_ubo.view_projection = shadow_ubo.projection * shadow_ubo.view;
+    const float left = -scene_radius;
+    const float right = scene_radius;
+    const float bottom = -scene_radius;
+    const float top = scene_radius;
+    float offset =
+        0.5f; // Small positive offset to prevent near clipping of shadows
+    float adjusted_near = light_space_min.z + offset;
+    const float adjusted_far = 2.0F * scene_radius;
+
+    glm::mat4 light_proj =
+        glm::orthoRH_ZO(left, right, bottom, top, adjusted_near, adjusted_far);
+    shadow_ubo.projection = light_proj;
+    shadow_ubo.view = light_view_matrix;
+    shadow_ubo.view_projection = light_proj * light_view_matrix;
+
+    const auto translation =
+        glm::translate(glm::mat4(1.0F), transform.position);
+
+    auto frustum_projection =
+        glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 2.0F, adjusted_far);
+
+    auto frustum_vulkan = glm::inverse(frustum_projection * light_view_matrix);
+
+    scene_renderer.submit_frustum(frustum_vulkan, translation);
   });
 
   const auto mesh_view =
@@ -235,68 +406,6 @@ auto Scene::on_create(const Core::Device &device, const Core::Window &,
 
   auto camera_entity = create_entity("Camera");
   camera_entity.add_component<CameraComponent>();
-
-#if 0
-  auto basic_cube_at_3_3_1 = create_entity("Basic Cube at 3, 3, 1");
-  auto &transform = basic_cube_at_3_3_1.add_component<TransformComponent>();
-  transform.position = glm::vec3{3.0F, 3.0F, 1.0F};
-  transform.scale = glm::vec3{2.F, 2.0F, 2.0F};
-  basic_cube_at_3_3_1.add_component<MeshComponent>(
-      Core::Mesh::reference_import_from(device, Core::FS::model("cube.gltf")));
-  basic_cube_at_3_3_1.add_component<TextureComponent>(
-      glm::vec4{1.0F, 0.0F, 1.0F, 1.0F});
-
-  auto meta_parent = create_entity("MetaParent");
-  for (auto i = 0; i < 10; i++) {
-    auto metahuman = create_entity(fmt::format("Metahuman.{}", i));
-
-    metahuman.set_parent(meta_parent);
-
-    auto &metahuman_transform = metahuman.add_component<TransformComponent>();
-    // Random glm::vec3
-    const auto random_position =
-        glm::vec3{static_cast<Core::floating>(rand() % 10) - 5,
-                  static_cast<Core::floating>(rand() % 10) - 5,
-                  static_cast<Core::floating>(rand() % 10) - 5};
-
-    metahuman_transform.position = random_position;
-
-    metahuman.add_component<MeshComponent>(Core::Mesh::reference_import_from(
-        device, Core::FS::model("metahuman/metahuman.fbx")));
-    metahuman.add_component<TextureComponent>(
-        glm::vec4{1.0F, 1.0F, 1.0F, 1.0F});
-    metahuman_transform.rotation =
-        glm::rotate(metahuman_transform.rotation, glm::radians(90.0F),
-                    glm::vec3{1.0F, 0.0F, 0.0F});
-    metahuman_transform.scale = glm::vec3{0.01F, 0.01F, 0.01F};
-  }
-
-  auto cerberus_model = create_entity("Cerberus Model");
-  auto &cerberus_transform = cerberus_model.add_component<TransformComponent>();
-  cerberus_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
-  cerberus_transform.scale = glm::vec3{1.F, 1.F, 1.F};
-  cerberus_model.add_component<MeshComponent>(Core::Mesh::reference_import_from(
-      device, Core::FS::model("cerberus_correct/cerberus.gltf")));
-
-  auto metahuman_model = create_entity("Metahuman Model");
-  auto &metahuman_transform =
-      metahuman_model.add_component<TransformComponent>();
-  metahuman_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
-  metahuman_transform.scale = glm::vec3{1.F, 1.F, 1.F};
-  metahuman_model.add_component<MeshComponent>(
-      Core::Mesh::reference_import_from(
-          device, Core::FS::model("metahuman/metahuman.fbx")));
-
-  auto sponza_model = create_entity("Sponza");
-  auto &sponza_transform = sponza_model.add_component<TransformComponent>();
-  sponza_transform.position = glm::vec3{-2.F, 0.0F, 2.F};
-  sponza_transform.scale = glm::vec3{1.F, 1.F, 1.F};
-  sponza_transform.rotation =
-      glm::rotate(sponza_transform.rotation, glm::radians(90.0F),
-                  glm::vec3{1.0F, 0.0F, 0.0F});
-  sponza_model.add_component<MeshComponent>(Core::Mesh::reference_import_from(
-      device, Core::FS::model("sponza/sponza.obj")));
-#endif
 }
 
 auto Scene::on_destroy() -> void {

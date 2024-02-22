@@ -1,8 +1,8 @@
 #pragma once
-
 #include "Concepts.hpp"
 #include "Logger.hpp"
 #include "Math.hpp"
+#include "Types.hpp"
 
 #include <bit>
 #include <entt/entt.hpp>
@@ -41,7 +41,8 @@ template <typename T>
 concept TwoWaySerializable = Serializable<T> && Deserializable<T>;
 
 template <typename T>
-  requires(std::floating_point<T> || std::integral<T>)
+  requires(std::floating_point<std::decay_t<T>> ||
+           std::integral<std::decay_t<T>>)
 bool write(std::ostream &out, const T &value) {
   if (!out.write(std::bit_cast<const char *>(&value), sizeof(value))) {
     error("Failed to write value to stream.");
@@ -51,7 +52,8 @@ bool write(std::ostream &out, const T &value) {
 }
 
 template <typename T>
-  requires(std::floating_point<T> || std::integral<T>)
+  requires(std::floating_point<std::decay_t<T>> ||
+           std::integral<std::decay_t<T>>)
 bool read(std::istream &in, T &value) {
   if (!in.read(std::bit_cast<char *>(&value), sizeof(value))) {
     error("Failed to read value from stream.");
@@ -233,8 +235,6 @@ template <class T> struct ComponentSerialiser;
 template <> struct ComponentSerialiser<IdentityComponent> {
   static auto serialise(const IdentityComponent &component, std::ostream &out)
       -> bool {
-    if (!write(out, component.id))
-      return false;
     if (!write(out, component.name))
       return false;
     return true;
@@ -242,10 +242,9 @@ template <> struct ComponentSerialiser<IdentityComponent> {
 
   static auto deserialise(std::istream &in, IdentityComponent &component)
       -> bool {
-    if (!read(in, component.id))
+    if (!read(in, component.name)) {
       return false;
-    if (!read(in, component.name))
-      return false;
+    }
     return true;
   }
 };
@@ -361,17 +360,12 @@ template <> struct ComponentSerialiser<SunComponent> {
       return false;
     if (!write(out_stream, component.colour))
       return false;
+    if (!write(out_stream, component.specular_colour))
+      return false;
     if (!write(out_stream, component.depth_params.bias))
       return false;
     if (!write(out_stream, component.depth_params.default_value))
       return false;
-    if (!write(out_stream, component.depth_params.far))
-      return false;
-    if (!write(out_stream, component.depth_params.near))
-      return false;
-    if (!write(out_stream, component.depth_params.value))
-      return false;
-
     return true;
   }
 
@@ -380,17 +374,12 @@ template <> struct ComponentSerialiser<SunComponent> {
       return false;
     if (!read(in, out.colour))
       return false;
+    if (!read(in, out.specular_colour))
+      return false;
     if (!read(in, out.depth_params.bias))
       return false;
     if (!read(in, out.depth_params.default_value))
       return false;
-    if (!read(in, out.depth_params.far))
-      return false;
-    if (!read(in, out.depth_params.near))
-      return false;
-    if (!read(in, out.depth_params.value))
-      return false;
-
     return true;
   }
 };
@@ -444,6 +433,104 @@ template <> struct ComponentSerialiser<ParentComponent> {
     if (!read(in, component.parent))
       return false;
     return true;
+  }
+};
+
+namespace BasicGeometrySerialisation {
+
+auto write(std::ostream &, const BasicGeometry::QuadParameters &) -> bool;
+auto write(std::ostream &, const BasicGeometry::TriangleParameters &) -> bool;
+auto write(std::ostream &, const BasicGeometry::CircleParameters &) -> bool;
+auto write(std::ostream &, const BasicGeometry::SphereParameters &) -> bool;
+auto write(std::ostream &, const BasicGeometry::CubeParameters &) -> bool;
+auto read(std::istream &, BasicGeometry::QuadParameters &) -> bool;
+auto read(std::istream &, BasicGeometry::TriangleParameters &) -> bool;
+auto read(std::istream &, BasicGeometry::CircleParameters &) -> bool;
+auto read(std::istream &, BasicGeometry::SphereParameters &) -> bool;
+auto read(std::istream &, BasicGeometry::CubeParameters &) -> bool;
+
+} // namespace BasicGeometrySerialisation
+
+template <> struct ComponentSerialiser<GeometryComponent> {
+  static bool serialise(const GeometryComponent &component, std::ostream &out) {
+    auto type = component.parameters.index();
+    if (!write(out, type))
+      return false;
+
+    // Serialize the actual data based on the type
+    return std::visit(
+        Core::overloaded{
+            [&](const BasicGeometry::QuadParameters &quad) {
+              return BasicGeometrySerialisation::write(out, quad);
+            },
+            [&](const BasicGeometry::TriangleParameters &triangle) {
+              return BasicGeometrySerialisation::write(out, triangle);
+            },
+            [&](const BasicGeometry::CircleParameters &circle) {
+              return BasicGeometrySerialisation::write(out, circle);
+            },
+            [&](const BasicGeometry::SphereParameters &sphere) {
+              return BasicGeometrySerialisation::write(out, sphere);
+            },
+            [&](const BasicGeometry::CubeParameters &cube) {
+              return BasicGeometrySerialisation::write(out, cube);
+            }},
+        component.parameters);
+  }
+
+  static bool deserialise(std::istream &in, GeometryComponent &component) {
+    // Deserialize the type of the geometry first
+    std::size_t type;
+    if (!read(in, type))
+      return false;
+
+    switch (type) {
+    case 0: {
+      BasicGeometry::QuadParameters quad;
+      if (BasicGeometrySerialisation::read(in, quad)) {
+        component.parameters = quad;
+        return true;
+      }
+      break;
+    }
+    case 1: {
+      BasicGeometry::TriangleParameters triangle;
+      if (BasicGeometrySerialisation::read(in, triangle)) {
+        component.parameters = triangle;
+        return true;
+      }
+      break;
+    }
+    case 2: {
+      BasicGeometry::CircleParameters circle;
+      if (BasicGeometrySerialisation::read(in, circle)) {
+        component.parameters = circle;
+        return true;
+      }
+      break;
+    }
+    case 3: {
+      BasicGeometry::SphereParameters sphere;
+      if (BasicGeometrySerialisation::read(in, sphere)) {
+        component.parameters = sphere;
+        return true;
+      }
+      break;
+    }
+    case 4: {
+      BasicGeometry::CubeParameters cube;
+      if (BasicGeometrySerialisation::read(in, cube)) {
+        component.parameters = cube;
+        return true;
+      }
+      break;
+    }
+    default:
+      assert(false && "Unknown geometry type");
+      return false;
+    }
+
+    return false;
   }
 };
 

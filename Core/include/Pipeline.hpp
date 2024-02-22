@@ -135,19 +135,19 @@ enum class PipelineStage : u8 {
   Compute,
 };
 
-struct PipelineConfiguration {
+struct ComputePipelineConfiguration {
   std::string name;
   PipelineStage stage{PipelineStage::Compute};
   const Shader &shader;
 
-  PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader &shader)
+  ComputePipelineConfiguration(std::string name, PipelineStage stage,
+                               const Shader &shader)
       : name(std::move(name)), stage(stage), shader(shader) {}
 };
 
-class Pipeline {
+class ComputePipeline {
 public:
-  ~Pipeline();
+  ~ComputePipeline();
   auto on_resize(const Extent<u32> &) -> void {}
 
   [[nodiscard]] auto get_pipeline() const -> const VkPipeline & {
@@ -167,12 +167,13 @@ public:
 
   auto bind(const CommandBuffer &) -> void;
 
-  static auto construct(const Device &dev, const PipelineConfiguration &)
-      -> Scope<Pipeline>;
+  static auto construct(const Device &dev, const ComputePipelineConfiguration &)
+      -> Scope<ComputePipeline>;
 
 private:
-  explicit Pipeline(const Device &dev, const PipelineConfiguration &);
-  auto construct_pipeline(const PipelineConfiguration &) -> void;
+  explicit ComputePipeline(const Device &dev,
+                           const ComputePipelineConfiguration &);
+  auto construct_pipeline(const ComputePipelineConfiguration &) -> void;
 
   const Device &device;
   std::string name{};

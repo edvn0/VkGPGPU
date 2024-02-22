@@ -6,6 +6,7 @@
 #include "Logger.hpp"
 
 #include <entt/entt.hpp>
+#include <vector>
 
 #include "ecs/Scene.hpp"
 #include "ecs/components/Component.hpp"
@@ -109,6 +110,16 @@ std::vector<Entity> Entity::get_children() const {
     }
   }
   return childrenEntities;
+}
+
+auto Entity::remove_all_components() const -> void {
+  static constexpr auto delete_all = []<class... Ts>(ComponentList<Ts...> comp,
+                                                     auto &reg, auto &entity) {
+    (reg.remove<Ts>(entity), ...);
+  };
+
+  delete_all(EngineComponents{}, scene->registry, handle);
+  delete_all(UnremovableComponents{}, scene->registry, handle);
 }
 
 } // namespace ECS

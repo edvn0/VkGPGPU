@@ -19,10 +19,10 @@ public:
   [[nodiscard]] auto get_handle() const { return handle; }
   [[nodiscard]] auto get_name() const -> const std::string &;
 
-  template <class T> auto add_component(T &&component) -> decltype(auto) {
+  template <IsComponent T> auto add_component(T &&component) -> decltype(auto) {
     return scene->registry.emplace<T>(handle, std::forward<T>(component));
   }
-  template <class T> auto add_component() -> decltype(auto) {
+  template <IsComponent T> auto add_component() -> decltype(auto) {
     if (scene->registry.any_of<T>(handle)) {
       return scene->registry.get<T>(handle);
     }
@@ -30,7 +30,7 @@ public:
     return scene->registry.emplace<T>(handle, T{});
   }
 
-  template <class T, class... Args>
+  template <IsComponent T, class... Args>
   auto add_component(Args &&...args) -> decltype(auto) {
     if (scene->registry.any_of<T>(handle)) {
       return scene->registry.get<T>(handle);
@@ -38,29 +38,32 @@ public:
 
     return scene->registry.emplace<T>(handle, std::forward<Args>(args)...);
   }
-  template <class T> auto put_component(T &&component) -> decltype(auto) {
+  template <IsComponent T> auto put_component(T &&component) -> decltype(auto) {
     return scene->registry.emplace_or_replace<T>(handle,
                                                  std::forward<T>(component));
   }
-  template <class T> [[nodiscard]] auto get_component() -> decltype(auto) {
+  template <IsComponent T>
+  [[nodiscard]] auto get_component() -> decltype(auto) {
     return scene->registry.get<T>(handle);
   }
-  template <class T>
+  template <IsComponent T>
   [[nodiscard]] auto get_component() const -> decltype(auto) {
     return scene->registry.get<T>(handle);
   }
-  template <class T> [[nodiscard]] auto has_component() const -> bool {
+  template <IsComponent T> [[nodiscard]] auto has_component() const -> bool {
     return scene->registry.any_of<T>(handle);
   }
-  template <class... Ts> [[nodiscard]] auto all_of() const -> bool {
+  template <IsComponent... Ts> [[nodiscard]] auto all_of() const -> bool {
     return scene->registry.all_of<Ts...>(handle);
   }
-  template <class... Ts> [[nodiscard]] auto any_of() const -> bool {
+  template <IsComponent... Ts> [[nodiscard]] auto any_of() const -> bool {
     return scene->registry.any_of<Ts...>(handle);
   }
-  template <class T> auto remove_component() const -> void {
+  template <IsComponent T> auto remove_component() const -> void {
     scene->registry.remove<T>(handle);
   }
+
+  auto remove_all_components() const -> void;
 
   auto set_parent(const Entity &parent) -> void;
   // Get parent entity, if it exists

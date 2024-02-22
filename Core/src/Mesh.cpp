@@ -124,7 +124,7 @@ auto Mesh::Deleter::operator()(ImporterImpl *impl) const -> void {
 
 namespace {
 constexpr auto to_mat4_from_assimp(const aiMatrix4x4 &matrix) -> glm::mat4 {
-  glm::mat4 result;
+  glm::mat4 result{};
   result[0][0] = matrix.a1;
   result[1][0] = matrix.a2;
   result[2][0] = matrix.a3;
@@ -172,8 +172,13 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcess_OptimizeGraph | aiProcess_OptimizeMeshes | aiProcess_GenNormals |
-    aiProcess_GenUVCoords | aiProcess_CalcTangentSpace | aiProcess_FlipUVs;
+    aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals |
+    aiProcess_CalcTangentSpace | aiProcess_OptimizeMeshes |
+    aiProcess_GenBoundingBoxes | aiProcess_GenUVCoords |
+    aiProcess_OptimizeGraph | aiProcess_JoinIdenticalVertices |
+    aiProcess_ValidateDataStructure | aiProcess_ImproveCacheLocality |
+    aiProcess_RemoveRedundantMaterials | aiProcess_FindInvalidData |
+    aiProcess_FindDegenerates | aiProcess_FindInstances | aiProcess_SortByPType;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
@@ -181,14 +186,19 @@ auto Mesh::import_from(const Device &device, const FS::Path &file_path)
 }
 
 auto Mesh::reference_import_from(const Device &device,
-                                 const FS::Path &file_path) -> Ref<Mesh> {
+                                 const FS::Path &file_path)
+    -> const Ref<Mesh> & {
   const std::string key = file_path.string();
   if (mesh_cache.contains(key)) {
     return mesh_cache.at(key);
   }
 
-  auto mesh = Ref<Mesh>(new Mesh{device, key});
-  mesh_cache.try_emplace(key, mesh);
+  auto &&[value, could] =
+      mesh_cache.try_emplace(key, Ref<Mesh>(new Mesh{device, key}));
+
+  if (!could) {
+    throw NotFoundException{fmt::format("Could not insert mesh at {}", key)};
+  }
 
   return mesh_cache.at(key);
 }
@@ -380,7 +390,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     return;
   }
 
-  materials.resize(num_materials);
+  materials = {};
 
   std::size_t i = 0;
   for (const auto *ai_material : materials_span) {
@@ -388,9 +398,12 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     // convert to std::string
     const std::string material_name = ai_material_name.C_Str();
 
+    // Gltf erroneously adds a material in some cases. Don't know why.
+    if (material_name.empty())
+      continue;
+
     auto submesh_material =
         Material::construct_reference(*device, *default_shader);
-    materials[i++] = submesh_material;
     submesh_material->set("albedo_map", white_texture);
     submesh_material->set("diffuse_map", white_texture);
     submesh_material->set("normal_map", white_texture);
@@ -414,7 +427,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("pc.albedo_colour", albedo_colour);
     submesh_material->set("pc.emission", emission);
 
-    float shininess{};
+    float shininess{0.0F};
     float metalness{0.0F};
     if (ai_material->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS) {
       shininess = 80.0F; // Default value
@@ -425,23 +438,45 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
       metalness = 0.0F;
     }
 
-    handle_albedo_map(white_texture, ai_material, *submesh_material,
-                      ai_tex_path);
-    handle_normal_map(white_texture, ai_material, *submesh_material,
-                      ai_tex_path);
+    handle_albedo_map(ai_material, *submesh_material, ai_tex_path);
+    handle_normal_map(ai_material, *submesh_material, ai_tex_path);
 
-    auto roughness = 1.0F - glm::sqrt(shininess / 100.0f);
-    handle_roughness_map(white_texture, ai_material, *submesh_material,
-                         ai_tex_path, roughness);
-    handle_metalness_map(white_texture, ai_material, *submesh_material,
-                         metalness);
+    auto roughness = 1.0F - glm::sqrt(shininess / 250.0f);
+    handle_roughness_map(ai_material, *submesh_material, ai_tex_path,
+                         roughness);
+    handle_metalness_map(ai_material, *submesh_material, metalness);
+
+    materials.push_back(std::move(submesh_material));
+  }
+
+  if (materials.empty()) {
+    auto submesh_material =
+        Material::construct_reference(*device, *default_shader);
+
+    static constexpr auto default_roughness_and_albedo = 0.8F;
+    auto vec_default_roughness_and_albedo = glm::vec3(0.8F);
+    submesh_material->set("pc.albedo_colour", vec_default_roughness_and_albedo);
+    submesh_material->set("pc.emission", 0.1F);
+    submesh_material->set("pc.metalness", 0.1F);
+    submesh_material->set("pc.roughness", default_roughness_and_albedo);
+    submesh_material->set("pc.use_normal_map", 0.0F);
+
+    submesh_material->set("albedo_map", white_texture);
+    submesh_material->set("diffuse_map", white_texture);
+    submesh_material->set("normal_map", white_texture);
+    submesh_material->set("metallic_map", white_texture);
+    submesh_material->set("roughness_map", white_texture);
+    submesh_material->set("ao_map", white_texture);
+    materials.push_back(submesh_material);
+
+    Assimp::DefaultLogger::kill();
+    return;
   }
 
   Assimp::DefaultLogger::kill();
 }
 
-void Mesh::handle_albedo_map(const Texture &white_texture,
-                             const aiMaterial *ai_material,
+void Mesh::handle_albedo_map(const aiMaterial *ai_material,
                              Material &submesh_material, aiString ai_tex_path) {
   const bool has_albedo_map =
       ai_material->GetTexture(aiTextureType_DIFFUSE, 0, &ai_tex_path) ==
@@ -469,12 +504,11 @@ void Mesh::handle_albedo_map(const Texture &white_texture,
   }
 
   if (fallback) {
-    submesh_material.set("albedo_map", white_texture);
+    submesh_material.set("albedo_map", SceneRenderer::get_white_texture());
   }
 }
 
-void Mesh::handle_normal_map(const Texture &white_texture,
-                             const aiMaterial *ai_material,
+void Mesh::handle_normal_map(const aiMaterial *ai_material,
                              Material &submesh_material, aiString ai_tex_path) {
   auto has_normal_map = ai_material->GetTexture(aiTextureType_NORMALS, 0,
                                                 &ai_tex_path) == AI_SUCCESS;
@@ -499,7 +533,7 @@ void Mesh::handle_normal_map(const Texture &white_texture,
   }
 
   if (fallback) {
-    submesh_material.set("normal_map", white_texture);
+    submesh_material.set("normal_map", SceneRenderer::get_white_texture());
     submesh_material.set("pc.use_normal_map", 0.0F);
   }
 }
@@ -512,8 +546,7 @@ static constexpr auto load_texture = [](const auto *ai_material, auto type,
   return ai_material->GetTexture(type, 0, &out_path) == AI_SUCCESS;
 };
 
-void Mesh::handle_roughness_map(const Texture &white_texture,
-                                const aiMaterial *ai_material,
+void Mesh::handle_roughness_map(const aiMaterial *ai_material,
                                 Material &submesh_material,
                                 aiString ai_tex_path, float roughness) {
   aiString path; // Path to the texture
@@ -548,13 +581,12 @@ void Mesh::handle_roughness_map(const Texture &white_texture,
 
   // Fallback to default white texture if no metallic-roughness map was found
   if (!has_roughness_texture) {
-    submesh_material.set("roughness_map", white_texture);
+    submesh_material.set("roughness_map", SceneRenderer::get_white_texture());
     submesh_material.set("pc.roughness", roughness);
   }
 }
 
-void Mesh::handle_metalness_map(const Texture &white_texture,
-                                const aiMaterial *ai_material,
+void Mesh::handle_metalness_map(const aiMaterial *ai_material,
                                 Material &submesh_material, float metalness) {
   aiString path; // Path to the texture
   bool has_metalness_texture = false;
@@ -585,7 +617,7 @@ void Mesh::handle_metalness_map(const Texture &white_texture,
 
   // Fallback to default white texture if no metallic-roughness map was found
   if (!has_metalness_texture) {
-    submesh_material.set("metallic_map", white_texture);
+    submesh_material.set("metallic_map", SceneRenderer::get_white_texture());
     submesh_material.set("pc.metalness", metalness);
   }
 }

@@ -34,12 +34,12 @@ public:
   auto serialise(const Scene &scene, std::ostream &stream) -> void;
   auto deserialise(Scene &scene, std::istream &stream) -> void;
 
+  auto serialise_entity_components(std::ostream &out, Entity &entity) -> bool;
+  auto deserialise_entity_components(std::istream &in, Entity &entity) -> bool;
+
 private:
   using ComponentTypes = Core::TypelistToTuple<EngineComponents>::type;
   static constexpr auto ComponentCount = std::tuple_size_v<ComponentTypes>;
-
-  auto serialise_entity_components(std::ostream &out, Entity &entity) -> bool;
-  auto deserialise_entity_components(std::istream &in, Entity &entity) -> bool;
 
   template <std::size_t... Is>
   auto make_component_mask(Entity &entity, std::index_sequence<Is...>) {

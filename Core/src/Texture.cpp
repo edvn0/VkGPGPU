@@ -65,7 +65,7 @@ Texture::~Texture() {
 
 auto calculate_mip_count(const Extent<u32> &ext) -> u32 {
   auto max_dimension = std::max(ext.width, ext.height);
-  return static_cast<u32>(std::ceil(std::log2(max_dimension))) + 1;
+  return static_cast<u32>(std::floor(std::log2(max_dimension))) + 1;
 }
 
 auto determine_mip_count(const MipGeneration &mipGeneration,
@@ -87,7 +87,41 @@ auto determine_mip_count(const MipGeneration &mipGeneration,
                     mipGeneration.strategy);
 }
 
-auto Texture::on_resize(const Extent<u32> &new_extent) -> void {}
+auto Texture::on_resize(const Extent<u32> &new_extent) -> void {
+  if (new_extent == properties.extent)
+    return;
+
+  properties.extent = new_extent;
+  data_buffer.clear();
+  // Depends on the size of the format
+  data_buffer.set_size_and_reallocate(properties.extent.size() * 4 *
+                                      sizeof(float));
+  data_buffer.fill_zero();
+
+  u32 mip_count =
+      determine_mip_count(properties.mip_generation, properties.extent);
+
+  image.reset();
+  image = make_scope<Image>(*device,
+                            ImageProperties{
+                                .extent = properties.extent,
+                                .mip_info =
+                                    {
+                                        .mips = mip_count,
+                                        .use_mips = true,
+                                    },
+                                .generate_per_mip_image_views = mip_count > 1,
+                                .format = properties.format,
+                                .tiling = properties.tiling,
+                                .usage = properties.usage,
+                                .layout = properties.layout,
+                                .min_filter = properties.min_filter,
+                                .max_filter = properties.max_filter,
+                                .address_mode = properties.address_mode,
+                                .border_color = properties.border_color,
+                            },
+                            data_buffer);
+}
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
     : device(&dev), data_buffer(size), storage(true) {
@@ -116,10 +150,14 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
   ensure(data_buffer.valid(), "DataBuffer must have size > 0");
 
   std::string identifier;
-  if (properties.path.empty()) {
+  if (properties.path.empty() && properties.identifier.empty()) {
     identifier = fmt::format("FromBuffer-Size{}", data_buffer.size());
   } else {
     identifier = properties.path.filename().string();
+  }
+
+  if (properties.identifier.empty()) {
+    properties.identifier = identifier;
   }
 
   u32 mip_count =
@@ -133,6 +171,7 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
                                         .mips = mip_count,
                                         .use_mips = true,
                                     },
+                                .generate_per_mip_image_views = mip_count > 1,
                                 .format = properties.format,
                                 .tiling = properties.tiling,
                                 .usage = properties.usage,
@@ -170,6 +209,7 @@ Texture::Texture(const Device &dev, const TextureProperties &props)
                                         .mips = mip_count,
                                         .use_mips = true,
                                     },
+                                .generate_per_mip_image_views = mip_count > 1,
                                 .format = properties.format,
                                 .tiling = properties.tiling,
                                 .usage = properties.usage,

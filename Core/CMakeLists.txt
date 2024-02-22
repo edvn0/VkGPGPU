@@ -100,14 +100,14 @@ target_include_directories(Core PUBLIC
     ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include
     ${CMAKE_SOURCE_DIR}/ThirdParty/assimp/include
     ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
-target_link_libraries(Core PUBLIC ECS Platform Reflection imgui imguizmo assimp::assimp glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage)
+target_link_libraries(Core PUBLIC ECS Platform Reflection imgui imguizmo imgui-notify assimp::assimp glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 target_compile_definitions(Core PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
-    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=4096)
+    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=1024)
     set(GPGPU_FAST_LOGGING ON)
 endif()
 

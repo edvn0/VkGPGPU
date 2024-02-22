@@ -20,7 +20,7 @@ public:
   explicit Scene(std::string_view scene_name);
   ~Scene();
   auto create_entity(std::string_view, bool add_observer = true) -> Entity;
-  auto delete_entity(Core::u64 identifier) -> void;
+  [[nodiscard]] auto delete_entity(Core::u64 identifier) -> bool;
 
   // Lifetime events
   auto on_create(const Core::Device &, const Core::Window &,
@@ -49,6 +49,8 @@ public:
   auto sort() -> void;
   void set_scene_name(const std::string_view scene_name) { name = scene_name; }
   void initialise_device_dependent_objects(const Core::Device &device);
+
+  template <class... Args> auto view() { return registry.view<Args...>(); }
 
 private:
   std::string name{};

@@ -55,7 +55,7 @@ struct TextureComponent {
 struct MeshComponent {
   Core::Ref<Core::Mesh> mesh;
   std::filesystem::path path;
-  bool draw_aabb{true};
+  bool draw_aabb{false};
 
   static constexpr std::string_view component_name{"Mesh"};
 };
@@ -93,6 +93,7 @@ using GeometryVariant =
 } // namespace BasicGeometry
 struct GeometryComponent {
   BasicGeometry::GeometryVariant parameters;
+  static constexpr std::string_view component_name{"Geometry"};
 };
 
 struct CameraComponent {
@@ -106,6 +107,7 @@ struct CameraComponent {
 
 struct SunComponent {
   glm::vec4 colour;
+  glm::vec4 specular_colour;
   glm::vec3 direction;
   Core::DepthParameters depth_params{};
 
@@ -129,9 +131,42 @@ template <typename... Ts> using ComponentList = Core::Typelist<Ts...>;
 using EngineComponents =
     ComponentList<IdentityComponent, TransformComponent, TextureComponent,
                   MeshComponent, CameraComponent, SunComponent, ParentComponent,
-                  ChildComponent>;
+                  ChildComponent, GeometryComponent>;
 using UnremovableComponents =
     ComponentList<IdentityComponent, TransformComponent, ParentComponent,
                   ChildComponent>;
+
+namespace Detail {
+// Primary template, assume the type is not in the list
+template <typename T, typename Typelist> struct IsInTypelist;
+
+// Specialization for Typelist
+template <typename T, typename... Types>
+struct IsInTypelist<T, ComponentList<Types...>> {
+  // Initial value is false
+  static constexpr bool value = false;
+};
+
+// Partial specialization for when a match is found
+template <typename T, typename... Types>
+struct IsInTypelist<T, ComponentList<T, Types...>> {
+  // Found T in the list, set value to true
+  static constexpr bool value = true;
+};
+
+// Recursive case: If the first type doesn't match, strip the first type and try
+// again
+template <typename T, typename First, typename... Rest>
+struct IsInTypelist<T, ComponentList<First, Rest...>> {
+  static constexpr bool value = IsInTypelist<T, ComponentList<Rest...>>::value;
+};
+
+// Helper variable template for easier usage
+template <typename T, typename Typelist>
+inline constexpr bool IsInTypelist_v = IsInTypelist<T, Typelist>::value;
+} // namespace Detail
+
+template <typename T>
+concept IsComponent = Detail::IsInTypelist_v<T, EngineComponents>;
 
 } // namespace ECS
