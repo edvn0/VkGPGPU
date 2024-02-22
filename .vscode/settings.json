@@ -124,6 +124,7 @@
     "resumable": "cpp",
     "execution": "cpp",
     "valarray": "cpp",
-    "expected": "cpp"
+    "expected": "cpp",
+    "*.glsl": "cpp"
   }
 }

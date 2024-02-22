@@ -362,10 +362,21 @@ template <> struct ComponentSerialiser<SunComponent> {
       return false;
     if (!write(out_stream, component.specular_colour))
       return false;
-    if (!write(out_stream, component.depth_params.bias))
+    if (!write(out_stream, component.depth_params.bias)) {
       return false;
-    if (!write(out_stream, component.depth_params.default_value))
+    }
+    if (!write(out_stream, component.depth_params.default_value)) {
       return false;
+    }
+    if (!write(out_stream, component.depth_params.lrbt)) {
+      return false;
+    }
+    if (!write(out_stream, component.depth_params.nf)) {
+      return false;
+    }
+    if (!write(out_stream, component.depth_params.center)) {
+      return false;
+    }
     return true;
   }
 
@@ -376,10 +387,21 @@ template <> struct ComponentSerialiser<SunComponent> {
       return false;
     if (!read(in, out.specular_colour))
       return false;
-    if (!read(in, out.depth_params.bias))
+    if (!read(in, out.depth_params.bias)) {
       return false;
-    if (!read(in, out.depth_params.default_value))
+    }
+    if (!read(in, out.depth_params.default_value)) {
       return false;
+    }
+    if (!read(in, out.depth_params.lrbt)) {
+      return false;
+    }
+    if (!read(in, out.depth_params.nf)) {
+      return false;
+    }
+    if (!read(in, out.depth_params.center)) {
+      return false;
+    }
     return true;
   }
 };
@@ -432,6 +454,128 @@ template <> struct ComponentSerialiser<ParentComponent> {
     // Deserialize the parent entity handle
     if (!read(in, component.parent))
       return false;
+    return true;
+  }
+};
+
+template <> struct ComponentSerialiser<PointLightComponent> {
+  static auto serialise(const PointLightComponent &component, std::ostream &out)
+      -> bool {
+    if (!write(out, component.radiance)) {
+      return false;
+    }
+    if (!write(out, component.intensity)) {
+      return false;
+    }
+    if (!write(out, component.light_size)) {
+      return false;
+    }
+    if (!write(out, component.min_radius)) {
+      return false;
+    }
+    if (!write(out, component.radius)) {
+      return false;
+    }
+    if (!write(out, component.casts_shadows)) {
+      return false;
+    }
+    if (!write(out, component.soft_shadows)) {
+      return false;
+    }
+    if (!write(out, component.falloff)) {
+      return false;
+    }
+    return true;
+  }
+
+  static auto deserialise(std::istream &in, PointLightComponent &component)
+      -> bool {
+    // Deserialize the parent entity handle
+    if (!read(in, component.radiance)) {
+      return false;
+    }
+    if (!read(in, component.intensity)) {
+      return false;
+    }
+    if (!read(in, component.light_size)) {
+      return false;
+    }
+    if (!read(in, component.min_radius)) {
+      return false;
+    }
+    if (!read(in, component.radius)) {
+      return false;
+    }
+    if (!read(in, component.casts_shadows)) {
+      return false;
+    }
+    if (!read(in, component.soft_shadows)) {
+      return false;
+    }
+    if (!read(in, component.falloff)) {
+      return false;
+    }
+    return true;
+  }
+};
+
+template <> struct ComponentSerialiser<SpotLightComponent> {
+  static auto serialise(const SpotLightComponent &component, std::ostream &out)
+      -> bool {
+    if (!write(out, component.radiance)) {
+      return false;
+    }
+    if (!write(out, component.intensity)) {
+      return false;
+    }
+    if (!write(out, component.range)) {
+      return false;
+    }
+    if (!write(out, component.angle)) {
+      return false;
+    }
+    if (!write(out, component.angle_attenuation)) {
+      return false;
+    }
+    if (!write(out, component.casts_shadows)) {
+      return false;
+    }
+    if (!write(out, component.soft_shadows)) {
+      return false;
+    }
+    if (!write(out, component.falloff)) {
+      return false;
+    }
+    return true;
+  }
+
+  static auto deserialise(std::istream &in, SpotLightComponent &component)
+      -> bool {
+    // Deserialize the parent entity handle
+    if (!read(in, component.radiance)) {
+      return false;
+    }
+    if (!read(in, component.intensity)) {
+      return false;
+    }
+    if (!read(in, component.range)) {
+      return false;
+    }
+    if (!read(in, component.angle)) {
+      return false;
+    }
+    if (!read(in, component.angle_attenuation)) {
+      return false;
+    }
+    if (!read(in, component.casts_shadows)) {
+      return false;
+    }
+    if (!read(in, component.soft_shadows)) {
+      return false;
+    }
+    if (!read(in, component.falloff)) {
+      return false;
+    }
     return true;
   }
 };

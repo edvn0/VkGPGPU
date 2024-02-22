@@ -12,6 +12,16 @@
 
 namespace Core {
 
+struct PipelineStatistics {
+  u64 input_assembly_vertices{0};
+  u64 input_assembly_primitives{0};
+  u64 vs_invocations{0};
+  u64 clip_invocations{0};
+  u64 clip_primitives{0};
+  u64 fs_invocations{0};
+  u64 cs_invocations{0};
+};
+
 class CommandBuffer;
 template <typename T, typename... Args>
 concept CommandBufferBindable =
@@ -58,6 +68,7 @@ public:
   auto begin(u32 current_frame, VkCommandBufferBeginInfo &) -> void;
 
   auto end() -> void;
+  auto submit() -> void;
   auto end_and_submit() -> void;
 
   [[nodiscard]] virtual auto get_command_buffer() const -> VkCommandBuffer;
@@ -67,14 +78,23 @@ public:
     return compute_times.peek();
   }
 
+  auto get_pipeline_statistics(u32 frame_index) const
+      -> const PipelineStatistics & {
+    return pipeline_statistics_query_results[frame_index];
+  }
+
+  auto begin_timestamp_query() -> u32;
+  void end_timestamp_query(u32 query_index);
+  auto get_execution_gpu_time(u32 frame_index, u32 query_index = 0) const
+      -> float;
+
   template <class T> void bind(T &object) { object.bind(*this); }
 
   static auto construct(const Device &, CommandBufferProperties)
       -> Scope<CommandBuffer>;
 
 private:
-  auto submit() -> void;
-  const Device &device;
+  const Device *device;
   CommandBufferProperties properties{};
   bool supports_device_query{false};
 
@@ -84,12 +104,20 @@ private:
     VkSemaphore finished_semaphore{};
   };
   FrameCommandBuffer *active_frame{nullptr};
-  VkQueryPool *active_pool{nullptr};
+  u32 active_frame_index{0};
   std::vector<FrameCommandBuffer> command_buffers{};
 
   VkCommandPool command_pool{};
 
+  u32 timestamp_query_count = 0;
+  u32 timestamp_next_available_query = 2;
   std::vector<VkQueryPool> query_pools{};
+  std::vector<VkQueryPool> pipeline_statistics_query_pools;
+  std::vector<std::vector<uint64_t>> timestamp_query_results;
+  std::vector<std::vector<float>> execution_gpu_times;
+
+  u32 pipeline_query_count = 0;
+  std::vector<PipelineStatistics> pipeline_statistics_query_results;
 
   Container::CircularBuffer<floating> compute_times{usize{200}};
 

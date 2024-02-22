@@ -156,6 +156,10 @@ auto SceneRenderer::create_preetham_sky(float turbidity, float azimuth,
 
 auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
   extent = new_extent;
+  inverse_extent = {
+      .width = 1.0F / static_cast<float>(extent.width),
+      .height = 1.0F / static_cast<float>(extent.height),
+  };
   geometry_framebuffer->on_resize(extent);
   shadow_framebuffer->on_resize(extent);
   fullscreen_framebuffer->on_resize(extent);
@@ -373,6 +377,26 @@ auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
     bloom_textures[2]->on_resize({bloomSize.x, bloomSize.y});
   }
 
+  {
+    constexpr uint32_t TILE_SIZE = 16u;
+    glm::uvec2 size = glm::uvec2{extent.width, extent.height};
+    size += TILE_SIZE - size % TILE_SIZE;
+    light_culling_workgroup_size = {size / TILE_SIZE, 1};
+    renderer_ubo.tiles_count = {
+        light_culling_workgroup_size.x,
+        light_culling_workgroup_size.y,
+    };
+
+    auto &visible_point_lights_ssbo = ssbos->get(7, current_frame);
+    auto &visible_spot_lights_ssbo = ssbos->get(8, current_frame);
+
+    visible_point_lights_ssbo->resize(light_culling_workgroup_size.x *
+                                      light_culling_workgroup_size.y * 4 *
+                                      1024);
+    visible_spot_lights_ssbo->resize(light_culling_workgroup_size.x *
+                                     light_culling_workgroup_size.y * 4 * 1024);
+  }
+
   const auto &ubo = ubos->get(0, current_frame);
   ubo->write(renderer_ubo);
 
@@ -437,6 +461,29 @@ auto SceneRenderer::shadow_pass() -> void {
 
   geometry_renderer.flush(*command_buffer, current_frame, shadow_pipeline.get(),
                           shadow_material.get());
+}
+
+auto SceneRenderer::light_culling_pass() -> void {
+
+  compute_command_buffer->begin(current_frame);
+  gpu_time_queries.light_culling_pass_query =
+      compute_command_buffer->begin_timestamp_query();
+  light_culling_material->set("shadow_map", get_depth_image());
+  light_culling_pipeline->bind(*compute_command_buffer);
+
+  update_material_for_rendering(current_frame, *light_culling_material,
+                                ubos.get(), ssbos.get());
+  light_culling_material->bind(*compute_command_buffer, *light_culling_pipeline,
+                               current_frame);
+
+  push_constants(*light_culling_pipeline, *light_culling_material);
+  vkCmdDispatch(compute_command_buffer->get_command_buffer(),
+                light_culling_workgroup_size.x, light_culling_workgroup_size.y,
+                1);
+
+  compute_command_buffer->end_timestamp_query(
+      gpu_time_queries.light_culling_pass_query);
+  compute_command_buffer->end_and_submit();
 }
 
 auto SceneRenderer::geometry_pass() -> void {
@@ -533,29 +580,8 @@ void SceneRenderer::bloom_pass() {
   allocInfo.pSetLayouts = &descriptorSetLayout;
 
   compute_command_buffer->begin(current_frame);
-
-#if 0
-  if (false) {
-    VkImageMemoryBarrier imageMemoryBarrier = {};
-    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageMemoryBarrier.image = inputImage->get_image_info().image;
-    imageMemoryBarrier.subresourceRange = {
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        0,
-        inputImage->get_properties().mip_info.mips,
-        0,
-        1,
-    };
-    imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(command_buffer->get_command_buffer(),
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &imageMemoryBarrier);
-  }
-#endif
+  gpu_time_queries.bloom_compute_pass_query =
+      compute_command_buffer->begin_timestamp_query();
 
   // Output image
   VkDescriptorSet descriptorSet =
@@ -882,6 +908,8 @@ void SceneRenderer::bloom_pass() {
   }
   // Renderer::RT_EndGPUPerfMarker(commandBuffer);
 
+  compute_command_buffer->end_timestamp_query(
+      gpu_time_queries.bloom_compute_pass_query);
   compute_command_buffer->end_and_submit();
 
   // m_CommandBuffer->EndTimestampQuery(m_GPUTimeQueries.BloomComputePassQuery);
@@ -955,6 +983,75 @@ auto SceneRenderer::fullscreen_pass() -> void {
   });
 }
 
+auto SceneRenderer::begin_scene(const ECS::Scene &scene, FrameIndex frame_index)
+    -> void {
+  set_frame_index(frame_index);
+
+  scene_data.light_environment = scene.get_light_environment();
+
+  const auto &lightEnvironment = scene_data.light_environment;
+  const std::vector<ECS::PointLight> &pointLightsVec =
+      lightEnvironment.point_light_buffer;
+  point_light_ubo.count = int(pointLightsVec.size());
+  std::memcpy(point_light_ubo.lights.data(), pointLightsVec.data(),
+              lightEnvironment.get_point_light_buffer_size_bytes());
+
+  auto &point_light_ubo_write = ubos->get(4, frame_index);
+  point_light_ubo_write->write(&point_light_ubo,
+                               16ull + sizeof(ECS::PointLight) *
+                                           point_light_ubo.count);
+
+  const std::vector<ECS::SpotLight> &spotLightsVec =
+      lightEnvironment.spot_light_buffer;
+  spot_light_ubo.count = int(spotLightsVec.size());
+  std::memcpy(spot_light_ubo.lights.data(), spotLightsVec.data(),
+              lightEnvironment.get_spot_light_buffer_size_bytes());
+  auto &spot_light_ubo_write = ubos->get(5, frame_index);
+  spot_light_ubo_write->write(
+      &spot_light_ubo, 16ull + sizeof(ECS::SpotLight) * spot_light_ubo.count);
+
+  for (size_t i = 0; i < spotLightsVec.size(); ++i) {
+    auto &light = spotLightsVec[i];
+    if (!light.casts_shadows)
+      continue;
+
+    glm::mat4 projection =
+        glm::perspective(glm::radians(light.angle), 1.f, 0.1f, light.range);
+    spot_shadows_ubo.shadow_matrices[i] =
+        projection * glm::lookAt(light.position,
+                                 light.position - light.direction,
+                                 glm::vec3(0.0f, 1.0f, 0.0f));
+  }
+
+  auto &spot_light_matrix_data = ubos->get(6, frame_index);
+  spot_light_matrix_data->write(
+      &spot_shadows_ubo,
+      static_cast<u32>(sizeof(glm::mat4) * spotLightsVec.size()));
+
+  const glm::uvec2 viewportSize = {extent.width, extent.height};
+
+  screen_data_ubo.full_resolution = {
+      viewportSize.x,
+      viewportSize.y,
+  };
+  screen_data_ubo.inverse_full_resolution = {
+      inverse_extent.width,
+      inverse_extent.height,
+  };
+  screen_data_ubo.half_resolution =
+      glm::ivec2{
+          viewportSize.x,
+          viewportSize.y,
+      } /
+      2;
+  screen_data_ubo.inverse_half_resolution = {
+      2.0F * inverse_extent.width,
+      2.0F * inverse_extent.height,
+  };
+
+  ubos->get(9, frame_index)->write(screen_data_ubo);
+}
+
 auto SceneRenderer::flush() -> void {
   u32 offset = 0;
   auto &&[vb, tb] = transform_buffers.at(current_frame);
@@ -987,12 +1084,13 @@ auto SceneRenderer::flush() -> void {
   {
     begin_renderpass(*geometry_framebuffer);
     environment_pass();
+    light_culling_pass();
     geometry_pass();
     debug_pass();
 
     bloom_pass();
 
-    //    grid_pass();
+    // grid_pass();
     end_renderpass();
   }
   {
@@ -1011,6 +1109,18 @@ auto SceneRenderer::flush() -> void {
 auto SceneRenderer::end_frame() -> void {}
 
 void SceneRenderer::push_constants(const GraphicsPipeline &pipeline,
+                                   const Material &material) {
+
+  const auto &constant_buffer = material.get_constant_buffer();
+  if (!constant_buffer.valid()) {
+    return;
+  }
+
+  vkCmdPushConstants(command_buffer->get_command_buffer(),
+                     pipeline.get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
+                     constant_buffer.size(), constant_buffer.raw());
+}
+void SceneRenderer::push_constants(const ComputePipeline &pipeline,
                                    const Material &material) {
 
   const auto &constant_buffer = material.get_constant_buffer();
@@ -1115,6 +1225,10 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       });
 
   extent = swapchain.get_extent();
+  inverse_extent = {
+      .width = 1.0F / static_cast<float>(extent.width),
+      .height = 1.0F / static_cast<float>(extent.height),
+  };
 
   Mesh::reference_import_from(*device, FS::model("cube.gltf"));
   Mesh::reference_import_from(*device, FS::model("sphere.fbx"));
@@ -1313,8 +1427,26 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   ubos->create(sizeof(RendererUBO), SetBinding(0));
   ubos->create(sizeof(ShadowUBO), SetBinding(1));
   ubos->create(sizeof(GridUBO), SetBinding(3));
+  ubos->create(sizeof(PointLights), SetBinding(4));
+  ubos->create(sizeof(SpotLights), SetBinding(5));
+  ubos->create(sizeof(SpotShadows), SetBinding(6));
+  ubos->create(sizeof(ScreenData), SetBinding(9));
   ssbos = make_scope<BufferSet<Buffer::Type::Storage>>(*device);
   ssbos->create(buffer_for_transform_data.size(), SetBinding(2));
+
+  {
+    // Point/spot lights + culled lights
+    ssbos->create(1, SetBinding(7));
+    ssbos->create(1, SetBinding(8));
+    shader_cache.try_emplace(
+        "LightCulling",
+        Shader::construct(*device, FS::shader("LightCulling.comp.spv")));
+    light_culling_material =
+        Material::construct(*device, *shader_cache.at("LightCulling"));
+    light_culling_pipeline = ComputePipeline::construct(
+        *device, {"LightCulling", PipelineStage::Compute,
+                  *shader_cache.at("LightCulling")});
+  }
 
   transform_buffers.resize(Config::frame_count);
   static constexpr auto total_size =

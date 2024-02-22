@@ -15,6 +15,55 @@ namespace ECS {
 
 class Entity;
 
+struct DirectionalLight {
+  glm::vec3 Direction = {0.0f, 0.0f, 0.0f};
+  glm::vec3 Radiance = {0.0f, 0.0f, 0.0f};
+  float Intensity = 0.0f;
+  float ShadowAmount = 1.0f;
+  // C++ only
+  bool CastShadows = true;
+};
+
+struct PointLight {
+  glm::vec3 position = {0.0f, 0.0f, 0.0f};
+  float intensity = 0.0f;
+  glm::vec3 radiance = {0.0f, 0.0f, 0.0f};
+  float min_radius = 0.001f;
+  float radius = 25.0f;
+  float falloff = 1.f;
+  float source_size = 0.1f;
+  bool casts_shadows = true;
+  std::array<char, 3> Padding{0, 0, 0};
+};
+
+struct SpotLight {
+  glm::vec3 position = {0.0f, 0.0f, 0.0f};
+  float intensity = 0.0f;
+  glm::vec3 direction = {0.0f, 0.0f, 0.0f};
+  float angle_attenuation = 0.0f;
+  glm::vec3 radiance = {0.0f, 0.0f, 0.0f};
+  float range = 0.1f;
+  float angle = 0.0f;
+  float falloff = 1.0f;
+  bool soft_shadows = true;
+  std::array<char, 3> padding0{0, 0, 0};
+  bool casts_shadows = true;
+  std::array<char, 3> padding1{0, 0, 0};
+};
+
+struct LightEnvironment {
+  std::array<DirectionalLight, 4> directional_lights;
+  std::vector<PointLight> point_light_buffer;
+  std::vector<SpotLight> spot_light_buffer;
+  [[nodiscard]] auto get_point_light_buffer_size_bytes() const -> Core::u32 {
+    return static_cast<Core::u32>(point_light_buffer.size() *
+                                  sizeof(PointLight));
+  }
+  [[nodiscard]] auto get_spot_light_buffer_size_bytes() const -> Core::u32 {
+    return static_cast<Core::u32>(spot_light_buffer.size() * sizeof(SpotLight));
+  }
+};
+
 class Scene {
 public:
   explicit Scene(std::string_view scene_name);
@@ -52,10 +101,14 @@ public:
 
   template <class... Args> auto view() { return registry.view<Args...>(); }
 
+  auto get_light_environment() const { return light_environment; }
+
 private:
   std::string name{};
   entt::registry registry;
   std::vector<ISceneObserver *> observers{};
+
+  LightEnvironment light_environment;
 
   Core::ThreadPool pool;
   std::queue<std::future<void>> futures;

@@ -97,6 +97,7 @@ auto Texture::on_resize(const Extent<u32> &new_extent) -> void {
   data_buffer.set_size_and_reallocate(properties.extent.size() * 4 *
                                       sizeof(float));
   data_buffer.fill_zero();
+  cached_size = data_buffer.size();
 
   u32 mip_count =
       determine_mip_count(properties.mip_generation, properties.extent);

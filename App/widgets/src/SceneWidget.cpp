@@ -161,6 +161,33 @@ void SceneWidget::draw_component_widget(Entity &entity) {
     ImGui::DragFloat3("Scale", &transform.scale.x, 0.1F);
   });
 
+  draw_component<PointLightComponent>(
+      entity, "Point light", [](PointLightComponent &component) {
+        ImGui::ColorEdit3("Radiance", &component.radiance.x);
+        ImGui::SliderFloat("Intensity", &component.intensity, 0.0f, 100.0f);
+        ImGui::SliderFloat("Light Size", &component.light_size, 0.0f, 10.0f);
+        ImGui::SliderFloat("Min Radius", &component.min_radius, 0.1f,
+                           component.radius);
+        ImGui::SliderFloat("Radius", &component.radius, component.min_radius,
+                           100.0f);
+        ImGui::Checkbox("Casts Shadows", &component.casts_shadows);
+        ImGui::Checkbox("Soft Shadows", &component.soft_shadows);
+        ImGui::SliderFloat("Falloff", &component.falloff, 0.0f, 10.0f);
+      });
+
+  draw_component<SpotLightComponent>(
+      entity, "Spot light", [](SpotLightComponent &component) {
+        ImGui::ColorEdit3("Radiance", &component.radiance.x);
+        ImGui::SliderFloat("Intensity", &component.intensity, 0.0f, 100.0f);
+        ImGui::SliderFloat("Range", &component.range, 0.0f, 100.0f);
+        ImGui::SliderAngle("Angle", &component.angle, 0.0f, 180.0f);
+        ImGui::SliderFloat("Angle Attenuation", &component.angle_attenuation,
+                           0.0f, 10.0f);
+        ImGui::Checkbox("Casts Shadows", &component.casts_shadows);
+        ImGui::Checkbox("Soft Shadows", &component.soft_shadows);
+        ImGui::SliderFloat("Falloff", &component.falloff, 0.0f, 10.0f);
+      });
+
   draw_component<TextureComponent>(
       entity, "Texture", [](TextureComponent &texture) {
         auto &texture_vector4 = texture.colour;
@@ -178,6 +205,9 @@ void SceneWidget::draw_component_widget(Entity &entity) {
     ImGui::ColorEdit4("Specular Colour", &sun.specular_colour.x);
 
     Core::DepthParameters &depth = sun.depth_params;
+    ImGui::DragFloat3("Center", glm::value_ptr(sun.depth_params.center));
+    ImGui::DragFloat4("LRBT", glm::value_ptr(sun.depth_params.lrbt));
+    ImGui::DragFloat2("NF", glm::value_ptr(sun.depth_params.nf));
     ImGui::DragFloat("Bias", &depth.bias, 0.1F, 0.0F, 1.0F);
     ImGui::DragFloat("Default Value", &depth.default_value, 0.01F, .01F, 0.2F);
   });

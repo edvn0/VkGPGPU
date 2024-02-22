@@ -159,9 +159,15 @@ void main()
   vec3 ambient = vec3(0.03) * albedo * getAO(); // Ambient light
 
   vec3 direct = kD * diffuse + specular;
-  vec3 shadow_pos_coords_remapped = (in_shadow_pos.xyz / in_shadow_pos.w) * 0.5 + 0.5;
-  direct *= (1.0F - calculateSoftShadow(shadow_map, shadow_pos_coords_remapped,
-                                        normal, L, textureSize(shadow_map, 0), 0, shadow.bias_and_default.x));
+  // Adjusting the x and y coordinates remains the same, mapping from [-1, 1] to
+  // [0, 1]
+  vec3 xy_coords_remapped = (in_shadow_pos.xyz / in_shadow_pos.w) * 0.5 + 0.5;
+
+  // Combining the adjusted x, y, and z into the remapped shadow coordinates
+  vec3 shadow_pos_coords_remapped = vec3(xy_coords_remapped);
+  direct *= calculateSoftShadow(shadow_map, shadow_pos_coords_remapped, normal,
+                                L, textureSize(shadow_map, 0), 1,
+                                shadow.bias_and_default.x);
 
   vec3 final = ambient + direct * radiance;
 

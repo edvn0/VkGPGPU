@@ -114,6 +114,32 @@ struct SunComponent {
   static constexpr std::string_view component_name{"Sun"};
 };
 
+struct PointLightComponent {
+  glm::vec3 radiance = {1.0f, 1.0f, 1.0f};
+  float intensity = 1.0f;
+  float light_size = 0.5f;
+  float min_radius = 1.f;
+  float radius = 10.0f;
+  bool casts_shadows = true;
+  bool soft_shadows = true;
+  float falloff = 1.0f;
+
+  static constexpr std::string_view component_name{"PointLight"};
+};
+
+struct SpotLightComponent {
+  glm::vec3 radiance{1.0f};
+  float intensity = 1.0f;
+  float range = 10.0f;
+  float angle = 60.0f;
+  float angle_attenuation = 5.0f;
+  bool casts_shadows = false;
+  bool soft_shadows = false;
+  float falloff = 1.0f;
+
+  static constexpr std::string_view component_name{"SpotLight"};
+};
+
 struct ParentComponent {
   Core::u64 parent; // Handle to the parent entity
 
@@ -131,7 +157,8 @@ template <typename... Ts> using ComponentList = Core::Typelist<Ts...>;
 using EngineComponents =
     ComponentList<IdentityComponent, TransformComponent, TextureComponent,
                   MeshComponent, CameraComponent, SunComponent, ParentComponent,
-                  ChildComponent, GeometryComponent>;
+                  ChildComponent, GeometryComponent, PointLightComponent,
+                  SpotLightComponent>;
 using UnremovableComponents =
     ComponentList<IdentityComponent, TransformComponent, ParentComponent,
                   ChildComponent>;

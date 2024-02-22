@@ -14,6 +14,8 @@
 
 #include <functional>
 
+#include "ecs/Scene.hpp"
+
 namespace Core {
 struct CommandKey;
 }
@@ -62,16 +64,16 @@ public:
                           const glm::vec4 &colour = Colours::white) -> void;
   auto end_renderpass() -> void;
   auto create(const Swapchain &swapchain) -> void;
-  auto set_frame_index(FrameIndex frame_index) -> void {
-    current_frame = frame_index;
-  }
   auto begin_frame(const Math::Mat4 &projection, const Math::Mat4 &view)
       -> void;
+
+  auto begin_scene(const ECS::Scene &, FrameIndex frame_index) -> void;
 
   auto flush() -> void;
   auto end_frame() -> void;
 
   void push_constants(const GraphicsPipeline &, const Material &);
+  void push_constants(const ComputePipeline &, const Material &);
   void update_material_for_rendering(FrameIndex frame_index,
                                      Material &material_for_update,
                                      BufferSet<Buffer::Type::Uniform> *ubo_set,
@@ -89,14 +91,6 @@ public:
   auto get_bloom_configuration() -> auto & { return bloom_settings; }
   auto create_pool_and_layout() -> void;
 
-  [[nodiscard]] auto get_command_buffer() const -> const auto & {
-    return *command_buffer;
-  }
-
-  [[nodiscard]] auto get_compute_command_buffer() const -> const auto & {
-    return *compute_command_buffer;
-  }
-
   [[nodiscard]] static auto get_white_texture() -> const Texture & {
     return *white_texture;
   }
@@ -106,11 +100,9 @@ public:
   [[nodiscard]] static auto get_brdf_lookup_texture() -> const Texture & {
     return *brdf_lookup_texture;
   }
-
   [[nodiscard]] auto get_current_index() const -> FrameIndex {
     return current_frame;
   }
-
   [[nodiscard]] auto get_ubos() -> Scope<BufferSet<Buffer::Type::Uniform>> & {
     return ubos;
   }
@@ -118,6 +110,15 @@ public:
     return ssbos;
   }
   [[nodiscard]] auto get_extent() const -> const auto & { return extent; }
+  [[nodiscard]] auto get_graphics_command_buffer() -> const auto & {
+    return *command_buffer;
+  }
+  [[nodiscard]] auto get_compute_command_buffer() -> const auto & {
+    return *compute_command_buffer;
+  }
+  [[nodiscard]] auto get_gpu_execution_times() -> const auto & {
+    return gpu_time_queries;
+  }
 
 private:
   const Device *device;
@@ -128,6 +129,7 @@ private:
   GeometryRenderer geometry_renderer;
 
   Extent<u32> extent{};
+  Extent<float> inverse_extent{};
 
   Scope<GraphicsPipeline> geometry_pipeline;
   Scope<GraphicsPipeline> wireframed_geometry_pipeline;
@@ -136,6 +138,11 @@ private:
   Scope<GraphicsPipeline> fullscreen_pipeline;
   Scope<Framebuffer> fullscreen_framebuffer;
   Scope<Material> fullscreen_material;
+
+  struct SceneInfo {
+    ECS::LightEnvironment light_environment;
+  };
+  SceneInfo scene_data;
 
   struct BloomSettings {
     bool enabled = true;
@@ -150,6 +157,10 @@ private:
   Scope<ComputePipeline> bloom_pipeline;
   std::array<Scope<Texture>, 3> bloom_textures{};
   Scope<Material> bloom_material;
+
+  glm::uvec3 light_culling_workgroup_size = {16, 1, 1};
+  Scope<ComputePipeline> light_culling_pipeline;
+  Scope<Material> light_culling_material;
 
   Scope<GraphicsPipeline> skybox_pipeline;
   Scope<Material> skybox_material;
@@ -181,6 +192,19 @@ private:
   ShadowUBO shadow_ubo{};
   GridUBO grid_ubo{};
   DepthParameters depth_factor{};
+  SpotLights spot_light_ubo{};
+  PointLights point_light_ubo{};
+  SpotShadows spot_shadows_ubo{};
+  ScreenData screen_data_ubo{};
+
+  struct GPUTimeQueries {
+    u32 directional_shadow_pass_query{0};
+    u32 light_culling_pass_query{0};
+    u32 geometry_pass_query{0};
+    u32 bloom_compute_pass_query{0};
+    u32 composite_pass_query{0};
+  };
+  GPUTimeQueries gpu_time_queries;
 
   SceneEnvironment scene_environment{};
 
@@ -199,11 +223,16 @@ private:
 
   auto shadow_pass() -> void;
   auto grid_pass() -> void;
+  auto light_culling_pass() -> void;
   auto geometry_pass() -> void;
   auto bloom_pass() -> void;
   auto debug_pass() -> void;
   auto environment_pass() -> void;
   auto fullscreen_pass() -> void;
+
+  auto set_frame_index(FrameIndex frame_index) -> void {
+    current_frame = frame_index;
+  }
 };
 
 } // namespace Core

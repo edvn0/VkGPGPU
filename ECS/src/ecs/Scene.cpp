@@ -120,7 +120,7 @@ static glm::mat4 compute_light_view_matrix(const glm::vec3 &light_position,
                                            const glm::vec3 &scene_center) {
   return glm::lookAt(
       light_position, scene_center,
-      glm::vec3(0, -1, 0)); // Assuming Y-up in your coordinate system
+      glm::vec3(0, 1, 0)); // Assuming Y-up in your coordinate system
 }
 
 static std::pair<glm::vec3, glm::vec3>
@@ -265,6 +265,52 @@ auto Scene::on_update(Core::SceneRenderer &renderer, Core::floating dt)
         },
         geom.parameters);
   });
+
+  {
+    auto pointLights =
+        registry.group<PointLightComponent>(entt::get<TransformComponent>);
+    light_environment.point_light_buffer.resize(pointLights.size());
+    uint32_t pointLightIndex = 0;
+    for (auto e : pointLights) {
+      Entity entity(this, e);
+      auto [transformComponent, lightComponent] =
+          pointLights.get<TransformComponent, PointLightComponent>(e);
+      light_environment.point_light_buffer[pointLightIndex++] = {
+          transformComponent.position, lightComponent.intensity,
+          lightComponent.radiance,     lightComponent.min_radius,
+          lightComponent.radius,       lightComponent.falloff,
+          lightComponent.light_size,   lightComponent.casts_shadows,
+      };
+    }
+  }
+  // Spot Lights
+  {
+    auto spotLights =
+        registry.group<SpotLightComponent>(entt::get<TransformComponent>);
+    light_environment.spot_light_buffer.resize(spotLights.size());
+    uint32_t spotLightIndex = 0;
+    for (auto e : spotLights) {
+      Entity entity(this, e);
+      auto [transformComponent, lightComponent] =
+          spotLights.get<TransformComponent, SpotLightComponent>(e);
+      glm::vec3 direction = glm::normalize(glm::rotate(
+          transformComponent.rotation, glm::vec3(1.0f, 0.0f, 0.0f)));
+
+      light_environment.spot_light_buffer[spotLightIndex++] = {
+          transformComponent.position,
+          lightComponent.intensity,
+          direction,
+          lightComponent.angle_attenuation,
+          lightComponent.radiance,
+          lightComponent.range,
+          lightComponent.angle,
+          lightComponent.falloff,
+          lightComponent.soft_shadows,
+          {},
+          lightComponent.casts_shadows,
+      };
+    }
+  }
 }
 
 auto Scene::get_entity(entt::entity identifier) -> std::optional<Entity> {
@@ -327,50 +373,67 @@ auto Scene::on_render(Core::SceneRenderer &scene_renderer, Core::floating ts,
         renderer_config.inverse_view * renderer_config.inverse_projection;
     renderer_config.light_position = glm::vec4{transform.position, 1.0F};
 
-    // Step 1: Compute the Scene's Center and Radius
-    auto &&[scene_center, scene_radius, scene_min, scene_max] =
-        compute_scene_center_and_radius(*this);
-
     // Update light direction based on the scene center
-    renderer_config.light_direction = -glm::normalize(
-        renderer_config.light_position - glm::vec4{scene_center, 1.0F});
+    renderer_config.light_direction =
+        -glm::normalize(renderer_config.light_position -
+                        glm::vec4{sun.depth_params.center, 1.0F});
     renderer_config.camera_position = glm::inverse(view_matrix)[3];
     renderer_config.light_ambient_colour = sun.colour;
     renderer_config.light_specular_colour = sun.specular_colour;
 
+    float depth_linearized_mul =
+        (-projection_matrix[3][2]); // float depth_linearized_mul = ( clipFar *
+                                    // clipNear ) / ( clipFar - clipNear );
+    float depth_linearized_add =
+        (projection_matrix[2][2]); // float depth_linearized_add = clipFar / (
+                                   // clipFar - clipNear );
+    // correct the handedness issue.
+    if (depth_linearized_mul * depth_linearized_add < 0)
+      depth_linearized_add = -depth_linearized_add;
+    renderer_config.depth_unpacked_constants = {
+        depth_linearized_mul,
+        depth_linearized_add,
+    };
+    const auto *P = glm::value_ptr(projection_matrix);
+    const glm::vec4 projection_info_perspective = {
+        2.0f / (P[4 * 0 + 0]),                 // (x) * (R - L)/N
+        2.0f / (P[4 * 1 + 1]),                 // (y) * (T - B)/N
+        -(1.0f - P[4 * 2 + 0]) / P[4 * 0 + 0], // L/N
+        -(1.0f + P[4 * 2 + 1]) / P[4 * 1 + 1], // B/N
+    };
+    float tan_half_fov_y =
+        1.0f /
+        renderer_config.projection[1][1]; // = tanf( drawContext.Camera.GetYFOV(
+                                          // ) * 0.5f );
+    float tan_half_fov_x =
+        1.0f /
+        renderer_config.projection[0][0]; // = tan_half_fov_y *
+                                          // drawContext.Camera.GetAspect( );
+    renderer_config.camera_tan_half_fov = {
+        tan_half_fov_x,
+        tan_half_fov_y,
+    };
+    renderer_config.ndc_to_view_multiplied = {
+        projection_info_perspective[0],
+        projection_info_perspective[1],
+    };
+    renderer_config.ndc_to_view_added = {
+        projection_info_perspective[2],
+        projection_info_perspective[3],
+    };
+
     // Step 2: Compute the Light View Matrix
     glm::mat4 light_view_matrix =
-        compute_light_view_matrix(transform.position, scene_center);
-
-    // Step 3: Compute Light Space Bounds
-    auto &&[light_space_min, light_space_max] =
-        compute_light_space_bounds(light_view_matrix, *this);
+        compute_light_view_matrix(transform.position, sun.depth_params.center);
 
     auto &shadow_ubo = scene_renderer.get_shadow_configuration();
-    const float left = -scene_radius;
-    const float right = scene_radius;
-    const float bottom = -scene_radius;
-    const float top = scene_radius;
-    float offset =
-        0.5f; // Small positive offset to prevent near clipping of shadows
-    float adjusted_near = light_space_min.z + offset;
-    const float adjusted_far = 2.0F * scene_radius;
-
     glm::mat4 light_proj =
-        glm::orthoRH_ZO(left, right, bottom, top, adjusted_near, adjusted_far);
+        glm::ortho(sun.depth_params.lrbt.x, sun.depth_params.lrbt.y,
+                   sun.depth_params.lrbt.z, sun.depth_params.lrbt.w,
+                   sun.depth_params.nf.x, sun.depth_params.nf.y);
     shadow_ubo.projection = light_proj;
     shadow_ubo.view = light_view_matrix;
     shadow_ubo.view_projection = light_proj * light_view_matrix;
-
-    const auto translation =
-        glm::translate(glm::mat4(1.0F), transform.position);
-
-    auto frustum_projection =
-        glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 2.0F, adjusted_far);
-
-    auto frustum_vulkan = glm::inverse(frustum_projection * light_view_matrix);
-
-    scene_renderer.submit_frustum(frustum_vulkan, translation);
   });
 
   const auto mesh_view =
