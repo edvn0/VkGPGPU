@@ -55,8 +55,10 @@ private:
   auto serialise_component(std::ostream &out, Entity &entity) -> bool {
     if (entity.has_component<T>()) {
       const auto &component = entity.get_component<T>();
-      if (!ComponentSerialiser<T>::serialise(component, out)) {
-        error("Failed to serialise component of type {}", typeid(T).name());
+      if (const auto result = ComponentSerialiser<T>::serialise(component, out);
+          !result) {
+        error("Failed to serialise component of type {}. Reason: {}",
+              typeid(T).name(), result.reason);
         return false;
       }
     }
@@ -81,8 +83,10 @@ private:
                              Core::u32 component_bit) -> bool {
     if (mask & component_bit) {
       auto &t = entity.add_component<T>();
-      if (!ComponentSerialiser<T>::deserialise(in, t)) {
-        error("Failed to deserialise component of type {}", typeid(T).name());
+      if (const auto result = ComponentSerialiser<T>::deserialise(in, t);
+          !result) {
+        error("Failed to deserialise component of type {}. Reason: {}",
+              typeid(T).name(), result.reason);
         return false;
       }
     }

@@ -50,12 +50,12 @@ float shadowPCF(sampler2D shadowMap, vec3 projection_coordinates, float bias,
 // 0,
 //   perform a single sample for hard shadows.
 float calculateSoftShadow(sampler2D shadowMap, vec3 projection_coordinates,
-                          vec3 normal, vec3 light_direction, vec2 shadowMapSize,
-                          int filter_size, float bias_value) {
+                          vec3 normal, vec3 light_direction, int filter_size,
+                          float bias_value) {
   float bias = max(0.05 * (1.0 - dot(normal, light_direction)), bias_value);
-  vec2 texelSize = 1.0 / shadowMapSize;
-  return 1.0F - shadowPCF(shadowMap, projection_coordinates, bias, texelSize,
-                          filter_size);
+  vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+  return shadowPCF(shadowMap, projection_coordinates, bias, texelSize,
+                   filter_size);
 }
 
 #endif // GPGPU_SHADOW_CALCULATION

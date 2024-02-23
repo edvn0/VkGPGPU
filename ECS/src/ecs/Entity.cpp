@@ -115,7 +115,7 @@ std::vector<Entity> Entity::get_children() const {
 auto Entity::remove_all_components() const -> void {
   static constexpr auto delete_all = []<class... Ts>(ComponentList<Ts...> comp,
                                                      auto &reg, auto &entity) {
-    (reg.remove<Ts>(entity), ...);
+    (reg.template remove<Ts>(entity), ...);
   };
 
   delete_all(EngineComponents{}, scene->registry, handle);

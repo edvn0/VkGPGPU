@@ -14,6 +14,35 @@
 
 namespace ECS {
 
+struct SerialisationResult {
+  std::string reason{};
+  bool success{true};
+
+  explicit(false) operator bool() const { return success; }
+
+  SerialisationResult(const std::string &reason_string, bool value)
+      : reason(reason_string), success(value) {}
+
+  explicit(false) SerialisationResult(bool value)
+      : reason(fmt::format("Success?: {}", value)), success(value) {}
+};
+
+#define DESERIALISE_FIELD(field)                                               \
+  if (!ECS::read(in, field)) {                                                 \
+    return SerialisationResult{                                                \
+        fmt::format("Could not deserialise field '{}'", #field),               \
+        false,                                                                 \
+    };                                                                         \
+  }
+
+#define SERIALISE_FIELD(field)                                                 \
+  if (!ECS::write(out, field)) {                                               \
+    return SerialisationResult{                                                \
+        fmt::format("Could not serialise field '{}'", #field),                 \
+        false,                                                                 \
+    };                                                                         \
+  }
+
 namespace Detail {
 template <typename T> bool write(std::ostream &out, const T &value) {
   static_assert(std::is_same_v<T, void>, "No write function found for type.");
@@ -234,91 +263,77 @@ template <class T> struct ComponentSerialiser;
 
 template <> struct ComponentSerialiser<IdentityComponent> {
   static auto serialise(const IdentityComponent &component, std::ostream &out)
-      -> bool {
-    if (!write(out, component.name))
-      return false;
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.name);
     return true;
   }
 
   static auto deserialise(std::istream &in, IdentityComponent &component)
-      -> bool {
-    if (!read(in, component.name)) {
-      return false;
-    }
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.name);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<TransformComponent> {
   static auto serialise(const TransformComponent &component, std::ostream &out)
-      -> bool {
-    if (!write(out, component.position))
-      return false;
-    if (!write(out, component.rotation))
-      return false;
-    if (!write(out, component.scale))
-      return false;
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.position);
+    SERIALISE_FIELD(component.rotation);
+    SERIALISE_FIELD(component.scale);
     return true;
   }
 
-  static auto deserialise(std::istream &in, TransformComponent &out) -> bool {
-    if (!read(in, out.position))
-      return false;
-    if (!read(in, out.rotation))
-      return false;
-    if (!read(in, out.scale))
-      return false;
+  static auto deserialise(std::istream &in, TransformComponent &component)
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.position);
+    DESERIALISE_FIELD(component.rotation);
+    DESERIALISE_FIELD(component.scale);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<TextureComponent> {
-  static auto serialise(const TextureComponent &component,
-                        std::ostream &out_stream) -> bool {
-    if (!write(out_stream, component.colour))
-      return false;
-
+  static auto serialise(const TextureComponent &component, std::ostream &out)
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.colour);
     return true;
   }
 
-  static auto deserialise(std::istream &in, TextureComponent &out) -> bool {
-    if (!read(in, out.colour))
-      return false;
+  static auto deserialise(std::istream &in, TextureComponent &component)
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.colour);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<MeshComponent> {
-  static auto serialise(const MeshComponent &component,
-                        std::ostream &out_stream) -> bool {
+  static auto serialise(const MeshComponent &component, std::ostream &out)
+      -> SerialisationResult {
     const auto has_valid_mesh_path =
         component.mesh != nullptr || !component.path.empty();
-    if (!write(out_stream, has_valid_mesh_path))
-      return false;
+    SERIALISE_FIELD(has_valid_mesh_path);
 
     if (has_valid_mesh_path) {
       if (component.mesh != nullptr) {
-        if (const auto &mesh = *component.mesh;
-            !write(out_stream, mesh.get_file_path().string()))
-          return false;
+        const auto &mesh = *component.mesh;
+        SERIALISE_FIELD(mesh.get_file_path().string())
       } else {
-        if (!write(out_stream, component.path.string()))
-          return false;
+        SERIALISE_FIELD(component.path.string())
       }
     }
 
     return true;
   }
 
-  static auto deserialise(std::istream &in, MeshComponent &out) -> bool {
+  static auto deserialise(std::istream &in, MeshComponent &out)
+      -> SerialisationResult {
     bool has_mesh = false;
-    if (!read(in, has_mesh))
-      return false;
+    DESERIALISE_FIELD(has_mesh);
 
     if (has_mesh) {
       std::string file_path;
-      if (!read(in, file_path))
-        return false;
+      DESERIALISE_FIELD(file_path);
       out.path = file_path;
     }
 
@@ -327,279 +342,167 @@ template <> struct ComponentSerialiser<MeshComponent> {
 };
 
 template <> struct ComponentSerialiser<CameraComponent> {
-  static auto serialise(const CameraComponent &component,
-                        std::ostream &out_stream) -> bool {
-    if (!write(out_stream, component.field_of_view))
-      return false;
-    if (!write(out_stream, component.camera_type))
-      return false;
-    if (!write(out_stream, component.near))
-      return false;
-    if (!write(out_stream, component.far))
-      return false;
+  static auto serialise(const CameraComponent &component, std::ostream &out)
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.field_of_view);
+    SERIALISE_FIELD(component.camera_type);
+    SERIALISE_FIELD(component.near);
+    SERIALISE_FIELD(component.far);
     return true;
   }
 
-  static auto deserialise(std::istream &in, CameraComponent &out) -> bool {
-    if (!read(in, out.field_of_view))
-      return false;
-    if (!read(in, out.camera_type))
-      return false;
-    if (!read(in, out.near))
-      return false;
-    if (!read(in, out.far))
-      return false;
+  static auto deserialise(std::istream &in, CameraComponent &component)
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.field_of_view);
+    DESERIALISE_FIELD(component.camera_type);
+    DESERIALISE_FIELD(component.near);
+    DESERIALISE_FIELD(component.far);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<SunComponent> {
-  static auto serialise(const SunComponent &component, std::ostream &out_stream)
-      -> bool {
-    if (!write(out_stream, component.direction))
-      return false;
-    if (!write(out_stream, component.colour))
-      return false;
-    if (!write(out_stream, component.specular_colour))
-      return false;
-    if (!write(out_stream, component.depth_params.bias)) {
-      return false;
-    }
-    if (!write(out_stream, component.depth_params.default_value)) {
-      return false;
-    }
-    if (!write(out_stream, component.depth_params.lrbt)) {
-      return false;
-    }
-    if (!write(out_stream, component.depth_params.nf)) {
-      return false;
-    }
-    if (!write(out_stream, component.depth_params.center)) {
-      return false;
-    }
+  static auto serialise(const SunComponent &component, std::ostream &out)
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.direction);
+    SERIALISE_FIELD(component.colour);
+    SERIALISE_FIELD(component.specular_colour);
+    SERIALISE_FIELD(component.depth_params.bias);
+    SERIALISE_FIELD(component.depth_params.default_value);
+    SERIALISE_FIELD(component.depth_params.lrbt);
+    SERIALISE_FIELD(component.depth_params.nf);
+    SERIALISE_FIELD(component.depth_params.center);
     return true;
   }
 
-  static auto deserialise(std::istream &in, SunComponent &out) -> bool {
-    if (!read(in, out.direction))
-      return false;
-    if (!read(in, out.colour))
-      return false;
-    if (!read(in, out.specular_colour))
-      return false;
-    if (!read(in, out.depth_params.bias)) {
-      return false;
-    }
-    if (!read(in, out.depth_params.default_value)) {
-      return false;
-    }
-    if (!read(in, out.depth_params.lrbt)) {
-      return false;
-    }
-    if (!read(in, out.depth_params.nf)) {
-      return false;
-    }
-    if (!read(in, out.depth_params.center)) {
-      return false;
-    }
+  static auto deserialise(std::istream &in, SunComponent &component)
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.direction);
+    DESERIALISE_FIELD(component.colour);
+    DESERIALISE_FIELD(component.specular_colour);
+    DESERIALISE_FIELD(component.depth_params.bias);
+    DESERIALISE_FIELD(component.depth_params.default_value);
+    DESERIALISE_FIELD(component.depth_params.lrbt);
+    DESERIALISE_FIELD(component.depth_params.nf);
+    DESERIALISE_FIELD(component.depth_params.center);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<ChildComponent> {
   static auto serialise(const ChildComponent &component, std::ostream &out)
-      -> bool {
-    // Serialize the number of children
-    const auto size = component.children.size();
-    if (!write(out, size))
-      return false;
-
-    // Serialize each child entity handle
-    for (const auto &child : component.children) {
-      if (!write(out, child))
-        return false;
-    }
-
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.children);
     return true;
   }
 
-  static auto deserialise(std::istream &in, ChildComponent &component) -> bool {
-    std::size_t size;
-    // Deserialize the number of children
-    if (!read(in, size))
-      return false;
-
-    component.children.resize(size);
-    // Deserialize each child entity handle
-    for (auto &child : component.children) {
-      if (!read(in, child))
-        return false;
-    }
-
+  static auto deserialise(std::istream &in, ChildComponent &component)
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.children);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<ParentComponent> {
   static auto serialise(const ParentComponent &component, std::ostream &out)
-      -> bool {
-    // Serialize the parent entity handle
-    if (!write(out, component.parent))
-      return false;
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.parent);
     return true;
   }
 
   static auto deserialise(std::istream &in, ParentComponent &component)
-      -> bool {
-    // Deserialize the parent entity handle
-    if (!read(in, component.parent))
-      return false;
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.parent);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<PointLightComponent> {
   static auto serialise(const PointLightComponent &component, std::ostream &out)
-      -> bool {
-    if (!write(out, component.radiance)) {
-      return false;
-    }
-    if (!write(out, component.intensity)) {
-      return false;
-    }
-    if (!write(out, component.light_size)) {
-      return false;
-    }
-    if (!write(out, component.min_radius)) {
-      return false;
-    }
-    if (!write(out, component.radius)) {
-      return false;
-    }
-    if (!write(out, component.casts_shadows)) {
-      return false;
-    }
-    if (!write(out, component.soft_shadows)) {
-      return false;
-    }
-    if (!write(out, component.falloff)) {
-      return false;
-    }
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.radiance);
+    SERIALISE_FIELD(component.intensity);
+    SERIALISE_FIELD(component.light_size);
+    SERIALISE_FIELD(component.min_radius);
+    SERIALISE_FIELD(component.radius);
+    SERIALISE_FIELD(component.casts_shadows);
+    SERIALISE_FIELD(component.soft_shadows);
+    SERIALISE_FIELD(component.falloff);
     return true;
   }
 
   static auto deserialise(std::istream &in, PointLightComponent &component)
-      -> bool {
+      -> SerialisationResult {
     // Deserialize the parent entity handle
-    if (!read(in, component.radiance)) {
-      return false;
-    }
-    if (!read(in, component.intensity)) {
-      return false;
-    }
-    if (!read(in, component.light_size)) {
-      return false;
-    }
-    if (!read(in, component.min_radius)) {
-      return false;
-    }
-    if (!read(in, component.radius)) {
-      return false;
-    }
-    if (!read(in, component.casts_shadows)) {
-      return false;
-    }
-    if (!read(in, component.soft_shadows)) {
-      return false;
-    }
-    if (!read(in, component.falloff)) {
-      return false;
-    }
+    DESERIALISE_FIELD(component.radiance);
+    DESERIALISE_FIELD(component.intensity);
+    DESERIALISE_FIELD(component.light_size);
+    DESERIALISE_FIELD(component.min_radius);
+    DESERIALISE_FIELD(component.radius);
+    DESERIALISE_FIELD(component.casts_shadows);
+    DESERIALISE_FIELD(component.soft_shadows);
+    DESERIALISE_FIELD(component.falloff);
     return true;
   }
 };
 
 template <> struct ComponentSerialiser<SpotLightComponent> {
   static auto serialise(const SpotLightComponent &component, std::ostream &out)
-      -> bool {
-    if (!write(out, component.radiance)) {
-      return false;
-    }
-    if (!write(out, component.intensity)) {
-      return false;
-    }
-    if (!write(out, component.range)) {
-      return false;
-    }
-    if (!write(out, component.angle)) {
-      return false;
-    }
-    if (!write(out, component.angle_attenuation)) {
-      return false;
-    }
-    if (!write(out, component.casts_shadows)) {
-      return false;
-    }
-    if (!write(out, component.soft_shadows)) {
-      return false;
-    }
-    if (!write(out, component.falloff)) {
-      return false;
-    }
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.radiance);
+    SERIALISE_FIELD(component.intensity);
+    SERIALISE_FIELD(component.range);
+    SERIALISE_FIELD(component.angle);
+    SERIALISE_FIELD(component.angle_attenuation);
+    SERIALISE_FIELD(component.casts_shadows);
+    SERIALISE_FIELD(component.soft_shadows);
+    SERIALISE_FIELD(component.falloff);
     return true;
   }
 
   static auto deserialise(std::istream &in, SpotLightComponent &component)
-      -> bool {
-    // Deserialize the parent entity handle
-    if (!read(in, component.radiance)) {
-      return false;
-    }
-    if (!read(in, component.intensity)) {
-      return false;
-    }
-    if (!read(in, component.range)) {
-      return false;
-    }
-    if (!read(in, component.angle)) {
-      return false;
-    }
-    if (!read(in, component.angle_attenuation)) {
-      return false;
-    }
-    if (!read(in, component.casts_shadows)) {
-      return false;
-    }
-    if (!read(in, component.soft_shadows)) {
-      return false;
-    }
-    if (!read(in, component.falloff)) {
-      return false;
-    }
+      -> SerialisationResult {
+    DESERIALISE_FIELD(component.radiance);
+    DESERIALISE_FIELD(component.intensity);
+    DESERIALISE_FIELD(component.range);
+    DESERIALISE_FIELD(component.angle);
+    DESERIALISE_FIELD(component.angle_attenuation);
+    DESERIALISE_FIELD(component.casts_shadows);
+    DESERIALISE_FIELD(component.soft_shadows);
+    DESERIALISE_FIELD(component.falloff);
     return true;
   }
 };
 
 namespace BasicGeometrySerialisation {
 
-auto write(std::ostream &, const BasicGeometry::QuadParameters &) -> bool;
-auto write(std::ostream &, const BasicGeometry::TriangleParameters &) -> bool;
-auto write(std::ostream &, const BasicGeometry::CircleParameters &) -> bool;
-auto write(std::ostream &, const BasicGeometry::SphereParameters &) -> bool;
-auto write(std::ostream &, const BasicGeometry::CubeParameters &) -> bool;
-auto read(std::istream &, BasicGeometry::QuadParameters &) -> bool;
-auto read(std::istream &, BasicGeometry::TriangleParameters &) -> bool;
-auto read(std::istream &, BasicGeometry::CircleParameters &) -> bool;
-auto read(std::istream &, BasicGeometry::SphereParameters &) -> bool;
-auto read(std::istream &, BasicGeometry::CubeParameters &) -> bool;
+auto write(std::ostream &, const BasicGeometry::QuadParameters &)
+    -> SerialisationResult;
+auto write(std::ostream &, const BasicGeometry::TriangleParameters &)
+    -> SerialisationResult;
+auto write(std::ostream &, const BasicGeometry::CircleParameters &)
+    -> SerialisationResult;
+auto write(std::ostream &, const BasicGeometry::SphereParameters &)
+    -> SerialisationResult;
+auto write(std::ostream &, const BasicGeometry::CubeParameters &)
+    -> SerialisationResult;
+auto read(std::istream &, BasicGeometry::QuadParameters &)
+    -> SerialisationResult;
+auto read(std::istream &, BasicGeometry::TriangleParameters &)
+    -> SerialisationResult;
+auto read(std::istream &, BasicGeometry::CircleParameters &)
+    -> SerialisationResult;
+auto read(std::istream &, BasicGeometry::SphereParameters &)
+    -> SerialisationResult;
+auto read(std::istream &, BasicGeometry::CubeParameters &)
+    -> SerialisationResult;
 
 } // namespace BasicGeometrySerialisation
 
 template <> struct ComponentSerialiser<GeometryComponent> {
-  static bool serialise(const GeometryComponent &component, std::ostream &out) {
-    auto type = component.parameters.index();
-    if (!write(out, type))
-      return false;
+  static auto serialise(const GeometryComponent &component, std::ostream &out)
+      -> SerialisationResult {
+    SERIALISE_FIELD(component.parameters.index());
 
     // Serialize the actual data based on the type
     return std::visit(
@@ -622,50 +525,50 @@ template <> struct ComponentSerialiser<GeometryComponent> {
         component.parameters);
   }
 
-  static bool deserialise(std::istream &in, GeometryComponent &component) {
+  static auto deserialise(std::istream &in, GeometryComponent &component)
+      -> SerialisationResult {
     // Deserialize the type of the geometry first
-    std::size_t type;
-    if (!read(in, type))
-      return false;
+    std::size_t variant_type{};
+    DESERIALISE_FIELD(variant_type);
 
-    switch (type) {
+    switch (variant_type) {
     case 0: {
       BasicGeometry::QuadParameters quad;
-      if (BasicGeometrySerialisation::read(in, quad)) {
+      if (const auto result = BasicGeometrySerialisation::read(in, quad)) {
         component.parameters = quad;
-        return true;
+        return result;
       }
       break;
     }
     case 1: {
       BasicGeometry::TriangleParameters triangle;
-      if (BasicGeometrySerialisation::read(in, triangle)) {
+      if (const auto result = BasicGeometrySerialisation::read(in, triangle)) {
         component.parameters = triangle;
-        return true;
+        return result;
       }
       break;
     }
     case 2: {
       BasicGeometry::CircleParameters circle;
-      if (BasicGeometrySerialisation::read(in, circle)) {
+      if (const auto result = BasicGeometrySerialisation::read(in, circle)) {
         component.parameters = circle;
-        return true;
+        return result;
       }
       break;
     }
     case 3: {
       BasicGeometry::SphereParameters sphere;
-      if (BasicGeometrySerialisation::read(in, sphere)) {
+      if (const auto result = BasicGeometrySerialisation::read(in, sphere)) {
         component.parameters = sphere;
-        return true;
+        return result;
       }
       break;
     }
     case 4: {
       BasicGeometry::CubeParameters cube;
-      if (BasicGeometrySerialisation::read(in, cube)) {
+      if (const auto result = BasicGeometrySerialisation::read(in, cube)) {
         component.parameters = cube;
-        return true;
+        return result;
       }
       break;
     }

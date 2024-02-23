@@ -166,8 +166,7 @@ void main()
   // Combining the adjusted x, y, and z into the remapped shadow coordinates
   vec3 shadow_pos_coords_remapped = vec3(xy_coords_remapped);
   direct *= calculateSoftShadow(shadow_map, shadow_pos_coords_remapped, normal,
-                                L, textureSize(shadow_map, 0), 1,
-                                shadow.bias_and_default.x);
+                                L, 1, shadow.bias_and_default.x);
 
   vec3 final = ambient + direct * radiance;
 

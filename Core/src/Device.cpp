@@ -232,13 +232,6 @@ auto Device::create_vulkan_device(
     VkPhysicalDevice dev,
     std::vector<IndexQueueTypePair> &index_queue_type_pairs) -> VkDevice {
 
-  VkPhysicalDeviceFeatures device_features{};
-  device_features.pipelineStatisticsQuery = VK_TRUE;
-  device_features.logicOp = VK_TRUE;
-  device_features.wideLines = VK_TRUE;
-  device_features.fillModeNonSolid = VK_TRUE;
-  device_features.samplerAnisotropy = VK_TRUE;
-
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
   queue_infos.reserve(index_queue_type_pairs.size());
   float priority = 1.0F;
@@ -249,9 +242,45 @@ auto Device::create_vulkan_device(
     queue_support[type] = {supports_timestamping};
   }
 
-  std::array extensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
+  std::vector<const char *> extensions{};
+
+  if constexpr (Config::enable_ray_tracing) {
+    extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+    };
+  } else {
+    extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+  }
+
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_features = {};
+  acceleration_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_pipeline_features =
+      {};
+  ray_tracing_pipeline_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+
+  VkPhysicalDeviceFeatures2 device_features{};
+  device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  vkGetPhysicalDeviceFeatures2(physical_device, &device_features);
+
+  device_features.features.pipelineStatisticsQuery = VK_TRUE;
+  device_features.features.logicOp = VK_TRUE;
+  device_features.features.wideLines = VK_TRUE;
+  device_features.features.fillModeNonSolid = VK_TRUE;
+  device_features.features.samplerAnisotropy = VK_TRUE;
+
+  device_features.pNext = &acceleration_features;
+  acceleration_features.pNext = &ray_tracing_pipeline_features;
+
+  acceleration_features.accelerationStructure = VK_TRUE;
+  ray_tracing_pipeline_features.rayTracingPipeline = VK_TRUE;
 
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -260,12 +289,19 @@ auto Device::create_vulkan_device(
       .pQueueCreateInfos = queue_infos.data(),
       .enabledExtensionCount = static_cast<u32>(extensions.size()),
       .ppEnabledExtensionNames = extensions.data(),
-      .pEnabledFeatures = &device_features,
   };
+
+  create_info.pNext = &device_features;
 
   VkDevice temp{};
   verify(vkCreateDevice(physical_device, &create_info, nullptr, &temp),
          "vkCreateDevice", "Failed to create Vulkan device");
+
+  VkPhysicalDeviceProperties2 properties_2{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  properties_2.pNext = &ray_tracing_properties;
+  vkGetPhysicalDeviceProperties2(physical_device, &properties_2);
+
   return temp;
 }
 

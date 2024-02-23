@@ -284,7 +284,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     }
   });
 
-  UI::widget("Depth", [&](const auto &extent) {
+  UI::widget("Depth", [&](const Extent<float> &extent) {
     UI::image(scene_renderer.get_depth_image(), {
                                                     extent.as<u32>().width,
                                                     extent.as<u32>().height,
@@ -337,10 +337,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     const auto &compute_command_buffer =
         scene_renderer.get_compute_command_buffer();
     const auto &gpu_times = scene_renderer.get_gpu_execution_times();
-    ImGui::Text("Dir Shadow Map Pass: %.3fms",
-                graphics_command_buffer.get_execution_gpu_time(
-                    scene_renderer.get_current_index(),
-                    gpu_times.directional_shadow_pass_query));
+    UI::text("Dir Shadow Map Pass: {}ms",
+             graphics_command_buffer.get_execution_gpu_time(
+                 scene_renderer.get_current_index(),
+                 gpu_times.directional_shadow_pass_query));
     // ImGui::Text("Spot Shadow Map Pass: %.3fms",
     //             commandBuffer->get_execution_gpu_time(
     //                 scene_renderer.get_current_index(),
@@ -359,12 +359,12 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         commandBuffer->get_execution_gpu_time(
             scene_renderer.get_current_index(),
     gpu_times.PreIntegrationQuery));*/
-    ImGui::Text("Light Culling Pass: %.3fms",
-                compute_command_buffer.get_execution_gpu_time(
-                    scene_renderer.get_current_index(),
-                    gpu_times.light_culling_pass_query));
-    ImGui::Text(
-        "Geometry Pass: %.3fms",
+    UI::text("Light Culling Pass: {}ms",
+             compute_command_buffer.get_execution_gpu_time(
+                 scene_renderer.get_current_index(),
+                 gpu_times.light_culling_pass_query));
+    UI::text(
+        "Geometry Pass: {}ms",
         graphics_command_buffer.get_execution_gpu_time(
             scene_renderer.get_current_index(), gpu_times.geometry_pass_query));
     /*ImGui::Text(
@@ -385,10 +385,9 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                 commandBuffer->get_execution_gpu_time(
                     scene_renderer.get_current_index(),
                     gpu_times.AOCompositePassQuery));*/
-    ImGui::Text("Bloom Pass: %.3fms",
-                compute_command_buffer.get_execution_gpu_time(
-                    scene_renderer.get_current_index(),
-                    gpu_times.bloom_compute_pass_query));
+    UI::text("Bloom Pass: {}ms", compute_command_buffer.get_execution_gpu_time(
+                                     scene_renderer.get_current_index(),
+                                     gpu_times.bloom_compute_pass_query));
     /*ImGui::Text("SSR Pass: %.3fms", commandBuffer->get_execution_gpu_time(
                                         frameIndex, gpu_times.SSRQuery));
     ImGui::Text(
@@ -400,26 +399,23 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         commandBuffer->get_execution_gpu_time(
             scene_renderer.get_current_index(),
     gpu_times.JumpFloodPassQuery));*/
-    ImGui::Text("Composite Pass: %.3fms",
-                graphics_command_buffer.get_execution_gpu_time(
-                    scene_renderer.get_current_index(),
-                    gpu_times.composite_pass_query));
+    UI::text("Composite Pass: {}ms",
+             graphics_command_buffer.get_execution_gpu_time(
+                 scene_renderer.get_current_index(),
+                 gpu_times.composite_pass_query));
 
     const PipelineStatistics &pipelineStats =
         graphics_command_buffer.get_pipeline_statistics(
             scene_renderer.get_current_index());
-    ImGui::Text("Input Assembly Vertices: %llu",
-                pipelineStats.input_assembly_vertices);
-    ImGui::Text("Input Assembly Primitives: %llu",
-                pipelineStats.input_assembly_primitives);
-    ImGui::Text("Vertex Shader Invocations: %llu",
-                pipelineStats.vs_invocations);
-    ImGui::Text("Clipping Invocations: %llu", pipelineStats.clip_invocations);
-    ImGui::Text("Clipping Primitives: %llu", pipelineStats.clip_primitives);
-    ImGui::Text("Fragment Shader Invocations: %llu",
-                pipelineStats.fs_invocations);
-    ImGui::Text("Compute Shader Invocations: %llu",
-                pipelineStats.cs_invocations);
+    UI::text("Input Assembly Vertices: {}",
+             pipelineStats.input_assembly_vertices);
+    UI::text("Input Assembly Primitives: {}",
+             pipelineStats.input_assembly_primitives);
+    UI::text("Vertex Shader Invocations: {}", pipelineStats.vs_invocations);
+    UI::text("Clipping Invocations: {}", pipelineStats.clip_invocations);
+    UI::text("Clipping Primitives: {}", pipelineStats.clip_primitives);
+    UI::text("Fragment Shader Invocations: {}", pipelineStats.fs_invocations);
+    UI::text("Compute Shader Invocations: {}", pipelineStats.cs_invocations);
   });
 
   if (load_entity()) {

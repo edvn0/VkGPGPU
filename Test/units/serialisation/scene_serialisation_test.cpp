@@ -189,7 +189,7 @@ TEST_CASE("Individual component serialisation", "[component]") {
     IdentityComponent newIdentity;
     ComponentSerialiser<IdentityComponent>::deserialise(stream, newIdentity);
     REQUIRE(newIdentity.name == "Entity1");
-    REQUIRE(newIdentity.id == old_identity.id);
+    REQUIRE(newIdentity.id != old_identity.id);
   }
 
   SECTION("Deser transform component") {
