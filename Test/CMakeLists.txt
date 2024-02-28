@@ -12,6 +12,7 @@ add_executable(Test
     units/generic_cache/texture_cache_tests.cpp
     units/containers/combine_into_one.cpp
     units/serialisation/scene_serialisation_test.cpp
+    units/fsm/finite_state_machine_tests.cpp
     units/aabb/aabb_tests.cpp
 )
 

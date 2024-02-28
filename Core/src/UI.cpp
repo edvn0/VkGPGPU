@@ -17,6 +17,18 @@ template <typename... Args> auto make_id(Args &&...data) {
 
 namespace Core::UI {
 
+static uint32_t ui_id_counter = 0;
+static char ui_id_buffer[16] = "##";
+
+auto push_id() -> void { ImGui::PushID(generate_id()); }
+
+auto pop_id() -> void { ImGui::PopID(); }
+
+const char *generate_id() {
+  _itoa_s(ui_id_counter++, ui_id_buffer + 2, sizeof(ui_id_buffer) - 2, 16);
+  return ui_id_buffer;
+}
+
 template <std::integral N>
   requires(!std::is_same_v<N, f32>)
 auto to_imvec2(const Extent<N> &extent) -> ImVec2 {

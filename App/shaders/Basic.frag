@@ -4,8 +4,7 @@
 #include <ShaderResources.glsl>
 #include <ShadowCalculation.glsl>
 
-layout(push_constant) uniform PushConstants
-{
+layout(push_constant) uniform PushConstants {
   vec4 albedo_colour;
   float emission;
   float metalness;
@@ -29,21 +28,18 @@ layout(location = 0) out vec4 out_colour;
 
 vec3 gamma_correct(vec3 color) { return pow(color, vec3(1.0 / 2.2)); }
 
-vec3 getAlbedo()
-{
+vec3 getAlbedo() {
   vec4 albedo_colour = pc.albedo_colour;
   vec3 sampled = texture(albedo_map, in_uvs).rgb;
   return albedo_colour.rgb * sampled * in_colour.rgb;
 }
 
-float getMetalness()
-{
+float getMetalness() {
   float metalness_from_texture = texture(metallic_map, in_uvs).r;
   return metalness_from_texture * pc.metalness;
 }
 
-float getRoughness()
-{
+float getRoughness() {
   float roughness_from_texture = texture(roughness_map, in_uvs).r;
   float computed = roughness_from_texture * pc.roughness;
   return max(computed, 0.05);
@@ -51,8 +47,7 @@ float getRoughness()
 
 float getAO() { return texture(ao_map, in_uvs).r; }
 
-vec3 getSpecularIBL(vec3 N, vec3 V, vec3 F0, float roughness)
-{
+vec3 getSpecularIBL(vec3 N, vec3 V, vec3 F0, float roughness) {
   const float MAX_REFLECTION_LOD = 4.0;
   vec3 R = reflect(-V, N); // Reflection vector
   vec3 prefilteredColor =
@@ -62,16 +57,14 @@ vec3 getSpecularIBL(vec3 N, vec3 V, vec3 F0, float roughness)
   return specular;
 }
 
-vec3 getAmbientIBL(vec3 N, vec3 albedo)
-{
+vec3 getAmbientIBL(vec3 N, vec3 albedo) {
   vec3 irradiance = texture(irradiance_texture, N).rgb;
   // The constant term PI is cancelled out in the division below
   vec3 ambient = irradiance * albedo;
   return ambient;
 }
 
-vec3 getNormal()
-{
+vec3 getNormal() {
   if (pc.use_normal_map <= 0.0F)
     return normalize(in_normals);
 
@@ -82,13 +75,11 @@ vec3 getNormal()
   return world_normal_from_map;
 }
 
-vec3 fresnelSchlick(float cosTheta, vec3 F0)
-{
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
   return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-float distributionGGX(vec3 N, vec3 H, float roughness)
-{
+float distributionGGX(vec3 N, vec3 H, float roughness) {
   float a = roughness * roughness;
   float a2 = a * a;
   float NdotH = max(dot(N, H), 0.0);
@@ -101,8 +92,7 @@ float distributionGGX(vec3 N, vec3 H, float roughness)
   return num / denom;
 }
 
-float geometrySchlickGGX(float NdotV, float roughness)
-{
+float geometrySchlickGGX(float NdotV, float roughness) {
   float r = (roughness + 1.0);
   float k = (r * r) / 8.0;
 
@@ -112,8 +102,7 @@ float geometrySchlickGGX(float NdotV, float roughness)
   return num / denom;
 }
 
-float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
-{
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
   float NdotV = max(dot(N, V), 0.0);
   float NdotL = max(dot(N, L), 0.0);
   float ggx1 = geometrySchlickGGX(NdotV, roughness);
@@ -121,8 +110,7 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
   return ggx1 * ggx2;
 }
 
-void main()
-{
+void main() {
   vec3 albedo = getAlbedo();
   float metalness = getMetalness();
   float roughness = getRoughness();
@@ -165,8 +153,8 @@ void main()
 
   // Combining the adjusted x, y, and z into the remapped shadow coordinates
   vec3 shadow_pos_coords_remapped = vec3(xy_coords_remapped);
-  direct *= calculateSoftShadow(shadow_map, shadow_pos_coords_remapped, normal,
-                                L, 1, shadow.bias_and_default.x);
+  direct *= 1.0F - calculateSoftShadow(shadow_map, shadow_pos_coords_remapped,
+                                       normal, L, 3, shadow.bias_and_default.x);
 
   vec3 final = ambient + direct * radiance;
 

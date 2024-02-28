@@ -141,7 +141,10 @@ auto Framebuffer::create_framebuffer() -> void {
                            ImageUsage::Sampled | ImageUsage::TransferSrc |
                            ImageUsage::TransferDst,
                   .layout = ImageLayout::DepthStencilReadOnlyOptimal,
-                  .border_color = SamplerBorderColor::FloatOpaqueWhite,
+                  .min_filter = SamplerFilter::Nearest,
+                  .max_filter = SamplerFilter::Nearest,
+                  .address_mode = SamplerAddressMode::ClampToBorder,
+                  .border_color = SamplerBorderColor::FloatOpaqueBlack,
                   .compare_op = CompareOperation::Less,
               });
         }

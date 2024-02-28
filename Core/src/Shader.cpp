@@ -51,7 +51,8 @@ Shader::Shader(
   if (types.size() > 1) {
     name_stream << "Combined-";
   }
-  for (const auto &[path, type] : types) {
+  for (auto it = types.begin(); it != types.end(); ++it) {
+    const auto &[path, type] = *it;
     parsed_spirv_per_stage[type] = read_file(path);
     VkShaderModuleCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -63,7 +64,10 @@ Shader::Shader(
                                 &shader_modules[type]),
            "vkCreateShaderModule", "Failed to create shader module");
 
-    name_stream << path.stem().string() << "-";
+    name_stream << path.stem().string();
+    if (std::next(it) != types.end()) {
+      name_stream << "-";
+    }
   }
   name = name_stream.str();
   const Reflection::Reflector reflector{*this};

@@ -1,11 +1,13 @@
 #pragma once
 
+#include "Camera.hpp"
 #include "ISceneObserver.hpp"
 #include "Math.hpp"
 #include "ThreadPool.hpp"
 #include "Types.hpp"
 
 #include <entt/entt.hpp>
+#include <fmt/core.h>
 #include <string>
 #include <vector>
 
@@ -69,6 +71,12 @@ public:
   explicit Scene(std::string_view scene_name);
   ~Scene();
   auto create_entity(std::string_view, bool add_observer = true) -> Entity;
+
+  template <typename... Args>
+  auto create_entity(fmt::format_string<Args...> fmt, Args &&...args)
+      -> Entity {
+    return create_entity(fmt::format(fmt, std::forward<Args>(args)...), true);
+  }
   [[nodiscard]] auto delete_entity(Core::u64 identifier) -> bool;
 
   // Lifetime events
@@ -76,7 +84,21 @@ public:
                  const Core::Swapchain &) -> void;
   auto on_destroy() -> void;
   auto on_update(Core::SceneRenderer &, Core::floating) -> void;
-  auto on_interface(Core::InterfaceSystem &) -> void;
+
+  auto on_update_runtime(Core::floating ts) -> void;
+  auto on_update_editor(Core::floating ts) -> void;
+  auto on_runtime_start() -> void;
+  auto on_runtime_stop() -> void;
+
+  auto on_simulation_start() -> void;
+  auto on_simulation_stop() -> void;
+
+  auto on_render_runtime(Core::SceneRenderer &, Core::floating ts) -> void;
+  auto on_render_editor(Core::SceneRenderer &, Core::floating ts,
+                        const Core::EditorCamera &) -> void;
+  auto on_render_simulation(Core::SceneRenderer &, Core::floating ts,
+                            const Core::EditorCamera &) -> void;
+
   auto on_resize(const Core::Extent<Core::u32> &) -> void;
 
   auto on_render(Core::SceneRenderer &, Core::floating ts,
@@ -99,6 +121,8 @@ public:
   void set_scene_name(const std::string_view scene_name) { name = scene_name; }
   void initialise_device_dependent_objects(const Core::Device &device);
 
+  auto copy_to(Scene &other) -> void;
+
   template <class... Args> auto view() { return registry.view<Args...>(); }
 
   auto get_light_environment() const { return light_environment; }
@@ -109,6 +133,8 @@ private:
   std::vector<ISceneObserver *> observers{};
 
   LightEnvironment light_environment;
+  bool is_playing{false};
+  bool should_simulate{false};
 
   Core::ThreadPool pool;
   std::queue<std::future<void>> futures;

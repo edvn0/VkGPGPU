@@ -13,6 +13,7 @@
 #include "DynamicLibraryLoader.hpp"
 #include "Environment.hpp"
 #include "Filesystem.hpp"
+#include "FiniteStateMachine.hpp"
 #include "Framebuffer.hpp"
 #include "Image.hpp"
 #include "Instance.hpp"
@@ -63,6 +64,21 @@ enum class GuizmoOperation : std::uint16_t {
   UNIVERSAL = T | R | Su
 };
 
+struct RayVisualization {
+  glm::vec3 start;
+  glm::vec3 end;
+  glm::vec3 color;
+  std::chrono::steady_clock::time_point creationTime;
+  float duration; // Duration in seconds before the ray fades completely
+
+  RayVisualization(const glm::vec3 &start, const glm::vec3 &end,
+                   const glm::vec3 &color, float duration)
+      : start(start), end(end), color(color),
+        creationTime(std::chrono::steady_clock::now()), duration(duration) {}
+};
+
+class SceneWidget;
+
 class ClientApp : public App {
 public:
   explicit ClientApp(const ApplicationProperties &props);
@@ -76,7 +92,13 @@ public:
   void on_event(Event &) override;
 
 private:
-  Scope<ECS::Scene> scene;
+  Scope<ECS::Scene> editor_scene;
+  Scope<ECS::Scene> active_scene;
+  Scope<ECS::Scene> simulation_scene;
+  Scope<ECS::Scene> runtime_scene;
+
+  SceneWidget *scene_widget{nullptr}; // Owned by the vector, we just need to
+                                      // handle this case specifically
 
   std::optional<entt::entity> selected_entity;
   std::tuple<u32, u32> main_position{};
@@ -92,7 +114,20 @@ private:
     }
   }
 
+  Scope<Texture> play_icon;
+  Scope<Texture> pause_icon;
+  Scope<Texture> simulate_icon;
+  Scope<Texture> stop_icon;
+
   std::array<glm::vec2, 2> viewport_bounds{};
+  bool camera_can_receive_events{true};
+  bool viewport_mouse_hovered{false};
+  bool viewport_focused{false};
+  bool right_click_started_in_viewport{false};
+  bool editor_camera_in_runtime{false};
+
+  enum class SceneState { Edit = 0, Play = 1, Pause = 2, Simulate = 3 };
+  FiniteStateMachine<SceneState> scene_state_fsm{SceneState::Edit};
 
   auto load_entity() -> std::optional<ECS::Entity>;
   auto copy_selected_entity() -> void;
@@ -104,5 +139,13 @@ private:
 
   SceneRenderer scene_renderer;
 
+  std::vector<RayVisualization> object_picking_rays{};
   void create_dummy_scene();
+
+  void on_scene_play();
+  void on_scene_stop();
+  void on_scene_start_simulation();
+  void on_scene_stop_simulation();
+
+  auto central_toolbar() -> void;
 };

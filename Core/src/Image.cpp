@@ -618,7 +618,7 @@ auto Image::initialise_vulkan_image() -> void {
       properties.mip_info.valid() ? static_cast<float>(properties.mip_info.mips)
                                   : 1.0f;
 
-  sampler_create_info.compareEnable = VK_FALSE;
+  sampler_create_info.compareEnable = VK_TRUE;
   sampler_create_info.compareOp =
       static_cast<VkCompareOp>(properties.compare_op);
 

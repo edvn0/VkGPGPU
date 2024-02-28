@@ -120,6 +120,10 @@ public:
     return gpu_time_queries;
   }
 
+  auto set_opacity(std::floating_point auto new_opacity) {
+    opacity = new_opacity;
+  }
+
 private:
   const Device *device;
   Scope<CommandBuffer> command_buffer{nullptr};
@@ -143,6 +147,8 @@ private:
     ECS::LightEnvironment light_environment;
   };
   SceneInfo scene_data;
+
+  floating opacity{1.0F};
 
   struct BloomSettings {
     bool enabled = true;

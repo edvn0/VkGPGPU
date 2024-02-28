@@ -363,25 +363,20 @@ auto SceneRenderer::end_renderpass() -> void {
 }
 
 auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
-  /*auto vector = Random::vec3(-glm::pi<float>(), glm::pi<float>());
-   auto texture_cube = create_preetham_sky(3.20000005, vector.y, vector.z);
-   scene_environment.radiance_texture = texture_cube;
-   scene_environment.irradiance_texture = texture_cube;*/
-
   // Bloom
   {
-    glm::uvec2 bloomSize = (glm::uvec2{extent.width, extent.height} + 1u) / 2u;
-    bloomSize += bloom_workgroup_size - bloomSize % bloom_workgroup_size;
-    bloom_textures[0]->on_resize({bloomSize.x, bloomSize.y});
-    bloom_textures[1]->on_resize({bloomSize.x, bloomSize.y});
-    bloom_textures[2]->on_resize({bloomSize.x, bloomSize.y});
+    glm::uvec2 bloom_size = (glm::uvec2{extent.width, extent.height} + 1u) / 2u;
+    bloom_size += bloom_workgroup_size - bloom_size % bloom_workgroup_size;
+    bloom_textures[0]->on_resize({bloom_size.x, bloom_size.y});
+    bloom_textures[1]->on_resize({bloom_size.x, bloom_size.y});
+    bloom_textures[2]->on_resize({bloom_size.x, bloom_size.y});
   }
 
   {
-    constexpr uint32_t TILE_SIZE = 16u;
+    static constexpr uint32_t tiling_size = 16u;
     glm::uvec2 size = glm::uvec2{extent.width, extent.height};
-    size += TILE_SIZE - size % TILE_SIZE;
-    light_culling_workgroup_size = {size / TILE_SIZE, 1};
+    size += tiling_size - size % tiling_size;
+    light_culling_workgroup_size = {size / tiling_size, 1};
     renderer_ubo.tiles_count = {
         light_culling_workgroup_size.x,
         light_culling_workgroup_size.y,
@@ -1074,11 +1069,6 @@ auto SceneRenderer::flush() -> void {
   {
     begin_renderpass(*shadow_framebuffer);
     shadow_pass();
-    end_renderpass();
-  }
-  {
-    begin_renderpass(*geometry_framebuffer);
-    explicit_clear(*geometry_framebuffer);
     end_renderpass();
   }
   {

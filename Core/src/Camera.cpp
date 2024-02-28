@@ -97,6 +97,9 @@ void EditorCamera::on_update(const float time_step) {
   const auto mouse = Input::mouse_position();
   const glm::vec2 delta = (mouse - initial_mouse_position) * 0.002F;
 
+  if (!is_active())
+    return;
+
   if (Input::pressed(MouseCode::MOUSE_BUTTON_RIGHT) &&
       !Input::pressed(KeyCode::KEY_LEFT_CONTROL)) {
     camera_mode = CameraMode::Flycam;

@@ -24,6 +24,18 @@ auto resolve(StringLike auto path) -> FS::Path {
   return std::filesystem::absolute(path);
 }
 
+inline auto editor_resources_directory() {
+  return std::filesystem::path("editor");
+}
+auto editor_resources(StringLike auto path, bool resolve = true) {
+  const auto output = editor_resources_directory() / path;
+  if (resolve) {
+    return std::filesystem::absolute(output);
+  } else {
+    return output;
+  }
+}
+
 inline auto font_directory() { return std::filesystem::path("fonts"); }
 auto font(StringLike auto path, bool resolve = true) {
   const auto output = font_directory() / path;

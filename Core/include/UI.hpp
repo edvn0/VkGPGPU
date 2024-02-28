@@ -31,6 +31,11 @@ auto set_drag_drop_payload_impl(std::string_view, std::string_view data)
 auto toast(Toast::Type type, u32 duration_ms, std::string_view) -> void;
 } // namespace Detail
 
+auto push_id() -> void;
+auto pop_id() -> void;
+
+auto generate_id() -> const char *;
+
 auto add_image(VkSampler sampler, VkImageView image_view, VkImageLayout layout)
     -> VkDescriptorSet;
 
