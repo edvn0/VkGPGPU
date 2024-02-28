@@ -581,18 +581,20 @@ void SceneRenderer::bloom_pass() {
   // Output image
   VkDescriptorSet descriptorSet =
       device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-  writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+  writeDescriptors[0] =
+      *shader.get_descriptor_set("bloom_output_storage_image", 0);
   writeDescriptors[0].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[0].pImageInfo = &descriptorImageInfo;
 
   // Input image
-  writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+  writeDescriptors[1] =
+      *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
   writeDescriptors[1].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[1].pImageInfo = &inputImage->get_descriptor_info();
 
-  writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+  writeDescriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
   writeDescriptors[2].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
@@ -659,20 +661,23 @@ void SceneRenderer::bloom_pass() {
 
       descriptorSet =
           device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-      writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+      writeDescriptors[0] =
+          *shader.get_descriptor_set("bloom_output_storage_image", 0);
       writeDescriptors[0].dstSet =
           descriptorSet; // Should this be set inside the shader?
       writeDescriptors[0].pImageInfo = &descriptorImageInfo;
 
       // Input image
-      writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+      writeDescriptors[1] =
+          *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
       writeDescriptors[1].dstSet =
           descriptorSet; // Should this be set inside the shader?
       auto descriptor = bloom_textures[0]->get_image().get_descriptor_info();
       // descriptor.sampler = samplerClamp;
       writeDescriptors[1].pImageInfo = &descriptor;
 
-      writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+      writeDescriptors[2] =
+          *shader.get_descriptor_set("bloom_output_texture", 0);
       writeDescriptors[2].dstSet =
           descriptorSet; // Should this be set inside the shader?
       writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
@@ -720,20 +725,23 @@ void SceneRenderer::bloom_pass() {
       // Output image
       descriptorSet =
           device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-      writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+      writeDescriptors[0] =
+          *shader.get_descriptor_set("bloom_output_storage_image", 0);
       writeDescriptors[0].dstSet =
           descriptorSet; // Should this be set inside the shader?
       writeDescriptors[0].pImageInfo = &descriptorImageInfo;
 
       // Input image
-      writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+      writeDescriptors[1] =
+          *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
       writeDescriptors[1].dstSet =
           descriptorSet; // Should this be set inside the shader?
       auto descriptor = bloom_textures[1]->get_image().get_descriptor_info();
       // descriptor.sampler = samplerClamp;
       writeDescriptors[1].pImageInfo = &descriptor;
 
-      writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+      writeDescriptors[2] =
+          *shader.get_descriptor_set("bloom_output_texture", 0);
       writeDescriptors[2].dstSet =
           descriptorSet; // Should this be set inside the shader?
       writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
@@ -783,19 +791,21 @@ void SceneRenderer::bloom_pass() {
       device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
   descriptorImageInfo.imageView = images[2]->get_mip_image_view_at(mips - 2);
 
-  writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+  writeDescriptors[0] =
+      *shader.get_descriptor_set("bloom_output_storage_image", 0);
   writeDescriptors[0].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[0].pImageInfo = &descriptorImageInfo;
 
   // Input image
-  writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+  writeDescriptors[1] =
+      *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
   writeDescriptors[1].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[1].pImageInfo =
       &bloom_textures[0]->get_image().get_descriptor_info();
 
-  writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+  writeDescriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
   writeDescriptors[2].dstSet =
       descriptorSet; // Should this be set inside the shader?
   writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
@@ -852,19 +862,21 @@ void SceneRenderer::bloom_pass() {
     descriptorImageInfo.imageView = images[2]->get_mip_image_view_at(mip);
     auto descriptorSet =
         device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-    writeDescriptors[0] = *shader.get_descriptor_set("o_Image", 0);
+    writeDescriptors[0] =
+        *shader.get_descriptor_set("bloom_output_storage_image", 0);
     writeDescriptors[0].dstSet =
         descriptorSet; // Should this be set inside the shader?
     writeDescriptors[0].pImageInfo = &descriptorImageInfo;
 
     // Input image
-    writeDescriptors[1] = *shader.get_descriptor_set("u_Texture", 0);
+    writeDescriptors[1] =
+        *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
     writeDescriptors[1].dstSet =
         descriptorSet; // Should this be set inside the shader?
     writeDescriptors[1].pImageInfo =
         &bloom_textures[0]->get_image().get_descriptor_info();
 
-    writeDescriptors[2] = *shader.get_descriptor_set("u_BloomTexture", 0);
+    writeDescriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
     writeDescriptors[2].dstSet =
         descriptorSet; // Should this be set inside the shader?
     writeDescriptors[2].pImageInfo = &images[2]->get_descriptor_info();
@@ -950,22 +962,23 @@ auto SceneRenderer::fullscreen_pass() -> void {
   float BloomDirtIntensity = bloom_settings.dirt_intensity;
   float Opacity = 1.0F;
 
-  fullscreen_material->set("u_Texture", *geometry_framebuffer->get_image(0));
+  fullscreen_material->set("bloom_geometry_input_texture",
+                           *geometry_framebuffer->get_image(0));
   fullscreen_material->set("u_DepthTexture", get_depth_image());
 
   if (!bloom_settings.enabled) {
     BloomIntensity = 0.0f;
     BloomDirtIntensity = 0.0f;
-    fullscreen_material->set("u_BloomTexture",
+    fullscreen_material->set("bloom_output_texture",
                              SceneRenderer::get_white_texture());
   }
-  fullscreen_material->set("u_BloomTexture", *bloom_textures[2]);
+  fullscreen_material->set("bloom_output_texture", *bloom_textures[2]);
   fullscreen_material->set("u_BloomDirtTexture",
                            SceneRenderer::get_black_texture());
 
   const auto data =
       glm::vec4{Exposure, BloomIntensity, BloomDirtIntensity, Opacity};
-  fullscreen_material->set("u_Uniforms.values", data);
+  fullscreen_material->set("bloom_uniforms.values", data);
 
   push_constants(*fullscreen_pipeline, *fullscreen_material);
 

@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <stb_image.h>
+#include <stb_image_resize2.h>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
 
@@ -195,8 +196,8 @@ auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer {
   return databuffer;
 }
 
-auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent)
-    -> DataBuffer {
+auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent,
+                               ResizeInfo resize_info) -> DataBuffer {
   if (!FS::exists(path)) {
     error("File does not exist: {}", path);
     return DataBuffer::empty();
@@ -206,6 +207,20 @@ auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent)
   std::int32_t actual_channels{};
   auto *stbi_pixels = stbi_load(path.string().c_str(), &width, &height,
                                 &actual_channels, STBI_rgb_alpha);
+
+  // Lets resize if needed
+  if (resize_info.resize) {
+    auto new_width = resize_info.extent.width;
+    auto new_height = resize_info.extent.height;
+    auto new_channels = 4;
+    auto *new_pixels = new u8[new_width * new_height * new_channels];
+    stbir_resize_uint8_srgb(stbi_pixels, width, height, 0, new_pixels,
+                            new_width, new_height, 0, STBIR_RGBA);
+    stbi_image_free(stbi_pixels);
+    stbi_pixels = new_pixels;
+    width = new_width;
+    height = new_height;
+  }
 
   DataBuffer databuffer{
       static_cast<std::size_t>(width * height * STBI_rgb_alpha)};
@@ -436,7 +451,7 @@ auto Image::get_mip_size(u32 mip) const -> std::pair<u32, u32> {
 auto Image::get_image() const -> VkImage { return impl->image; }
 
 namespace {
-auto hash_combine(usize &seed, const void *value) noexcept -> void {
+auto hash_combine(usize &seed, const auto *value) noexcept -> void {
   static constexpr auto hasher = std::hash<const void *>{};
   seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }

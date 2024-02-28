@@ -6,16 +6,20 @@
 #include "ImageProperties.hpp"
 
 namespace Core {
+struct ResizeInfo {
+  Extent<u32> extent;
+  bool resize{false};
+};
 
 auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer;
-auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &)
-    -> DataBuffer;
+auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &,
+                               ResizeInfo = {}) -> DataBuffer;
 auto load_databuffer_from_file(StringLike auto path) -> DataBuffer {
   return load_databuffer_from_file(path);
 }
-auto load_databuffer_from_file(StringLike auto path, Extent<u32> &extent)
-    -> DataBuffer {
-  return load_databuffer_from_file(path, extent);
+auto load_databuffer_from_file(StringLike auto path, Extent<u32> &extent,
+                               ResizeInfo info = {}) -> DataBuffer {
+  return load_databuffer_from_file(path, extent, info);
 }
 
 struct MipInfo {
@@ -30,6 +34,7 @@ struct ImageProperties {
   Extent<u32> extent;
 
   MipInfo mip_info{};
+  ResizeInfo resize_info{};
 
   bool generate_per_mip_image_views{true};
 

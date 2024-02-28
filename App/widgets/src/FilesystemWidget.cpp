@@ -160,6 +160,7 @@ void FilesystemWidget::render_directory_contents() {
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
             .layout = ImageLayout::ShaderReadOnlyOptimal,
             .mip_generation = MipGeneration(1),
+            .resize = ResizeStrategy{extent},
         });
 
         UI::image_button(*texture, {extent});

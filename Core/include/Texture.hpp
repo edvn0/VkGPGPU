@@ -38,6 +38,50 @@ struct MipGeneration {
   }
 };
 
+enum class ResizeMethod : u8 {
+  ByScalingFactor, // Resize based on a scaling factor (e.g., 0.5 for half size)
+  ByAbsoluteSize,  // Resize to specific dimensions
+  Default,         // Does nothing, uses the original image size
+};
+
+// Scaling factor data, specifying how much to scale the original image
+struct ScalingFactorData {
+  float scale_factor;
+};
+
+class ResizeStrategy {
+public:
+  // Strategy can be either a method enum or specific data for resizing
+  std::variant<ResizeMethod, Extent<u32>, ScalingFactorData> strategy;
+
+  // Default constructor uses the Default resizing method
+  ResizeStrategy() : strategy(ResizeMethod::Default) {}
+
+  // Constructor for setting the strategy directly with ResizeMethod
+  explicit ResizeStrategy(ResizeMethod method) : strategy(method) {}
+
+  // Constructors for specific resizing strategies
+  explicit ResizeStrategy(u32 width, u32 height)
+      : strategy(Extent<u32>{width, height}) {}
+
+  explicit ResizeStrategy(const Extent<u32> &extent) : strategy(extent) {}
+
+  explicit ResizeStrategy(float scale_factor)
+      : strategy(ScalingFactorData{scale_factor}) {}
+
+  // Additional constructor to handle more complex logic
+  ResizeStrategy(ResizeMethod method, u32 width, u32 height) {
+    if (method == ResizeMethod::ByAbsoluteSize) {
+      strategy = Extent<u32>{width, height};
+    } else if (method == ResizeMethod::ByScalingFactor) {
+      // Should not really call this constructor with a scaling factor
+      strategy = ScalingFactorData{1.0F};
+    } else {
+      strategy = method;
+    }
+  }
+};
+
 struct TextureProperties {
   ImageFormat format;
   std::string identifier{};
@@ -53,6 +97,7 @@ struct TextureProperties {
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
   MipGeneration mip_generation{MipGenerationStrategy::FromSize};
+  ResizeStrategy resize{ResizeStrategy(ResizeMethod::Default)};
 };
 
 auto determine_mip_count(const MipGeneration &mipGeneration,

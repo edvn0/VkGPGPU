@@ -51,7 +51,7 @@ static constexpr bool use_pipeline_cache = true;
 #ifdef GPGPU_ENABLE_RAYTRACING
 static constexpr bool enable_ray_tracing = GPGPU_ENABLE_RAYTRACING;
 #else
-static constexpr bool enable_ray_tracing = true;
+static constexpr bool enable_ray_tracing = false;
 #endif
 
 } // namespace Core::Config

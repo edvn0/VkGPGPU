@@ -6,7 +6,7 @@ layout(set = 0, binding = 0,
        rgba32f) restrict writeonly uniform imageCube output_cubemap;
 
 layout(push_constant) uniform Uniforms { vec3 TurbidityAzimuthInclination; }
-u_Uniforms;
+bloom_uniforms;
 
 vec3 GetCubeMapTexCoord() {
   vec2 st = gl_GlobalInvocationID.xy / vec2(imageSize(output_cubemap));
@@ -114,9 +114,9 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 void main() {
   vec3 cubeTC = GetCubeMapTexCoord();
 
-  float turbidity = u_Uniforms.TurbidityAzimuthInclination.x;
-  float azimuth = u_Uniforms.TurbidityAzimuthInclination.y;
-  float inclination = u_Uniforms.TurbidityAzimuthInclination.z;
+  float turbidity = bloom_uniforms.TurbidityAzimuthInclination.x;
+  float azimuth = bloom_uniforms.TurbidityAzimuthInclination.y;
+  float inclination = bloom_uniforms.TurbidityAzimuthInclination.z;
   vec3 sunDir =
       normalize(vec3(sin(inclination) * cos(azimuth), cos(inclination),
                      sin(inclination) * sin(azimuth)));
