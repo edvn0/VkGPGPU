@@ -2,6 +2,7 @@
 
 #include "Texture.hpp"
 
+#include "CommandBuffer.hpp"
 #include "DataBuffer.hpp"
 #include "Formatters.hpp"
 #include "Types.hpp"
@@ -20,6 +21,18 @@ auto Texture::empty_with_size(const Device &device, usize size,
 auto Texture::construct(const Device &device,
                         const TextureProperties &properties) -> Scope<Texture> {
   return Scope<Texture>(new Texture(device, properties));
+}
+
+auto Texture::construct_from_command_buffer(const Device &device,
+                                            const TextureProperties &properties,
+
+                                            CommandBuffer &command_buffer)
+    -> Scope<Texture> {
+  command_buffer.begin(0);
+  auto constructed =
+      Scope<Texture>(new Texture(device, properties, command_buffer));
+  command_buffer.end_and_submit();
+  return constructed;
 }
 
 auto Texture::construct_shader(const Device &device,
@@ -240,11 +253,58 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
         properties.extent, human_readable_size(cached_size));
 }
 
-Texture::Texture(const Device &dev, const TextureProperties &props)
+Texture::Texture(const Device &dev, const TextureProperties &props,
+                 CommandBuffer *buffer)
     : device(&dev), properties(props),
       data_buffer(load_databuffer_from_file(
           properties.path, properties.extent,
           determine_resize_info(properties.resize, properties.extent))) {
+  if (!FS::exists(properties.path)) {
+    throw NotFoundException(fmt::format("Texture file '{}' does not exist!",
+                                        properties.path.string()));
+  }
+
+  properties.identifier = properties.path.filename().string();
+
+  u32 mip_count =
+      determine_mip_count(properties.mip_generation, properties.extent);
+
+  const auto resize_info =
+      determine_resize_info(properties.resize, properties.extent);
+
+  ImageProperties image_properties{
+      .extent = properties.extent,
+      .mip_info =
+          {
+              .mips = mip_count,
+              .use_mips = true,
+          },
+      .resize_info = resize_info,
+      .generate_per_mip_image_views = mip_count > 1,
+      .format = properties.format,
+      .tiling = properties.tiling,
+      .usage = properties.usage,
+      .layout = properties.layout,
+      .min_filter = properties.min_filter,
+      .max_filter = properties.max_filter,
+      .address_mode = properties.address_mode,
+      .border_color = properties.border_color,
+      .command_buffer_override = buffer,
+  };
+
+  image = make_scope<Image>(*device, image_properties, data_buffer);
+  cached_size = data_buffer.size();
+  debug("Created texture '{}', {} with size: {}", properties.identifier,
+        properties.extent, human_readable_size(cached_size));
+
+  if (properties.texture_data_strategy == TextureDataStrategy::Delete) {
+    data_buffer.clear();
+  }
+}
+
+Texture::Texture(const Device &dev, const TextureProperties &props,
+                 CommandBuffer &command_buf)
+    : Texture(dev, props) {
   if (!FS::exists(properties.path)) {
     throw NotFoundException(fmt::format("Texture file '{}' does not exist!",
                                         properties.path.string()));

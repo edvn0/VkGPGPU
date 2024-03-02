@@ -139,6 +139,9 @@ public:
       -> Scope<Texture>;
   static auto construct(const Device &, const TextureProperties &)
       -> Scope<Texture>;
+  static auto construct_from_command_buffer(const Device &,
+                                            const TextureProperties &,
+                                            CommandBuffer &) -> Scope<Texture>;
   static auto construct_storage(const Device &, const TextureProperties &)
       -> Scope<Texture>;
   static auto construct_shader(const Device &, const TextureProperties &)
@@ -148,7 +151,8 @@ public:
                                     DataBuffer &&) -> Scope<Texture>;
 
 private:
-  Texture(const Device &, const TextureProperties &);
+  Texture(const Device &, const TextureProperties &, CommandBuffer * = nullptr);
+  Texture(const Device &, const TextureProperties &, CommandBuffer &);
   Texture(const Device &, usize, const Extent<u32> &);
   Texture(const Device &, const TextureProperties &, DataBuffer &&);
 

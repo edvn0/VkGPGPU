@@ -40,8 +40,8 @@ auto to_vulkan_format(ImageFormat format) -> VkFormat {
 }
 
 bool transition_image(
-    const ImmediateCommandBuffer &buffer, VkImage &to_transition,
-    VkImageLayout from, VkImageLayout to, u32 mip_levels = 1,
+    const VkCommandBuffer &buffer, VkImage &to_transition, VkImageLayout from,
+    VkImageLayout to, u32 mip_levels = 1,
     VkImageAspectFlags aspect_bit = VK_IMAGE_ASPECT_COLOR_BIT) {
   VkImageMemoryBarrier barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -123,8 +123,7 @@ bool transition_image(
   }
 
   VkDependencyFlags flags = VK_DEPENDENCY_BY_REGION_BIT;
-  vkCmdPipelineBarrier(buffer.get_command_buffer(), sourceStage,
-                       destinationStage,
+  vkCmdPipelineBarrier(buffer, sourceStage, destinationStage,
                        flags,      // Dependency flags
                        0, nullptr, // Memory barrier count and data
                        0, nullptr, // Buffer memory barrier count and data
@@ -269,7 +268,8 @@ auto to_aspect_bit(const ImageFormat &format) -> VkImageAspectFlags {
 
 Image::Image(const Device &dev, ImageProperties props)
     : device(&dev), properties(props),
-      aspect_bit(to_aspect_bit(properties.format)) {
+      aspect_bit(to_aspect_bit(properties.format)),
+      override_command_buffer(props.command_buffer_override) {
   ensure(device != nullptr, "Device cannot be null. This class name: {}",
          "Image");
   ensure(properties.extent.width > 0, "Extent width must be greater than 0");
@@ -285,9 +285,16 @@ Image::Image(const Device &dev, ImageProperties props)
 
   recreate();
   if (aspect_bit == VK_IMAGE_ASPECT_DEPTH_BIT) {
-    transition_image(create_immediate(*device, Queue::Type::Graphics),
-                     impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     to_vulkan_layout(properties.layout), 1, aspect_bit);
+    if (override_command_buffer != nullptr) {
+      transition_image(override_command_buffer->get_command_buffer(),
+                       impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                       to_vulkan_layout(properties.layout), 1, aspect_bit);
+    } else {
+      transition_image(
+          create_immediate(*device, Queue::Type::Graphics).get_command_buffer(),
+          impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+          to_vulkan_layout(properties.layout), 1, aspect_bit);
+    }
   }
 }
 
@@ -333,10 +340,41 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
       staging_allocation_info.size};
   data_buffer.read(allocation_span);
 
-  {
+  if (override_command_buffer != nullptr) {
+    transition_image(override_command_buffer->get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_UNDEFINED,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = aspect_bit;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {
+        0,
+        0,
+        0,
+    };
+    region.imageExtent = {
+        properties.extent.width,
+        properties.extent.height,
+        1,
+    };
+
+    vkCmdCopyBufferToImage(override_command_buffer->get_command_buffer(),
+                           staging_buffer, impl->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    transition_image(override_command_buffer->get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     to_vulkan_layout(properties.layout), aspect_bit);
+  } else {
     const auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+    transition_image(buffer.get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_UNDEFINED,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -361,7 +399,8 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
                            impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &region);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    transition_image(buffer.get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                      to_vulkan_layout(properties.layout), aspect_bit);
   }
 
@@ -480,7 +519,14 @@ void Image::create_mips() {
   auto &&[mip_width, mip_height] = properties.extent.as<i32>();
 
   auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
-  transition_image(command_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+  VkCommandBuffer vk_cmd_buffer{nullptr};
+  if (override_command_buffer != nullptr) {
+    vk_cmd_buffer = override_command_buffer->get_command_buffer();
+  } else {
+    vk_cmd_buffer = command_buffer.get_command_buffer();
+  }
+
+  transition_image(vk_cmd_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    properties.mip_info.mips);
   for (u32 i = 1; i < properties.mip_info.mips; i++) {
@@ -490,9 +536,9 @@ void Image::create_mips() {
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-    vkCmdPipelineBarrier(
-        command_buffer.get_command_buffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &barrier);
 
     VkImageBlit blit{};
     blit.srcOffsets[0] = {
@@ -524,7 +570,7 @@ void Image::create_mips() {
     blit.dstSubresource.baseArrayLayer = 0;
     blit.dstSubresource.layerCount = 1;
 
-    vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
+    vkCmdBlitImage(vk_cmd_buffer, impl->image,
                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
                    VK_FILTER_LINEAR);
@@ -534,8 +580,7 @@ void Image::create_mips() {
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+    vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
                          0, nullptr, 1, &barrier);
 
@@ -553,8 +598,7 @@ void Image::create_mips() {
   barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-  vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
-                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+  vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 }

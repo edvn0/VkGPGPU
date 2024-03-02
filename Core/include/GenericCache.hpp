@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandBuffer.hpp"
 #include "Concepts.hpp"
 #include "Containers.hpp"
 #include "Device.hpp"
@@ -20,12 +21,21 @@ template <typename R> bool is_ready(const std::future<R> &f) {
 }
 
 template <class Constructor>
-concept ConstructorLike = requires(
-    const Device &device, const typename Constructor::Properties &properties) {
-  {
-    Constructor::construct(device, properties)
-  } -> std::same_as<Scope<typename Constructor::Type>>;
-};
+concept ConstructorLike =
+    requires(const Device &device,
+             const typename Constructor::Properties &properties) {
+      {
+        Constructor::construct(device, properties)
+      } -> std::same_as<Scope<typename Constructor::Type>>;
+    } ||
+    requires(const Device &device,
+             const typename Constructor::Properties &properties,
+             CommandBuffer &command_buffer) {
+      {
+        Constructor::construct_from_command_buffer(device, properties,
+                                                   command_buffer)
+      } -> std::same_as<Scope<typename Constructor::Type>>;
+    };
 
 template <class T, class P>
 concept Cacheable = requires(const Device &device, const P &properties) {
@@ -38,6 +48,13 @@ template <class T, class P> struct DefaultConstructor {
 
   static auto construct(const Device &device, const P &properties) -> Scope<T> {
     return T::construct(device, properties);
+  }
+
+  static auto construct_from_command_buffer(const Device &device,
+                                            const P &properties,
+                                            CommandBuffer &command_buffer)
+      -> Scope<T> {
+    return T::construct_from_command_buffer(device, properties, command_buffer);
   }
 };
 
@@ -88,13 +105,21 @@ public:
       if constexpr (IsAsynchronous) {
 
         processing_identifier_cache.emplace(props.identifier);
-        auto future_texture = ThreadPool::submit(
-            [this, props]() { return C::construct(*device, props); });
-
-        future_cache.emplace(CacheTask{
+        CacheTask task{
             .identifier = props.identifier,
-            .future = std::move(future_texture),
-        });
+            .command_buffer = CommandBuffer::construct(*device,
+                                                       CommandBufferProperties{
+                                                           .count = 1,
+                                                       }),
+        };
+        auto future_texture = ThreadPool::submit(
+            [this, props, buffer = task.command_buffer.get()]() {
+              return C::construct_from_command_buffer(*device, props, *buffer);
+            });
+
+        task.future = std::move(future_texture);
+
+        future_cache.emplace(std::move(task));
         return loading;
       } else {
         type_cache[props.identifier] = C::construct(*device, props);
@@ -114,7 +139,7 @@ public:
     }
 
     std::scoped_lock lock(access);
-    auto &&[identifier, future] = future_cache.front();
+    auto &&[identifier, future, command_buffer] = future_cache.front();
     // Check state of future
     if (is_ready(future)) {
       return;
@@ -137,6 +162,7 @@ private:
   struct CacheTask {
     std::string identifier;
     std::future<Scope<T>> future;
+    Scope<CommandBuffer> command_buffer;
   };
 
   std::queue<CacheTask> future_cache;

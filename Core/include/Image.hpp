@@ -48,6 +48,10 @@ struct ImageProperties {
   SamplerAddressMode address_mode{SamplerAddressMode::Repeat};
   SamplerBorderColor border_color{SamplerBorderColor::FloatOpaqueBlack};
   CompareOperation compare_op{CompareOperation::Less};
+
+  // For threading purposes, lets allow calling code to provide a owning command
+  // buffer :)
+  CommandBuffer *command_buffer_override{nullptr};
 };
 
 class Image {
@@ -82,6 +86,7 @@ public:
 
 private:
   const Device *device{nullptr};
+  CommandBuffer *override_command_buffer{nullptr};
   ImageProperties properties;
   VkDescriptorImageInfo descriptor_image_info{};
   Scope<ImageStorageImpl> impl{nullptr};
