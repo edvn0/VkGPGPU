@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Exception.hpp"
+
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -16,8 +18,8 @@ public:
   void serialise(const Scene &scene, const Core::StringLike auto &filename) {
     std::ofstream out_stream(Core::FS::Path{filename}, std::ios::binary);
     if (!out_stream.is_open()) {
-      throw std::runtime_error("Unable to open file for writing: " +
-                               Core::FS::Path{filename}.string());
+      throw Core::UnableToOpenException("Unable to open file for writing: " +
+                                        Core::FS::Path{filename}.string());
     }
     serialise(scene, out_stream);
   }
@@ -25,8 +27,8 @@ public:
   void deserialise(Scene &scene, const Core::StringLike auto &filename) {
     std::ifstream in_stream(Core::FS::Path{filename}, std::ios::binary);
     if (!in_stream.is_open()) {
-      throw std::runtime_error("Unable to open file for reading: " +
-                               Core::FS::Path{filename}.string());
+      throw Core::UnableToOpenException("Unable to open file for reading: " +
+                                        Core::FS::Path{filename}.string());
     }
     deserialise(scene, in_stream);
   }
@@ -34,7 +36,8 @@ public:
   auto serialise(const Scene &scene, std::ostream &stream) -> void;
   auto deserialise(Scene &scene, std::istream &stream) -> void;
 
-  auto serialise_entity_components(std::ostream &out, Entity &entity) -> bool;
+  auto serialise_entity_components(std::ostream &out,
+                                   const ImmutableEntity &entity) -> bool;
   auto deserialise_entity_components(std::istream &in, Entity &entity) -> bool;
 
 private:
@@ -51,11 +54,24 @@ private:
     return mask;
   }
 
-  template <typename T>
-  auto serialise_component(std::ostream &out, Entity &entity) -> bool {
+  template <std::size_t... Is>
+  auto make_component_mask(const ImmutableEntity &entity,
+                           std::index_sequence<Is...>) {
+    Core::u32 mask = 0;
+    ((entity.any_of<std::tuple_element_t<Is, ComponentTypes>>()
+          ? mask |= (1 << Is)
+          : mask),
+     ...);
+    return mask;
+  }
+
+  template <SerialisationType TS, typename T>
+  auto serialise_component(std::ostream &out, const ImmutableEntity &entity)
+      -> bool {
     if (entity.has_component<T>()) {
       const auto &component = entity.get_component<T>();
-      if (const auto result = ComponentSerialiser<T>::serialise(component, out);
+      if (const auto result =
+              ComponentSerialiser<TS, T>::serialise(component, out);
           !result) {
         error("Failed to serialise component of type {}. Reason: {}",
               typeid(T).name(), result.reason);
@@ -65,25 +81,26 @@ private:
     return true;
   }
 
-  template <std::size_t... Is>
-  auto serialise_entity_components_impl(std::ostream &out, Entity &entity,
+  template <SerialisationType TS, std::size_t... Is>
+  auto serialise_entity_components_impl(std::ostream &out,
+                                        const ImmutableEntity &entity,
                                         std::index_sequence<Is...>) -> bool {
     // Write component mask
     auto mask = make_component_mask(entity, std::index_sequence<Is...>{});
     out.write(std::bit_cast<const char *>(&mask), sizeof(mask));
 
     // Serialize components based on mask
-    return (serialise_component<std::tuple_element_t<Is, ComponentTypes>>(
+    return (serialise_component<TS, std::tuple_element_t<Is, ComponentTypes>>(
                 out, entity) &&
             ...);
   }
 
-  template <typename T>
+  template <SerialisationType TS, typename T>
   auto deserialise_component(std::istream &in, Entity &entity, Core::u32 mask,
                              Core::u32 component_bit) -> bool {
     if (mask & component_bit) {
       auto &t = entity.add_component<T>();
-      if (const auto result = ComponentSerialiser<T>::deserialise(in, t);
+      if (const auto result = ComponentSerialiser<TS, T>::deserialise(in, t);
           !result) {
         error("Failed to deserialise component of type {}. Reason: {}",
               typeid(T).name(), result.reason);
@@ -93,14 +110,14 @@ private:
     return true;
   }
 
-  template <std::size_t... Is>
+  template <SerialisationType TS, std::size_t... Is>
   auto deserialise_entity_components_impl(std::istream &in, Entity &entity,
                                           std::index_sequence<Is...>) -> bool {
     Core::u32 mask = 0;
     in.read(std::bit_cast<char *>(&mask), sizeof(mask));
 
     // Deserialise components based on mask. Stop if any deserialization fails.
-    return (deserialise_component<std::tuple_element_t<Is, ComponentTypes>>(
+    return (deserialise_component<TS, std::tuple_element_t<Is, ComponentTypes>>(
                 in, entity, mask, (1 << Is)) &&
             ...);
   }

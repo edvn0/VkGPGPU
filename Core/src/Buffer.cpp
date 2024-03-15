@@ -3,6 +3,7 @@
 #include "Buffer.hpp"
 
 #include "Allocator.hpp"
+#include "DataBuffer.hpp"
 #include "DebugMarker.hpp"
 #include "Device.hpp"
 #include "Verify.hpp"
@@ -196,7 +197,8 @@ auto Buffer::read_raw(size_t offset, size_t data_size) -> std::vector<char> {
 Buffer::~Buffer() {
   Allocator allocator{"Buffer"};
   allocator.deallocate_buffer(buffer_data->allocation, buffer_data->buffer);
-  debug("Destroyed Buffer (type: {})", type);
+  debug("Destroyed buffer (type: {}, size: {})", type,
+        human_readable_size(size));
 }
 
 auto Buffer::get_buffer() const noexcept -> VkBuffer {
@@ -241,7 +243,8 @@ void Buffer::resize(u64 new_size) {
   initialise_descriptor_info();
 
   // Optional: Debug message to indicate successful resize
-  debug("Resized Buffer (type: {}, new size: {})", type, new_size);
+  debug("Resized Buffer (type: {}, new size: {})", type,
+        human_readable_size(new_size));
 }
 
 auto Buffer::get_vulkan_type() const noexcept -> VkDescriptorType {

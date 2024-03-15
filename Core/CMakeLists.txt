@@ -59,6 +59,7 @@ set(SOURCES
     inline/Logger.inl
     src/Allocator.cpp
     src/App.cpp
+    src/Environment.cpp
     src/Buffer.cpp
     src/Camera.cpp
     src/CommandBuffer.cpp

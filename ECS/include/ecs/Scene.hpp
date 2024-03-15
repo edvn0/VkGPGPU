@@ -18,12 +18,11 @@ namespace ECS {
 class Entity;
 
 struct DirectionalLight {
-  glm::vec3 Direction = {0.0f, 0.0f, 0.0f};
-  glm::vec3 Radiance = {0.0f, 0.0f, 0.0f};
-  float Intensity = 0.0f;
-  float ShadowAmount = 1.0f;
-  // C++ only
-  bool CastShadows = true;
+  glm::vec3 direction = {0.0f, 0.0f, 0.0f};
+  glm::vec3 radiance = {0.0f, 0.0f, 0.0f};
+  float intensity = 0.0f;
+  float shadow_amount = 1.0f;
+  bool cast_shadows = true;
 };
 
 struct PointLight {
@@ -73,8 +72,7 @@ public:
   auto create_entity(std::string_view, bool add_observer = true) -> Entity;
 
   template <typename... Args>
-  auto create_entity(fmt::format_string<Args...> fmt, Args &&...args)
-      -> Entity {
+  auto create_entity(fmt::format_string<Args...> fmt, Args &&...args) {
     return create_entity(fmt::format(fmt, std::forward<Args>(args)...), true);
   }
   [[nodiscard]] auto delete_entity(Core::u64 identifier) -> bool;
@@ -140,6 +138,7 @@ private:
   std::queue<std::future<void>> futures;
 
   friend class Entity;
+  friend class ImmutableEntity;
 };
 
 } // namespace ECS

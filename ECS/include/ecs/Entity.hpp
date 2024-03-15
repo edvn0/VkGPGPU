@@ -79,6 +79,45 @@ public:
 private:
   Scene *scene;
   entt::entity handle;
+
+  friend class ImmutableEntity;
+};
+
+class ImmutableEntity {
+public:
+  ImmutableEntity(const Scene *scene, entt::entity handle)
+      : scene(scene), handle(handle) {}
+
+  explicit ImmutableEntity(const Entity &entity)
+      : scene(entity.scene), handle(entity.get_handle()) {}
+
+  [[nodiscard]] auto get_id() const -> Core::u64;
+  [[nodiscard]] auto get_handle() const { return handle; }
+  [[nodiscard]] auto get_name() const -> const std::string &;
+
+  template <IsComponent T>
+  [[nodiscard]] auto get_component() const -> decltype(auto) {
+    return scene->registry.get<T>(handle);
+  }
+  template <IsComponent T> [[nodiscard]] auto has_component() const -> bool {
+    return scene->registry.any_of<T>(handle);
+  }
+  template <IsComponent... Ts> [[nodiscard]] auto all_of() const -> bool {
+    return scene->registry.all_of<Ts...>(handle);
+  }
+  template <IsComponent... Ts> [[nodiscard]] auto any_of() const -> bool {
+    return scene->registry.any_of<Ts...>(handle);
+  }
+
+  [[nodiscard]] auto valid() const -> bool {
+    return scene->registry.valid(handle);
+  }
+
+  [[nodiscard]] auto get_transform() const -> const TransformComponent &;
+
+private:
+  const Scene *scene;
+  entt::entity handle;
 };
 
 } // namespace ECS

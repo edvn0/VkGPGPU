@@ -8,18 +8,19 @@ namespace ECS {
 
 void SceneSerialiser::serialise(const Scene &scene, std::ostream &stream) {
   if (!stream) {
-    throw std::runtime_error("Unable to open stream for writing");
+    throw Core::UnableToOpenException("Unable to open stream for writing");
   }
 
   auto &registry = scene.get_registry();
   const auto t0 = std::chrono::high_resolution_clock::now();
-  registry.view<IdentityComponent>().each(
-      [&](const auto entity, auto &identity) {
-        auto scene_entity =
-            Entity{const_cast<Scene *>(&scene), entity, identity.name};
-        if (!serialise_entity_components(stream, scene_entity)) {
-        }
-      });
+  registry.view<IdentityComponent>().each([&](const auto entity,
+                                              auto &identity) {
+    auto scene_entity =
+        ImmutableEntity{&scene, entity}; // Entity{const_cast<Scene *>(&scene),
+                                         // entity, identity.name};
+    if (!serialise_entity_components(stream, scene_entity)) {
+    }
+  });
   const auto t1 = std::chrono::high_resolution_clock::now();
 
   info("Serialised scene in {}ms",
@@ -28,7 +29,7 @@ void SceneSerialiser::serialise(const Scene &scene, std::ostream &stream) {
 
 void SceneSerialiser::deserialise(Scene &scene, std::istream &stream) {
   if (!stream) {
-    throw std::runtime_error("Unable to open stream for reading");
+    throw Core::UnableToOpenException("Unable to open stream for reading");
   }
 
   const auto t0 = std::chrono::high_resolution_clock::now();
@@ -55,14 +56,15 @@ void SceneSerialiser::deserialise(Scene &scene, std::istream &stream) {
 }
 
 auto SceneSerialiser::serialise_entity_components(std::ostream &out,
-                                                  Entity &entity) -> bool {
-  return serialise_entity_components_impl(
+                                                  const ImmutableEntity &entity)
+    -> bool {
+  return serialise_entity_components_impl<SerialisationType::Binary>(
       out, entity, std::make_index_sequence<ComponentCount>{});
 }
 
 auto SceneSerialiser::deserialise_entity_components(std::istream &in,
                                                     Entity &entity) -> bool {
-  return deserialise_entity_components_impl(
+  return deserialise_entity_components_impl<SerialisationType::Binary>(
       in, entity, std::make_index_sequence<ComponentCount>{});
 }
 

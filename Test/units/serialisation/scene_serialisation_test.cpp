@@ -12,9 +12,10 @@
 
 #include "ecs/Entity.hpp"
 #include "ecs/Scene.hpp"
+#include "ecs/serialisation/GeneralBinarySerialisers.hpp"
 #include "ecs/serialisation/SceneSerialiser.hpp" // Include the header where your SceneSerialiser is defined
 
-static constexpr auto create_stream = []() -> std::stringstream {
+static constexpr auto create_stream = []() {
   return std::stringstream{std::ios::binary | std::ios::out | std::ios::in};
 };
 
@@ -185,9 +186,11 @@ TEST_CASE("Individual component serialisation", "[component]") {
   SECTION("Deser identifier component") {
     auto stream = create_stream();
     auto old_identity = IdentityComponent{"Entity1"};
-    ComponentSerialiser<IdentityComponent>::serialise(old_identity, stream);
+    ComponentSerialiser<SerialisationType::Binary,
+                        IdentityComponent>::serialise(old_identity, stream);
     IdentityComponent newIdentity;
-    ComponentSerialiser<IdentityComponent>::deserialise(stream, newIdentity);
+    ComponentSerialiser<SerialisationType::Binary,
+                        IdentityComponent>::deserialise(stream, newIdentity);
     REQUIRE(newIdentity.name == "Entity1");
     REQUIRE(newIdentity.id != old_identity.id);
   }
@@ -195,36 +198,44 @@ TEST_CASE("Individual component serialisation", "[component]") {
   SECTION("Deser transform component") {
     auto stream = create_stream();
     auto old_transform = TransformComponent{glm::vec3(1.0f, 2.0f, 3.0f)};
-    ComponentSerialiser<TransformComponent>::serialise(old_transform, stream);
+    ComponentSerialiser<SerialisationType::Binary,
+                        TransformComponent>::serialise(old_transform, stream);
     TransformComponent newTransform;
-    ComponentSerialiser<TransformComponent>::deserialise(stream, newTransform);
+    ComponentSerialiser<SerialisationType::Binary,
+                        TransformComponent>::deserialise(stream, newTransform);
     REQUIRE(newTransform.position == glm::vec3(1.0f, 2.0f, 3.0f));
   }
 
   SECTION("Deser texture component") {
     auto stream = create_stream();
     auto old_texture = TextureComponent{glm::vec4{1.0f, 2.0f, 3.0f, 4.0f}};
-    ComponentSerialiser<TextureComponent>::serialise(old_texture, stream);
+    ComponentSerialiser<SerialisationType::Binary, TextureComponent>::serialise(
+        old_texture, stream);
     TextureComponent newTexture;
-    ComponentSerialiser<TextureComponent>::deserialise(stream, newTexture);
+    ComponentSerialiser<SerialisationType::Binary,
+                        TextureComponent>::deserialise(stream, newTexture);
     REQUIRE(newTexture.colour == glm::vec4{1.0f, 2.0f, 3.0f, 4.0f});
   }
 
   SECTION("Deser mesh component") {
     auto stream = create_stream();
     auto old_mesh = MeshComponent{nullptr, "Test"};
-    ComponentSerialiser<MeshComponent>::serialise(old_mesh, stream);
+    ComponentSerialiser<SerialisationType::Binary, MeshComponent>::serialise(
+        old_mesh, stream);
     MeshComponent newMesh;
-    ComponentSerialiser<MeshComponent>::deserialise(stream, newMesh);
+    ComponentSerialiser<SerialisationType::Binary, MeshComponent>::deserialise(
+        stream, newMesh);
     REQUIRE(newMesh.path == "Test");
   }
 
   SECTION("Deser camera component") {
     auto stream = create_stream();
     auto old_camera = CameraComponent{1.0f};
-    ComponentSerialiser<CameraComponent>::serialise(old_camera, stream);
+    ComponentSerialiser<SerialisationType::Binary, CameraComponent>::serialise(
+        old_camera, stream);
     CameraComponent newCamera;
-    ComponentSerialiser<CameraComponent>::deserialise(stream, newCamera);
+    ComponentSerialiser<SerialisationType::Binary,
+                        CameraComponent>::deserialise(stream, newCamera);
     REQUIRE(newCamera.field_of_view == 1.0f);
   }
 }
@@ -498,11 +509,13 @@ TEST_CASE("GeometryComponent Serialization and Deserialization",
     originalComponent.parameters = BasicGeometry::QuadParameters{2.0f, 3.0f};
 
     std::stringstream stream = create_stream();
-    ComponentSerialiser<GeometryComponent>::serialise(originalComponent,
+    ComponentSerialiser<SerialisationType::Binary,
+                        GeometryComponent>::serialise(originalComponent,
                                                       stream);
 
     GeometryComponent deserializedComponent;
-    ComponentSerialiser<GeometryComponent>::deserialise(stream,
+    ComponentSerialiser<SerialisationType::Binary,
+                        GeometryComponent>::deserialise(stream,
                                                         deserializedComponent);
 
     auto &originalQuad =
@@ -520,11 +533,13 @@ TEST_CASE("GeometryComponent Serialization and Deserialization",
         BasicGeometry::TriangleParameters{4.0f, 5.0f};
 
     std::stringstream stream = create_stream();
-    ComponentSerialiser<GeometryComponent>::serialise(originalComponent,
+    ComponentSerialiser<SerialisationType::Binary,
+                        GeometryComponent>::serialise(originalComponent,
                                                       stream);
 
     GeometryComponent deserializedComponent;
-    ComponentSerialiser<GeometryComponent>::deserialise(stream,
+    ComponentSerialiser<SerialisationType::Binary,
+                        GeometryComponent>::deserialise(stream,
                                                         deserializedComponent);
 
     auto &originalTriangle = std::get<BasicGeometry::TriangleParameters>(

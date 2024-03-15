@@ -629,8 +629,12 @@ auto load_path_from_texture_path(const std::string_view texture_path) {
   static std::unordered_map<std::size_t, std::filesystem::path> cache{};
 
   // Remove everything before and including App in texture_path
-  const auto actual_path =
-      FS::Path{texture_path.substr(texture_path.find("App") + 4)};
+  FS::Path actual_path;
+  if (texture_path.find("App") != std::string::npos) {
+    actual_path = FS::Path{texture_path.substr(texture_path.find("App") + 4)};
+  } else {
+    actual_path = FS::Path{texture_path};
+  }
 
   const auto texture_path_hash = hasher(actual_path.filename().string());
   if (cache.contains(texture_path_hash)) {

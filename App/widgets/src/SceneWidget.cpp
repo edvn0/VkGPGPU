@@ -212,87 +212,86 @@ void SceneWidget::draw_component_widget(Entity &entity) {
     ImGui::DragFloat("Default Value", &depth.default_value, 0.01F, .01F, 0.2F);
   });
 
-  draw_component<GeometryComponent>(
-      entity, "Basic Geometry", [](GeometryComponent &comp) {
-        const char *items[] = {"Quad", "Triangle", "Circle", "Sphere", "Cube"};
-        int currentItem = comp.parameters.index();
+  draw_component<
+      GeometryComponent>(entity, "Basic Geometry", [](GeometryComponent &comp) {
+    const std::array items = {"Quad", "Triangle", "Circle", "Sphere", "Cube"};
+    auto current_item = static_cast<i32>(comp.parameters.index());
+    auto count = static_cast<i32>(items.size());
 
-        if (ImGui::Combo("Geometry Type", &currentItem, items,
-                         IM_ARRAYSIZE(items))) {
-        }
+    if (ImGui::Combo("Geometry Type", &current_item, items.data(), count)) {
+    }
 
-        // Update the variant to reflect the new selection, if changed
-        switch (currentItem) {
-        case 0: // Quad
-          if (!std::holds_alternative<BasicGeometry::QuadParameters>(
-                  comp.parameters)) {
-            comp.parameters = BasicGeometry::QuadParameters{
-                1.0f, 1.0f}; // Default QuadParameters
-          }
-          break;
-        case 1: // Triangle
-          if (!std::holds_alternative<BasicGeometry::TriangleParameters>(
-                  comp.parameters)) {
-            comp.parameters = BasicGeometry::TriangleParameters{
-                1.0f, 1.0f}; // Default TriangleParameters
-          }
-          break;
-        case 2: // Circle
-          if (!std::holds_alternative<BasicGeometry::CircleParameters>(
-                  comp.parameters)) {
-            comp.parameters = BasicGeometry::CircleParameters{
-                1.0f}; // Default CircleParameters
-          }
-          break;
-        case 3: // Sphere
-          if (!std::holds_alternative<BasicGeometry::SphereParameters>(
-                  comp.parameters)) {
-            comp.parameters = BasicGeometry::SphereParameters{
-                1.0f}; // Default SphereParameters
-          }
-          break;
-        case 4: // Cube
-          if (!std::holds_alternative<BasicGeometry::CubeParameters>(
-                  comp.parameters)) {
-            comp.parameters =
-                BasicGeometry::CubeParameters{1.0f}; // Default CubeParameters
-          }
-          break;
-        }
+    // Update the variant to reflect the new selection, if changed
+    switch (current_item) {
+    case 0: // Quad
+      if (!std::holds_alternative<BasicGeometry::QuadParameters>(
+              comp.parameters)) {
+        comp.parameters =
+            BasicGeometry::QuadParameters{1.0f, 1.0f}; // Default QuadParameters
+      }
+      break;
+    case 1: // Triangle
+      if (!std::holds_alternative<BasicGeometry::TriangleParameters>(
+              comp.parameters)) {
+        comp.parameters = BasicGeometry::TriangleParameters{
+            1.0f, 1.0f}; // Default TriangleParameters
+      }
+      break;
+    case 2: // Circle
+      if (!std::holds_alternative<BasicGeometry::CircleParameters>(
+              comp.parameters)) {
+        comp.parameters =
+            BasicGeometry::CircleParameters{1.0f}; // Default CircleParameters
+      }
+      break;
+    case 3: // Sphere
+      if (!std::holds_alternative<BasicGeometry::SphereParameters>(
+              comp.parameters)) {
+        comp.parameters =
+            BasicGeometry::SphereParameters{1.0f}; // Default SphereParameters
+      }
+      break;
+    case 4: // Cube
+      if (!std::holds_alternative<BasicGeometry::CubeParameters>(
+              comp.parameters)) {
+        comp.parameters =
+            BasicGeometry::CubeParameters{1.0f}; // Default CubeParameters
+      }
+      break;
+    }
 
-        // Draw UI based on the selected Geometry Type
-        std::visit(overloaded{[](BasicGeometry::QuadParameters &quad) {
-                                ImGui::Text("Quad Parameters");
-                                ImGui::DragFloat("Width", &quad.width, 0.1f,
-                                                 0.0f, FLT_MAX, "%.3f");
-                                ImGui::DragFloat("Height", &quad.height, 0.1f,
-                                                 0.0f, FLT_MAX, "%.3f");
-                              },
-                              [](BasicGeometry::TriangleParameters &triangle) {
-                                ImGui::Text("Triangle Parameters");
-                                ImGui::DragFloat("Base", &triangle.base, 0.1f,
-                                                 0.0f, FLT_MAX, "%.3f");
-                                ImGui::DragFloat("Height", &triangle.height,
-                                                 0.1f, 0.0f, FLT_MAX, "%.3f");
-                              },
-                              [](BasicGeometry::CircleParameters &circle) {
-                                ImGui::Text("Circle Parameters");
-                                ImGui::DragFloat("Radius", &circle.radius, 0.1f,
-                                                 0.0f, FLT_MAX, "%.3f");
-                              },
-                              [](BasicGeometry::SphereParameters &sphere) {
-                                ImGui::Text("Sphere Parameters");
-                                ImGui::DragFloat("Radius", &sphere.radius, 0.1f,
-                                                 0.0f, FLT_MAX, "%.3f");
-                              },
-                              [](BasicGeometry::CubeParameters &cube) {
-                                ImGui::Text("Cube Parameters");
-                                ImGui::DragFloat("Side Length",
-                                                 &cube.side_length, 0.1f, 0.0f,
-                                                 FLT_MAX, "%.3f");
-                              }},
-                   comp.parameters);
-      });
+    // Draw UI based on the selected Geometry Type
+    std::visit(overloaded{[](BasicGeometry::QuadParameters &quad) {
+                            ImGui::Text("Quad Parameters");
+                            ImGui::DragFloat("Width", &quad.width, 0.1f, 0.0f,
+                                             FLT_MAX, "%.3f");
+                            ImGui::DragFloat("Height", &quad.height, 0.1f, 0.0f,
+                                             FLT_MAX, "%.3f");
+                          },
+                          [](BasicGeometry::TriangleParameters &triangle) {
+                            ImGui::Text("Triangle Parameters");
+                            ImGui::DragFloat("Base", &triangle.base, 0.1f, 0.0f,
+                                             FLT_MAX, "%.3f");
+                            ImGui::DragFloat("Height", &triangle.height, 0.1f,
+                                             0.0f, FLT_MAX, "%.3f");
+                          },
+                          [](BasicGeometry::CircleParameters &circle) {
+                            ImGui::Text("Circle Parameters");
+                            ImGui::DragFloat("Radius", &circle.radius, 0.1f,
+                                             0.0f, FLT_MAX, "%.3f");
+                          },
+                          [](BasicGeometry::SphereParameters &sphere) {
+                            ImGui::Text("Sphere Parameters");
+                            ImGui::DragFloat("Radius", &sphere.radius, 0.1f,
+                                             0.0f, FLT_MAX, "%.3f");
+                          },
+                          [](BasicGeometry::CubeParameters &cube) {
+                            ImGui::Text("Cube Parameters");
+                            ImGui::DragFloat("Side Length", &cube.side_length,
+                                             0.1f, 0.0f, FLT_MAX, "%.3f");
+                          }},
+               comp.parameters);
+  });
 
   draw_component<MeshComponent>(
       entity, "Mesh", [&dev = device](MeshComponent &mesh) {

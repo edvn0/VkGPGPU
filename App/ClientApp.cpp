@@ -614,7 +614,8 @@ auto ClientApp::copy_selected_entity() -> void {
   if (!stream)
     return;
 
-  if (!serialiser.serialise_entity_components(stream, entity)) {
+  if (!serialiser.serialise_entity_components(stream,
+                                              ECS::ImmutableEntity{entity})) {
     warn("Could not serialise entity to stream");
     return;
   }
@@ -677,6 +678,8 @@ void ClientApp::on_event(Event &event) {
         switch (static_cast<KeyCode>(event.get_keycode())) {
         case KeyCode::KEY_C:
           editor_camera_in_runtime = !editor_camera_in_runtime;
+          break;
+        default:
           break;
         }
       }
