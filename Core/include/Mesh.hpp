@@ -110,6 +110,7 @@ private:
   [[nodiscard]] auto
   read_texture_from_file_path(const std::string &texture_path) const
       -> Scope<Texture>;
+
   void handle_normal_map(const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
   void handle_roughness_map(const aiMaterial *ai_material,

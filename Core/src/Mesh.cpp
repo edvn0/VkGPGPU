@@ -20,6 +20,67 @@
 
 namespace Core {
 
+auto create_texture_from_raw_data(const Device *device, const byte *data,
+                                  int width, int height) -> Scope<Texture> {
+  DataBuffer buffer{width * height * 4 * sizeof(byte)};
+  buffer.write(data, width * height * 4 * sizeof(byte));
+
+  return Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent = Extent<i32>(width, height).as<u32>(),
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueWhite,
+      },
+      std::move(buffer));
+}
+
+auto create_texture_from_memory(const Device *device, const aiTexel *data,
+                                size_t size) -> Scope<Texture> {
+  int width{};
+  int height{};
+  int channels{};
+  auto *raw_pixels =
+      stbi_load_from_memory(std::bit_cast<u8 *>(data),
+                            static_cast<int>(size * 4 * sizeof(unsigned char)),
+                            &width, &height, &channels, STBI_rgb_alpha);
+
+  if (!raw_pixels) {
+    return nullptr;
+  }
+
+  auto texture =
+      create_texture_from_raw_data(device, raw_pixels, width, height);
+
+  stbi_image_free(raw_pixels);
+
+  return texture;
+}
+
+auto create_texture_from_raw_data(const Device *device, const aiTexel *data,
+                                  int width, int height) -> Scope<Texture> {
+  DataBuffer buffer{width * height * 4 * 4 * sizeof(byte)};
+  buffer.write(std::bit_cast<u8 *>(data),
+               width * height * 4 * 4 * sizeof(byte));
+
+  return Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent = Extent<i32>(width, height).as<u32>(),
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueWhite,
+      },
+      std::move(buffer));
+}
+
 // Select the kinds of messages you want to receive on this log stream
 static constexpr unsigned int severity =
     Assimp::Logger::Debugging | Assimp::Logger::Info | Assimp::Logger::Err |
@@ -46,71 +107,6 @@ auto Mesh::get_material(u32 index) const -> Material * {
   }
   return nullptr;
 }
-
-struct InMemoryImageLoader {
-  explicit InMemoryImageLoader(const void *input_data,
-                               std::integral auto input_width,
-                               std::integral auto input_height,
-                               DataBuffer &input_buffer)
-      : buffer(input_buffer) {
-    if (input_data == nullptr) {
-      error("InMemoryImageLoader", "Could not load embedded texture.");
-      return;
-    }
-
-    constexpr std::int32_t requested_channels = STBI_rgb_alpha;
-    const auto size = input_height > 0
-                          ? input_width * input_height * requested_channels
-                          : input_width;
-
-    stbi_set_flip_vertically_on_load(true);
-    auto *loaded_image =
-        stbi_load_from_memory(static_cast<const u8 *>(input_data), size, &width,
-                              &height, &channels, requested_channels);
-
-    const auto span = std::span{
-        loaded_image,
-        static_cast<std::size_t>(width * height * channels),
-    };
-    const auto padded_buffer = pad_with_alpha(span);
-    const auto loaded_size = width * height * requested_channels;
-
-    const DataBuffer data_buffer{padded_buffer.data(), loaded_size};
-    stbi_image_free(loaded_image);
-
-    input_buffer.copy_from(data_buffer);
-  }
-
-  std::int32_t width{};
-  std::int32_t height{};
-  std::int32_t channels{};
-  DataBuffer &buffer;
-
-private:
-  auto pad_with_alpha(const auto data) const -> std::vector<u8> {
-    if (channels == 4) {
-      // Already has an alpha channel
-      return {data.begin(), data.end()};
-    }
-
-    std::vector<u8> new_data(width * height * 4); // 4 channels for RGBA
-
-    for (auto y = 0; y < height; ++y) {
-      for (auto x = 0; x < width; ++x) {
-        const int new_index = (y * width + x) * 4;
-        const int old_index = (y * width + x) * channels;
-
-        for (int j = 0; j < channels; ++j) {
-          new_data[new_index + j] = data[old_index + j];
-        }
-
-        new_data[new_index + 3] = 255;
-      }
-    }
-
-    return new_data;
-  }
-};
 
 struct ImporterImpl {
   Scope<Assimp::Importer> importer{nullptr};
@@ -483,16 +479,36 @@ void Mesh::handle_albedo_map(const aiMaterial *ai_material,
       AI_SUCCESS;
   auto fallback = !has_albedo_map;
   if (const std::string key = ai_tex_path.C_Str(); has_albedo_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
+    bool texture_loaded = false;
+    if (const aiTexture *ai_texture_embedded =
             importer->scene->GetEmbeddedTexture(key.c_str())) {
-      ensure(false, "No support for embedded textures");
+      // Handle embedded texture.
+      // Check if the embedded texture is uncompressed (RAW) or compressed.
+      if (ai_texture_embedded->mHeight == 0) {
+        // The embedded texture is compressed (e.g., PNG, JPG).
+        // Use your method to create a texture from the compressed data in
+        // memory.
+        auto texture = create_texture_from_memory(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      } else {
+        // The embedded texture is uncompressed (RAW).
+        // mWidth and mHeight specify the dimensions, and pcData contains the
+        // pixel data.
+        auto texture = create_texture_from_raw_data(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth,
+            ai_texture_embedded->mHeight);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      }
     } else {
+      // Texture is not embedded, read from file path.
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-      texture = true;
+      texture_loaded = true;
     }
 
-    if (texture) {
+    if (texture_loaded) {
       info("Has albedo map: {}", mesh_owned_textures.at(key)->get_file_path());
       const auto &text = mesh_owned_textures.at(key);
       submesh_material.set("albedo_map", *text);
@@ -514,16 +530,36 @@ void Mesh::handle_normal_map(const aiMaterial *ai_material,
                                                 &ai_tex_path) == AI_SUCCESS;
   auto fallback = !has_normal_map;
   if (const std::string key = ai_tex_path.C_Str(); has_normal_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
-            importer->scene->GetEmbeddedTexture(ai_tex_path.C_Str())) {
-      ensure(false, "Embedded textures are not supported.");
+    bool texture_loaded = false;
+    if (const aiTexture *ai_texture_embedded =
+            importer->scene->GetEmbeddedTexture(key.c_str())) {
+      // Handle embedded texture.
+      // Check if the embedded texture is uncompressed (RAW) or compressed.
+      if (ai_texture_embedded->mHeight == 0) {
+        // The embedded texture is compressed (e.g., PNG, JPG).
+        // Use your method to create a texture from the compressed data in
+        // memory.
+        auto texture = create_texture_from_memory(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      } else {
+        // The embedded texture is uncompressed (RAW).
+        // mWidth and mHeight specify the dimensions, and pcData contains the
+        // pixel data.
+        auto texture = create_texture_from_raw_data(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth,
+            ai_texture_embedded->mHeight);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      }
     } else {
+      // Texture is not embedded, read from file path.
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-      texture = true;
+      texture_loaded = true;
     }
 
-    if (texture) {
+    if (texture_loaded) {
       submesh_material.set("normal_map", *mesh_owned_textures.at(key));
       submesh_material.set("pc.use_normal_map", 1.0F);
       info("Has normal map: {}", mesh_owned_textures.at(key)->get_file_path());
@@ -564,18 +600,23 @@ void Mesh::handle_roughness_map(const aiMaterial *ai_material,
     std::string texture_path = path.C_Str();
 
     if (!texture_path.empty()) {
-      // Load the texture from the path
-      if (!mesh_owned_textures.contains(texture_path)) {
-        mesh_owned_textures.try_emplace(
-            texture_path, read_texture_from_file_path(texture_path));
+      try {
+        // Load the texture from the path
+        if (!mesh_owned_textures.contains(texture_path)) {
+          mesh_owned_textures.try_emplace(
+              texture_path, read_texture_from_file_path(texture_path));
+        }
+        has_roughness_texture = true;
+
+        submesh_material.set("roughness_map",
+                             *mesh_owned_textures.at(texture_path));
+        submesh_material.set("pc.roughness", 1.0F);
+
+        info("Has roughness texture: {}", texture_path);
+      } catch (const std::exception &exc) {
+        error("Exception: {}", exc);
+        has_roughness_texture = false;
       }
-      has_roughness_texture = true;
-
-      submesh_material.set("roughness_map",
-                           *mesh_owned_textures.at(texture_path));
-      submesh_material.set("pc.roughness", 1.0F);
-
-      info("Has roughness texture: {}", texture_path);
     }
   }
 
@@ -600,18 +641,24 @@ void Mesh::handle_metalness_map(const aiMaterial *ai_material,
     std::string texture_path = path.C_Str();
 
     if (!texture_path.empty()) {
-      // Load the texture from the path
-      if (!mesh_owned_textures.contains(texture_path)) {
-        mesh_owned_textures.try_emplace(
-            texture_path, read_texture_from_file_path(texture_path));
+      try {
+
+        // Load the texture from the path
+        if (!mesh_owned_textures.contains(texture_path)) {
+          mesh_owned_textures.try_emplace(
+              texture_path, read_texture_from_file_path(texture_path));
+        }
+        has_metalness_texture = true;
+
+        submesh_material.set("metallic_map",
+                             *mesh_owned_textures.at(texture_path));
+        submesh_material.set("pc.metalness", 1.0F);
+
+        info("Has metalness texture: {}", texture_path);
+      } catch (const std::exception &exc) {
+        error("Exception: {}", exc);
+        has_metalness_texture = false;
       }
-      has_metalness_texture = true;
-
-      submesh_material.set("metallic_map",
-                           *mesh_owned_textures.at(texture_path));
-      submesh_material.set("pc.metalness", 1.0F);
-
-      info("Has metalness texture: {}", texture_path);
     }
   }
 

@@ -214,7 +214,7 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
                  DataBuffer &&buffer)
     : device(&dev), properties(props), data_buffer(std::move(buffer)) {
   ensure(data_buffer.valid(), "DataBuffer must have size > 0");
-
+  cached_size = data_buffer.size();
   std::string identifier;
   if (properties.path.empty() && properties.identifier.empty()) {
     identifier = fmt::format("FromBuffer-Size{}", data_buffer.size());

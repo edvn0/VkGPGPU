@@ -1481,22 +1481,22 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   {
     DataBuffer buffer(4 * sizeof(float));
     buffer.fill_zero();
-    bloom_texture_props.identifier = "BloomCompute-0";
-    bloom_textures[0] = Texture::construct_from_buffer(
+    bloom_texture_props.identifier = "bloom_compute_0";
+    bloom_textures.at(0) = Texture::construct_from_buffer(
         *device, bloom_texture_props, std::move(buffer));
   }
   {
     DataBuffer buffer(4 * sizeof(float));
     buffer.fill_zero();
-    bloom_texture_props.identifier = "BloomCompute-1";
-    bloom_textures[1] = Texture::construct_from_buffer(
+    bloom_texture_props.identifier = "bloom_compute_1";
+    bloom_textures.at(1) = Texture::construct_from_buffer(
         *device, bloom_texture_props, std::move(buffer));
   }
   {
     DataBuffer buffer(4 * sizeof(float));
     buffer.fill_zero();
-    bloom_texture_props.identifier = "BloomCompute-2";
-    bloom_textures[2] = Texture::construct_from_buffer(
+    bloom_texture_props.identifier = "bloom_compute_2";
+    bloom_textures.at(2) = Texture::construct_from_buffer(
         *device, bloom_texture_props, std::move(buffer));
   }
 

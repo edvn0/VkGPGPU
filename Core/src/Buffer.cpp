@@ -3,7 +3,7 @@
 #include "Buffer.hpp"
 
 #include "Allocator.hpp"
-#include "DataBuffer.hpp"
+#include "DataBuffer.hpp" // for human_readable_size
 #include "DebugMarker.hpp"
 #include "Device.hpp"
 #include "Verify.hpp"
@@ -243,7 +243,7 @@ void Buffer::resize(u64 new_size) {
   initialise_descriptor_info();
 
   // Optional: Debug message to indicate successful resize
-  debug("Resized Buffer (type: {}, new size: {})", type,
+  debug("Resized buffer (type: {}, new size: {})", type,
         human_readable_size(new_size));
 }
 

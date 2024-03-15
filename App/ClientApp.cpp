@@ -313,7 +313,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
       }
 
       if (path.extension() == ".gltf" || path.extension() == ".obj" ||
-          path.extension() == ".fbx") {
+          path.extension() == ".fbx" || path.extension() == ".glb") {
         auto entity = active_scene->create_entity(path.filename().string());
         entity.add_component<ECS::MeshComponent>(
             Core::Mesh::reference_import_from(*get_device(), path));
@@ -696,6 +696,9 @@ void ClientApp::on_event(Event &event) {
   });
   dispatcher.dispatch<MouseButtonPressedEvent>(
       [this](MouseButtonPressedEvent &event) {
+        if (ImGuizmo::IsUsing())
+          return false;
+
         if (event.get_button() != MouseCode::MOUSE_BUTTON_LEFT)
           return false;
 
