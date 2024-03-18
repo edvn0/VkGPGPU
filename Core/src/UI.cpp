@@ -6,6 +6,8 @@
 
 #include <backends/imgui_impl_vulkan.h>
 #include <fmt/format.h>
+#include <iomanip>
+#include <sstream>
 
 #include "imgui-notify/ImGuiNotify.hpp"
 
@@ -17,15 +19,30 @@ template <typename... Args> auto make_id(Args &&...data) {
 
 namespace Core::UI {
 
-static uint32_t ui_id_counter = 0;
-static char ui_id_buffer[16] = "##";
-
 auto push_id() -> void { ImGui::PushID(generate_id()); }
 
 auto pop_id() -> void { ImGui::PopID(); }
 
+static unsigned int ui_id_counter =
+    0; // Ensure this is initialized appropriately
+static char ui_id_buffer[10] =
+    "ID"; // Adjust size based on expected range of ui_id_counter
+
 const char *generate_id() {
-  _itoa_s(ui_id_counter++, ui_id_buffer + 2, sizeof(ui_id_buffer) - 2, 16);
+  std::ostringstream stream;
+  stream << "ID" << std::hex
+         << ui_id_counter++; // Convert to hexadecimal and increment
+  std::string id_str = stream.str();
+
+  // Ensure the buffer is large enough for the string and a null terminator
+  size_t buffer_length = sizeof(ui_id_buffer);
+  if (id_str.length() + 1 <= buffer_length) {
+    std::copy(id_str.begin(), id_str.end(), ui_id_buffer);
+    ui_id_buffer[id_str.length()] = '\0'; // Null-terminate the string
+  } else {
+    // Handle error or buffer overflow
+  }
+
   return ui_id_buffer;
 }
 

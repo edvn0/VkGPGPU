@@ -25,13 +25,20 @@ auto Texture::construct(const Device &device,
 
 auto Texture::construct_from_command_buffer(const Device &device,
                                             const TextureProperties &properties,
-
                                             CommandBuffer &command_buffer)
     -> Scope<Texture> {
-  command_buffer.begin(0);
   auto constructed =
       Scope<Texture>(new Texture(device, properties, command_buffer));
-  command_buffer.end_and_submit();
+  return constructed;
+}
+
+auto Texture::construct_from_command_buffer(const Device &device,
+                                            const TextureProperties &properties,
+                                            DataBuffer &&buffer,
+                                            CommandBuffer &command_buffer)
+    -> Scope<Texture> {
+  auto constructed = Scope<Texture>(
+      new Texture(device, properties, std::move(buffer), &command_buffer));
   return constructed;
 }
 
@@ -100,8 +107,8 @@ auto determine_mip_count(const MipGeneration &mipGeneration,
                     mipGeneration.strategy);
 }
 
-ResizeInfo determine_resize_info(const ResizeStrategy &strategy,
-                                 const Extent<u32> &original_extent) {
+static auto determine_resize_info(const ResizeStrategy &strategy,
+                                  const Extent<u32> &original_extent) {
   return std::visit(
       overloaded{
           [&](const ResizeMethod &method) -> ResizeInfo {
@@ -121,7 +128,7 @@ ResizeInfo determine_resize_info(const ResizeStrategy &strategy,
               };
             }
             case ResizeMethod::ByAbsoluteSize: {
-              auto size = std::get<Extent<u32>>(strategy.strategy);
+              auto &size = std::get<Extent<u32>>(strategy.strategy);
               return {
                   size,
                   true,
@@ -135,7 +142,10 @@ ResizeInfo determine_resize_info(const ResizeStrategy &strategy,
             }
           },
           [&](const Extent<u32> &sizeData) -> ResizeInfo {
-            return {{sizeData.width, sizeData.height}, true};
+            return {
+                sizeData,
+                true,
+            };
           },
           [&](const ScalingFactorData &scale_data) -> ResizeInfo {
             auto scaled = original_extent.as<float>();
@@ -187,6 +197,9 @@ auto Texture::on_resize(const Extent<u32> &new_extent) -> void {
                                 .border_color = properties.border_color,
                             },
                             data_buffer);
+
+  debug("Resized texture '{}', size: {}", properties.identifier,
+        human_readable_size(cached_size));
 }
 
 Texture::Texture(const Device &dev, usize size, const Extent<u32> &extent)
@@ -303,8 +316,53 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
 }
 
 Texture::Texture(const Device &dev, const TextureProperties &props,
+                 DataBuffer &&buffer, CommandBuffer *command_buffer)
+    : device(&dev), properties(props), data_buffer(std::move(buffer)) {
+
+  properties.identifier = properties.path.filename().string();
+
+  u32 mip_count =
+      determine_mip_count(properties.mip_generation, properties.extent);
+
+  const auto resize_info =
+      determine_resize_info(properties.resize, properties.extent);
+
+  ImageProperties image_properties{
+      .extent = properties.extent,
+      .mip_info =
+          {
+              .mips = mip_count,
+              .use_mips = true,
+          },
+      .resize_info = resize_info,
+      .generate_per_mip_image_views = mip_count > 1,
+      .format = properties.format,
+      .tiling = properties.tiling,
+      .usage = properties.usage,
+      .layout = properties.layout,
+      .min_filter = properties.min_filter,
+      .max_filter = properties.max_filter,
+      .address_mode = properties.address_mode,
+      .border_color = properties.border_color,
+      .command_buffer_override = command_buffer,
+  };
+
+  image = make_scope<Image>(*device, image_properties, data_buffer);
+  cached_size = data_buffer.size();
+  debug("Created texture '{}', {} with size: {}", properties.identifier,
+        properties.extent, human_readable_size(cached_size));
+
+  if (properties.texture_data_strategy == TextureDataStrategy::Delete) {
+    data_buffer.clear();
+  }
+}
+
+Texture::Texture(const Device &dev, const TextureProperties &props,
                  CommandBuffer &command_buf)
-    : Texture(dev, props) {
+    : device(&dev), properties(props),
+      data_buffer(load_databuffer_from_file(
+          properties.path, properties.extent,
+          determine_resize_info(properties.resize, properties.extent))) {
   if (!FS::exists(properties.path)) {
     throw NotFoundException(fmt::format("Texture file '{}' does not exist!",
                                         properties.path.string()));
@@ -335,9 +393,14 @@ Texture::Texture(const Device &dev, const TextureProperties &props,
       .max_filter = properties.max_filter,
       .address_mode = properties.address_mode,
       .border_color = properties.border_color,
+      .command_buffer_override = &command_buf,
   };
 
-  image = make_scope<Image>(*device, image_properties, data_buffer);
+  if (!data_buffer.valid()) {
+    image = make_scope<Image>(*device, image_properties);
+  } else {
+    image = make_scope<Image>(*device, image_properties, data_buffer);
+  }
   cached_size = data_buffer.size();
   debug("Created texture '{}', {} with size: {}", properties.identifier,
         properties.extent, human_readable_size(cached_size));
@@ -380,6 +443,10 @@ auto Texture::write_to_file(const FS::Path &path) const -> bool {
   stbi_write_png(path.string().c_str(), width, height, 4, buffer.data(), 0);
 
   return true;
+}
+
+auto Texture::transition_image(ImageLayout layout) -> void {
+  return image->transition_image_to(layout);
 }
 
 } // namespace Core

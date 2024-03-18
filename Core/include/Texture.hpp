@@ -7,6 +7,7 @@
 #include "ImageProperties.hpp"
 
 #include <variant>
+#include <vulkan/vulkan.h>
 
 namespace Core {
 
@@ -120,6 +121,8 @@ public:
     return properties.extent;
   }
 
+  auto transition_image(ImageLayout) -> void;
+
   [[nodiscard]] auto hash() const -> usize;
   [[nodiscard]] auto get_file_path() const
       -> std::optional<std::filesystem::path> {
@@ -142,6 +145,10 @@ public:
   static auto construct_from_command_buffer(const Device &,
                                             const TextureProperties &,
                                             CommandBuffer &) -> Scope<Texture>;
+  static auto construct_from_command_buffer(const Device &,
+                                            const TextureProperties &,
+                                            DataBuffer &&, CommandBuffer &)
+      -> Scope<Texture>;
   static auto construct_storage(const Device &, const TextureProperties &)
       -> Scope<Texture>;
   static auto construct_shader(const Device &, const TextureProperties &)
@@ -152,6 +159,8 @@ public:
 
 private:
   Texture(const Device &, const TextureProperties &, CommandBuffer * = nullptr);
+  Texture(const Device &, const TextureProperties &, DataBuffer &&,
+          CommandBuffer *);
   Texture(const Device &, const TextureProperties &, CommandBuffer &);
   Texture(const Device &, usize, const Extent<u32> &);
   Texture(const Device &, const TextureProperties &, DataBuffer &&);

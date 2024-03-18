@@ -175,14 +175,9 @@ auto InterfaceSystem::end_frame() -> void {
           0.2F,
       },
   };
-  static constexpr VkClearDepthStencilValue depth_stencil_clear{
-      .depth = 1.0F,
-      .stencil = 0,
-  };
 
-  std::array<VkClearValue, 2> clear_values{};
+  std::array<VkClearValue, 1> clear_values{};
   clear_values[0].color = clear_colour;
-  clear_values[1].depthStencil = depth_stencil_clear;
 
   const auto &[width, height] = swapchain->get_extent();
 

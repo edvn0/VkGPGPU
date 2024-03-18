@@ -28,7 +28,10 @@ struct WindowProperties {
 class Window {
 public:
   virtual ~Window();
+
   auto update() -> void;
+  auto wait_for_events() -> void;
+
   [[nodiscard]] auto get_native() const -> const GLFWwindow *;
   [[nodiscard]] auto get_native() -> GLFWwindow *;
   [[nodiscard]] auto get_surface() const -> VkSurfaceKHR;

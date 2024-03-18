@@ -112,6 +112,7 @@ public:
   [[nodiscard]] auto get_entity(Core::u64) -> std::optional<Entity>;
 
   auto clear() -> void { registry.clear(); }
+  auto save(std::string_view = "") -> void;
   auto sort(auto &&func) -> void {
     registry.sort(std::forward<decltype(func)>(func));
   }

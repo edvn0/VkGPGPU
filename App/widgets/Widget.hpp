@@ -5,6 +5,7 @@
 #include "Types.hpp"
 
 #include "core/Forward.hpp"
+#include "ecs/Forward.hpp"
 #include "ecs/ISceneObserver.hpp"
 
 class Widget : public ECS::ISceneObserver {
@@ -16,4 +17,9 @@ public:
                          const Core::Swapchain &) = 0;
   virtual void on_destroy() = 0;
   virtual void on_event(Core::Event &) {}
+};
+
+struct ISceneContextDependent {
+  virtual ~ISceneContextDependent() = default;
+  virtual auto set_scene_context(ECS::Scene *) -> void = 0;
 };

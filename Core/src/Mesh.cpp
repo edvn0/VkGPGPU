@@ -21,7 +21,7 @@
 namespace Core {
 
 auto create_texture_from_raw_data(const Device *device, const byte *data,
-                                  int width, int height) -> Scope<Texture> {
+                                  i32 width, i32 height) -> Scope<Texture> {
   DataBuffer buffer{width * height * 4 * sizeof(byte)};
   buffer.write(data, width * height * 4 * sizeof(byte));
 
@@ -46,7 +46,7 @@ auto create_texture_from_memory(const Device *device, const aiTexel *data,
   int channels{};
   auto *raw_pixels =
       stbi_load_from_memory(std::bit_cast<u8 *>(data),
-                            static_cast<int>(size * 4 * sizeof(unsigned char)),
+                            static_cast<i32>(size * 4 * sizeof(unsigned char)),
                             &width, &height, &channels, STBI_rgb_alpha);
 
   if (!raw_pixels) {
@@ -62,7 +62,7 @@ auto create_texture_from_memory(const Device *device, const aiTexel *data,
 }
 
 auto create_texture_from_raw_data(const Device *device, const aiTexel *data,
-                                  int width, int height) -> Scope<Texture> {
+                                  i32 width, i32 height) -> Scope<Texture> {
   DataBuffer buffer{width * height * 4 * 4 * sizeof(byte)};
   buffer.write(std::bit_cast<u8 *>(data),
                width * height * 4 * 4 * sizeof(byte));
@@ -82,9 +82,9 @@ auto create_texture_from_raw_data(const Device *device, const aiTexel *data,
 }
 
 // Select the kinds of messages you want to receive on this log stream
-static constexpr unsigned int severity =
-    Assimp::Logger::Debugging | Assimp::Logger::Info | Assimp::Logger::Err |
-    Assimp::Logger::Warn;
+static constexpr u32 severity = Assimp::Logger::Debugging |
+                                Assimp::Logger::Info | Assimp::Logger::Err |
+                                Assimp::Logger::Warn;
 
 auto Mesh::get_materials_span() const -> std::span<Material *> {
   std::vector<Material *> raw_pointers;
@@ -199,9 +199,10 @@ auto Mesh::reference_import_from(const Device &device,
   return mesh_cache.at(key);
 }
 
+// Quite hacky. Works for now :)
 auto Mesh::get_cube() -> const Ref<Mesh> & {
-  static const auto path = FS::model("cube.gltf").string();
-  return mesh_cache.at(path);
+  static const auto &mesh = mesh_cache.at(FS::model("cube.gltf").string());
+  return mesh;
 }
 
 Mesh::Mesh(const Device &dev, const FS::Path &path)

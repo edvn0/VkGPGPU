@@ -8,7 +8,8 @@ namespace Core {
 
 auto DataBuffer::allocate_storage(usize new_size) -> void {
   if (data) {
-    info("Resetting data storage at {}", fmt::ptr(data.get()));
+    info("Resetting data storage at {}. Old size was: {}", fmt::ptr(data.get()),
+         human_readable_size(size()));
     data.reset();
   }
   data = std::make_unique<u8[]>(new_size);
@@ -20,7 +21,7 @@ auto human_readable_size(usize bytes, i32 places) -> std::string {
   const auto max_unit_index = units.size() - 1;
 
   usize unit_index = 0;
-  double size = bytes;
+  auto size = static_cast<double>(bytes);
 
   while (size >= 1024 && unit_index < max_unit_index) {
     size /= 1024;

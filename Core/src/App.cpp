@@ -66,7 +66,7 @@ auto App::frame() const -> u32 { return swapchain->current_frame(); }
 auto App::forward_incoming_events(Event &event) -> void {
   EventDispatcher dispatcher(event);
   dispatcher.dispatch<WindowResizeEvent>([this](WindowResizeEvent &event) {
-    const Extent extent{event.get_width(), event.get_height()};
+    const Extent<i32> extent{event.get_width(), event.get_height()};
     on_resize(extent.as<u32>());
     return true;
   });
@@ -94,6 +94,7 @@ auto App::run() -> void {
     if (was_resized()) {
       on_resize(window->get_extent());
       window->reset_resize_status();
+      vkDeviceWaitIdle(device->get_device());
       continue;
     }
 

@@ -8,11 +8,13 @@
 #include "ecs/Scene.hpp"
 #include "ecs/components/Component.hpp"
 
-class SceneWidget : public Widget {
+class SceneWidget : public Widget, public ISceneContextDependent {
 public:
   explicit SceneWidget(const Core::Device &, std::optional<entt::entity> &);
 
-  auto set_scene_context(ECS::Scene *scene) -> void { context = scene; }
+  auto set_scene_context(ECS::Scene *scene) -> void override {
+    context = scene;
+  }
 
   void on_update(Core::floating ts) override {}
   void on_interface(Core::InterfaceSystem &) override;

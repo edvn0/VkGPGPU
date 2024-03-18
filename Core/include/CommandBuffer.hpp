@@ -37,6 +37,7 @@ struct CommandBufferProperties {
   bool is_primary{true};
   bool owned_by_swapchain{false};
   bool record_stats{false};
+  bool mutex_around_queue{false};
 };
 
 class ImmediateCommandBuffer {

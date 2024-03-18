@@ -104,10 +104,8 @@ void ClientApp::on_update(floating ts) {
 void ClientApp::on_create() {
   scene_renderer.create(*get_swapchain());
 
-  editor_scene = make_scope<ECS::Scene>("Default");
-  active_scene.swap(editor_scene);
-  auto entity = active_scene->create_entity("Test");
-
+  editor_scene = make_ref<ECS::Scene>("Default");
+  active_scene = editor_scene;
   active_scene->on_create(*get_device(), *get_window(), *get_swapchain());
 
   // ECS::SceneSerialiser serialiser;
@@ -121,7 +119,7 @@ void ClientApp::on_create() {
   auto widget = make_scope<SceneWidget>(*get_device(), selected_entity);
   widget->set_scene_context(active_scene.get());
 
-  scene_widget = widget.get();
+  scene_context_dependents.push_back(widget.get());
 
   widgets.emplace_back(std::move(widget));
   widgets.emplace_back(std::move(fs_widget));
@@ -287,8 +285,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         static_cast<float>(x),
         static_cast<float>(y),
     };
-    viewport_bounds[1] = {viewport_bounds[0].x + extent.width,
-                          viewport_bounds[0].y + extent.height};
+    viewport_bounds[1] = {
+        viewport_bounds[0].x + extent.width,
+        viewport_bounds[0].y + extent.height,
+    };
 
     const auto is_hovering = ImGui::IsMouseHoveringRect(
         ImVec2(viewport_bounds[0].x, viewport_bounds[0].y),
@@ -510,6 +510,13 @@ void ClientApp::on_interface(InterfaceSystem &system) {
 }
 
 auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
+  // Dummy glfw loop to check if the window size > 0
+  Extent ext = new_extent;
+  while (ext.width == 0 || ext.height == 0) {
+    get_window()->wait_for_events();
+    ext = get_window()->get_extent();
+  }
+
   scene_renderer.on_resize(new_extent);
 
   info("New extent: {}", new_extent);
@@ -543,7 +550,12 @@ auto ClientApp::load_entity() -> std::optional<ECS::Entity> {
 static auto cast_ray(const glm::mat4 &projection, const glm::mat4 &view,
                      const glm::vec3 &camera_position, float mx, float my)
     -> std::pair<glm::vec3, glm::vec3> {
-  glm::vec4 mouse_clip_pos = {mx, my, -1.0f, 1.0f};
+  glm::vec4 mouse_clip_pos = {
+      mx,
+      my,
+      -1.0f,
+      1.0f,
+  };
 
   auto inverse_proj = glm::inverse(projection);
   auto inverse_view = glm::inverse(glm::mat3(view));
@@ -668,6 +680,13 @@ void ClientApp::on_event(Event &event) {
       return true;
     }
 
+    if (event.get_keycode() == KeyCode::KEY_N &&
+        Input::pressed<KeyCode::KEY_LEFT_CONTROL>()) {
+      active_scene->save();
+      active_scene->clear();
+      return true;
+    }
+
     if (event.get_keycode() == KeyCode::KEY_DELETE) {
       delete_selected_entity();
       return true;
@@ -750,7 +769,6 @@ void ClientApp::create_dummy_scene() {
   mesh_comp.mesh =
       Mesh::reference_import_from(*get_device(), FS::model("sphere.gltf"));
 
-#if 0
   for (int x = 0; x < grid_size; ++x) {
     for (int y = 0; y < grid_size; ++y) {
       for (int z = 0; z < grid_size; ++z) {
@@ -770,35 +788,32 @@ void ClientApp::create_dummy_scene() {
         float randomSize = Random::as_float(0.5, 100.0F);
         geom.parameters = ECS::BasicGeometry::CubeParameters{randomSize};
 
-        auto randomSize = Random::vec3(0.5, 100.0F);
-        entity.get_transform().scale = randomSize;
+        auto randomSize3 = Random::vec3(0.5, 100.0F);
+        entity.get_transform().scale = randomSize3;
 
         entity.add_component<ECS::TextureComponent>(
             glm::vec4{gradient_color, 1.0F});
-        entity.add_component<ECS::MeshComponent>(Mesh::reference_import_from(
-            *get_device(), FS::model("sphere.gltf")));
+        // entity.add_component<ECS::MeshComponent>(Mesh::reference_import_from(
+        //     *get_device(), FS::model("sphere.gltf")));
       }
     }
   }
-#endif
 
   active_scene->sort();
 }
 
 void ClientApp::on_scene_play() {
-  // SelectionManager::DeselectAll();
-
   scene_state_fsm.transition_to(SceneState::Play);
 
   runtime_scene = make_scope<ECS::Scene>("Default");
-  editor_scene->copy_to(*runtime_scene);
+  active_scene->copy_to(*runtime_scene);
   // runtime_scene->SetSceneTransitionCallback(
   //     [this](const std::string &scene) { QueueSceneTransition(scene); });
   // ScriptEngine::SetSceneContext(runtime_scene, m_ViewportRenderer);
   // AssetEditorPanel::SetSceneContext(runtime_scene);
   runtime_scene->on_runtime_start();
   active_scene.swap(runtime_scene);
-  scene_widget->set_scene_context(active_scene.get());
+  set_scene_context();
 }
 
 void ClientApp::on_scene_stop() {
@@ -814,7 +829,7 @@ void ClientApp::on_scene_stop() {
   // AssetEditorPanel::SetSceneContext(editor_scene);
   // MiniAudioEngine::SetSceneContext(editor_scene);
   active_scene.swap(editor_scene);
-  scene_widget->set_scene_context(active_scene.get());
+  set_scene_context();
 }
 
 void ClientApp::on_scene_start_simulation() {
@@ -826,7 +841,7 @@ void ClientApp::on_scene_start_simulation() {
   // AssetEditorPanel::SetSceneContext(simulation_scene);
   simulation_scene->on_simulation_start();
   active_scene.swap(simulation_scene);
-  scene_widget->set_scene_context(active_scene.get());
+  set_scene_context();
 }
 
 void ClientApp::on_scene_stop_simulation() {
@@ -834,7 +849,7 @@ void ClientApp::on_scene_stop_simulation() {
   scene_state_fsm.transition_to(SceneState::Edit);
   simulation_scene.reset();
   active_scene.swap(editor_scene);
-  scene_widget->set_scene_context(active_scene.get());
+  set_scene_context();
 }
 
 static inline ImRect RectExpanded(const ImRect &rect, float x, float y) {
@@ -847,100 +862,103 @@ static inline ImRect RectExpanded(const ImRect &rect, float x, float y) {
 }
 
 void ClientApp::central_toolbar() {
-  UI::push_id();
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+  auto &colors = ImGui::GetStyle().Colors;
+  const auto &buttonHovered = colors[ImGuiCol_ButtonHovered];
+  ImGui::PushStyleColor(
+      ImGuiCol_ButtonHovered,
+      ImVec4(buttonHovered.x, buttonHovered.y, buttonHovered.z, 0.5f));
+  const auto &buttonActive = colors[ImGuiCol_ButtonActive];
+  ImGui::PushStyleColor(
+      ImGuiCol_ButtonActive,
+      ImVec4(buttonActive.x, buttonActive.y, buttonActive.z, 0.5f));
 
-  const float buttonSize = 18.0f + 5.0f;
-  const float edgeOffset = 4.0f;
-  const float windowHeight = 32.0f;
-  const float numberOfButtons = 3.0f;
-  const float backgroundWidth = edgeOffset * 6.0f +
-                                buttonSize * numberOfButtons +
-                                edgeOffset * (numberOfButtons - 1.0f) * 2.0f;
+  ImGui::Begin("##toolbar", nullptr,
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar |
+                   ImGuiWindowFlags_NoScrollWithMouse);
 
-  float toolbarX = (viewport_bounds[0].x + viewport_bounds[1].x) / 2.0f;
-  ImGui::SetNextWindowPos(ImVec2(toolbarX - (backgroundWidth / 2.0f),
-                                 viewport_bounds[0].y + edgeOffset));
-  ImGui::SetNextWindowSize(ImVec2(backgroundWidth, windowHeight));
-  ImGui::SetNextWindowBgAlpha(0.0f);
-  ImGui::Begin("##viewport_central_toolbar", 0,
-               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking);
+  bool toolbarEnabled = active_scene != nullptr;
 
-  const float desiredHeight = 26.0f + 5.0f;
-  ImRect background = RectExpanded(ImGui::GetCurrentWindow()->Rect(), 0.0f,
-                                   -(windowHeight - desiredHeight) / 2.0f);
-  ImGui::GetWindowDrawList()->AddRectFilled(background.Min, background.Max,
-                                            IM_COL32(15, 15, 15, 127), 4.0f);
+  ImVec4 tintColor = ImVec4(1, 1, 1, 1);
+  if (!toolbarEnabled)
+    tintColor.w = 0.5f;
 
-  {
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
-                        ImVec2(edgeOffset * 2.0f, 0));
-    // UI::ScopedStyle enableSpacing(ImGuiStyleVar_ItemSpacing,
-    //                              ImVec2(edgeOffset * 2.0f, 0));
+  float size = ImGui::GetWindowHeight() - 4.0f;
+  ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) -
+                       (size * 0.5f));
 
-    const ImColor c_ButtonTint = ImColor(0.5, 0.9, 0.1, 1.0f);
-    const ImColor c_SimulateButtonTint =
-        scene_state_fsm.get_current_state() == SceneState::Simulate
-            ? ImColor(1.0f, 0.75f, 0.75f, 1.0f)
-            : c_ButtonTint;
+  const auto current_scene_state = scene_state_fsm.get_current_state();
+  bool has_play_button = current_scene_state == SceneState::Edit ||
+                         current_scene_state == SceneState::Play;
+  bool has_simulate_button = current_scene_state == SceneState::Edit ||
+                             current_scene_state == SceneState::Simulate;
+  bool has_pause_button = current_scene_state != SceneState::Edit;
 
-    auto toolbar_button = [buttonSize](const Texture &icon, const ImColor &tint,
-                                       float paddingY = 0.0f) {
-      const auto as_float = icon.get_extent().as<floating>();
-      const float height =
-          std::min((float)as_float.height, buttonSize) - paddingY * 2.0f;
-      const float width =
-          (float)as_float.width / (float)as_float.height * height;
-      const bool clicked =
-          ImGui::InvisibleButton(UI::generate_id(), ImVec2(width, height));
-      UI::image(icon, UI::InterfaceImageProperties{
-                          .extent = Extent<float>{width, height}.as<u32>(),
-                      });
-
-      return clicked;
-    };
-
-    auto &buttonTex = scene_state_fsm.get_current_state() == SceneState::Play
-                          ? *stop_icon
-                          : *play_icon;
-    if (toolbar_button(buttonTex, c_ButtonTint)) {
-      if (scene_state_fsm.get_current_state() == SceneState::Edit)
+  if (has_play_button) {
+    auto &icon = (current_scene_state == SceneState::Edit ||
+                  current_scene_state == SceneState::Simulate)
+                     ? *play_icon
+                     : *stop_icon;
+    if (UI::image_button(icon) && toolbarEnabled) {
+      if (current_scene_state == SceneState::Edit ||
+          current_scene_state == SceneState::Simulate) {
         on_scene_play();
-      else if (scene_state_fsm.get_current_state() != SceneState::Simulate)
+      } else if (current_scene_state == SceneState::Play) {
         on_scene_stop();
+      }
     }
-    /// UI::SetTooltip(scene_state_fsm.get_current_state() == SceneState::Edit
-    //                   ? "Play"
-    //                   : "Stop");
-
-    if (toolbar_button(*simulate_icon, c_SimulateButtonTint)) {
-      if (scene_state_fsm.get_current_state() == SceneState::Edit)
-        on_scene_start_simulation();
-      else if (scene_state_fsm.get_current_state() == SceneState::Simulate)
-        on_scene_stop_simulation();
-    }
-    // UI::SetTooltip(scene_state_fsm.get_current_state() ==
-    // SceneState::Simulate
-    //                    ? "Stop"
-    //                    : "Simulate Physics");
-
-    if (toolbar_button(*pause_icon, c_ButtonTint)) {
-      if (scene_state_fsm.get_current_state() == SceneState::Play)
-        scene_state_fsm.transition_to(SceneState::Pause);
-      else if (scene_state_fsm.get_current_state() == SceneState::Pause)
-        scene_state_fsm.transition_to(SceneState::Play);
-    }
-    // UI::SetTooltip(scene_state_fsm.get_current_state() == SceneState::Pause
-    //                    ? "Resume"
-    //                    : "Pause");
-    ImGui::PopStyleVar();
   }
-  UI::end();
 
-  UI::pop_id();
+  if (has_simulate_button) {
+    if (has_play_button)
+      ImGui::SameLine();
 
-  ImGui::PopStyleVar(4);
+    auto &icon = (current_scene_state == SceneState::Edit ||
+                  current_scene_state == SceneState::Play)
+                     ? *simulate_icon
+                     : *stop_icon;
+    if (UI::image_button(icon) && toolbarEnabled) {
+      if (current_scene_state == SceneState::Edit ||
+          current_scene_state == SceneState::Play) {
+        on_scene_start_simulation();
+      } else if (current_scene_state == SceneState::Simulate) {
+        on_scene_stop_simulation();
+      }
+    }
+  }
+  /*
+  if (has_pause_button) {
+    bool isPaused = active_scene->is_paused();
+    ImGui::SameLine();
+    {
+      Ref<Texture2D> icon = m_IconPause;
+      if (ImGui::ImageButton((ImTextureID)(uint64_t)icon->GetRendererID(),
+                             ImVec2(size, size), ImVec2(0, 0), ImVec2(1, 1), 0,
+                             ImVec4(0.0f, 0.0f, 0.0f, 0.0f), tintColor) &&
+          toolbarEnabled) {
+        m_ActiveScene->SetPaused(!isPaused);
+      }
+    }
+
+    // Step button
+    if (isPaused) {
+      ImGui::SameLine();
+      {
+        Ref<Texture2D> icon = m_IconStep;
+        bool isPaused = m_ActiveScene->IsPaused();
+        if (ImGui::ImageButton((ImTextureID)(uint64_t)icon->GetRendererID(),
+                               ImVec2(size, size), ImVec2(0, 0), ImVec2(1, 1),
+                               0, ImVec4(0.0f, 0.0f, 0.0f, 0.0f), tintColor) &&
+            toolbarEnabled) {
+          m_ActiveScene->Step();
+        }
+      }
+    }
+  }
+  */
+  ImGui::PopStyleVar(2);
+  ImGui::PopStyleColor(3);
+  ImGui::End();
 }

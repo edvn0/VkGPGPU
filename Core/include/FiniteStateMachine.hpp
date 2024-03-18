@@ -17,6 +17,7 @@ private:
 
 public:
   FiniteStateMachine(StateEnum initial_state) : current_state(initial_state) {}
+  virtual ~FiniteStateMachine() = default;
 
   void transition_to(StateEnum new_state) {
     on_leave_state(current_state);

@@ -179,6 +179,18 @@ Scene::~Scene() {
   info("Scene {} destroyed and serialised.", name);
 }
 
+auto Scene::save(std::string_view path) -> void {
+  SceneSerialiser serialiser;
+  try {
+    auto chosen = path.empty() ? name + ".scene"
+                               : std::string{path} + "-" + name + ".scene";
+    serialiser.serialise(*this, Core::FS::Path{chosen});
+  } catch (const std::exception &e) {
+    error("Failed to serialise scene: {}", e.what());
+  }
+  info("Scene {} serialised.", name);
+}
+
 auto Scene::create_entity(const std::string_view entity_name, bool add_observer)
     -> Entity {
   Entity entity{this, entity_name};
@@ -223,12 +235,12 @@ auto Scene::on_render_runtime(Core::SceneRenderer &renderer, Core::floating dt)
     auto point_light_view =
         registry.group<PointLightComponent>(entt::get<TransformComponent>);
     light_environment.point_light_buffer.resize(point_light_view.size());
-    Core::u32 pointLightIndex = 0;
+    Core::u32 point_light_index = 0;
     for (auto e : point_light_view) {
       Entity entity(this, e);
       auto [transform_component, light_component] =
           point_light_view.get<TransformComponent, PointLightComponent>(e);
-      light_environment.point_light_buffer[pointLightIndex++] = {
+      light_environment.point_light_buffer[point_light_index++] = {
           transform_component.position, light_component.intensity,
           light_component.radiance,     light_component.min_radius,
           light_component.radius,       light_component.falloff,
@@ -418,12 +430,12 @@ auto Scene::on_render_editor(Core::SceneRenderer &renderer, Core::floating dt,
     auto point_light_view =
         registry.group<PointLightComponent>(entt::get<TransformComponent>);
     light_environment.point_light_buffer.resize(point_light_view.size());
-    Core::u32 pointLightIndex = 0;
+    Core::u32 point_light_index = 0;
     for (auto e : point_light_view) {
       Entity entity(this, e);
       auto [transform_component, light_component] =
           point_light_view.get<TransformComponent, PointLightComponent>(e);
-      light_environment.point_light_buffer[pointLightIndex++] = {
+      light_environment.point_light_buffer[point_light_index++] = {
           transform_component.position, light_component.intensity,
           light_component.radiance,     light_component.min_radius,
           light_component.radius,       light_component.falloff,

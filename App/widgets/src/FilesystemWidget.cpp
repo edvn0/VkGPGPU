@@ -16,11 +16,15 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
                                   })) {
   history.push_back(current_path);
 
+  static constexpr auto post_insert_hook = [](Scope<Texture> &texture) -> void {
+    texture->transition_image(ImageLayout::ShaderReadOnlyOptimal);
+  };
+
   pop_one_from_texture_cache_thread = std::jthread{
       [this](const auto &stop_token) {
         while (!stop_token.stop_requested()) {
           std::this_thread::sleep_for(std::chrono::milliseconds(160));
-          texture_cache.update_one();
+          texture_cache.update_one(post_insert_hook);
         }
       },
   };
@@ -99,6 +103,13 @@ void FilesystemWidget::render_navigation_buttons() {
   }
 }
 
+static constexpr auto is_image = [](const auto &path) {
+  const auto extension = path.extension().string();
+  return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+         extension == ".bmp" || extension == ".tga" || extension == ".gif" ||
+         extension == ".psd" || extension == ".hdr" || extension == ".pic";
+};
+
 void FilesystemWidget::render_directory_contents() {
   auto render_file_or_directory = [&](const auto &entry, const auto size) {
     Extent<u32> extent{
@@ -117,13 +128,6 @@ void FilesystemWidget::render_directory_contents() {
         UI::image(*file_icon, {extent});
       }
     }
-  };
-
-  static constexpr auto is_image = [](const auto &path) {
-    const auto extension = path.extension().string();
-    return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
-           extension == ".bmp" || extension == ".tga" || extension == ".gif" ||
-           extension == ".psd" || extension == ".hdr" || extension == ".pic";
   };
 
   static constexpr float padding = 16.0F;
@@ -155,7 +159,7 @@ void FilesystemWidget::render_directory_contents() {
             .identifier = filename_string,
             .path = path,
             .extent = extent,
-            .tiling = ImageTiling::Linear,
+            .tiling = ImageTiling::Optimal,
             .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
             .layout = ImageLayout::ShaderReadOnlyOptimal,

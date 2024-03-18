@@ -126,11 +126,21 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
       .enabledExtensionCount = static_cast<u32>(enabled_extensions.size()),
       .ppEnabledExtensionNames = enabled_extensions.data(),
   };
+
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
   if (enable_validation_layers) {
+    std::array<VkValidationFeatureEnableEXT, 1> enabled_features{};
+    enabled_features[0] =
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+
+    VkValidationFeaturesEXT validation_features{};
+    validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    validation_features.enabledValidationFeatureCount = enabled_features.size();
+    validation_features.pEnabledValidationFeatures = enabled_features.data();
+
     populateDebugMessengerCreateInfo(debug_create_info);
-    create_info.pNext =
-        (VkDebugUtilsMessengerCreateInfoEXT *)&debug_create_info;
+    create_info.pNext = &debug_create_info;
+    debug_create_info.pNext = &validation_features;
   }
 
   verify(vkCreateInstance(&create_info, nullptr, &instance), "vkCreateInstance",

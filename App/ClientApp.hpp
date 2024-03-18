@@ -64,19 +64,6 @@ enum class GuizmoOperation : std::uint16_t {
   UNIVERSAL = T | R | Su
 };
 
-struct RayVisualization {
-  glm::vec3 start;
-  glm::vec3 end;
-  glm::vec3 color;
-  std::chrono::steady_clock::time_point creationTime;
-  float duration; // Duration in seconds before the ray fades completely
-
-  RayVisualization(const glm::vec3 &start, const glm::vec3 &end,
-                   const glm::vec3 &color, float duration)
-      : start(start), end(end), color(color),
-        creationTime(std::chrono::steady_clock::now()), duration(duration) {}
-};
-
 class SceneWidget;
 
 class ClientApp : public App {
@@ -92,13 +79,13 @@ public:
   void on_event(Event &) override;
 
 private:
-  Scope<ECS::Scene> editor_scene;
-  Scope<ECS::Scene> active_scene;
-  Scope<ECS::Scene> simulation_scene;
-  Scope<ECS::Scene> runtime_scene;
+  Ref<ECS::Scene> editor_scene;
+  Ref<ECS::Scene> active_scene;
+  Ref<ECS::Scene> simulation_scene;
+  Ref<ECS::Scene> runtime_scene;
 
-  SceneWidget *scene_widget{nullptr}; // Owned by the vector, we just need to
-                                      // handle this case specifically
+  // Non owning :) owned by the parent App.
+  std::vector<ISceneContextDependent *> scene_context_dependents;
 
   std::optional<entt::entity> selected_entity;
   std::tuple<u32, u32> main_position{};
@@ -126,7 +113,12 @@ private:
   bool right_click_started_in_viewport{false};
   bool editor_camera_in_runtime{false};
 
-  enum class SceneState { Edit = 0, Play = 1, Pause = 2, Simulate = 3 };
+  enum class SceneState : Core::u8 {
+    Edit = 0,
+    Play = 1,
+    Pause = 2,
+    Simulate = 3,
+  };
   FiniteStateMachine<SceneState> scene_state_fsm{SceneState::Edit};
 
   auto load_entity() -> std::optional<ECS::Entity>;
@@ -139,7 +131,6 @@ private:
 
   SceneRenderer scene_renderer;
 
-  std::vector<RayVisualization> object_picking_rays{};
   void create_dummy_scene();
 
   void on_scene_play();
@@ -148,4 +139,10 @@ private:
   void on_scene_stop_simulation();
 
   auto central_toolbar() -> void;
+
+  auto set_scene_context() {
+    for (auto &dependent : scene_context_dependents) {
+      dependent->set_scene_context(active_scene.get());
+    }
+  }
 };

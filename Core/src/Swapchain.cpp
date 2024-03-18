@@ -323,13 +323,15 @@ auto Swapchain::end_frame() -> void {
   VkSubmitInfo submit_info{};
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-  const VkSemaphore wait_semaphores[] = {
-      image_available_semaphores[current_frame()]};
-  constexpr VkPipelineStageFlags wait_stages[] = {
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  submit_info.waitSemaphoreCount = 1;
-  submit_info.pWaitSemaphores = wait_semaphores;
-  submit_info.pWaitDstStageMask = wait_stages;
+  const std::array<VkSemaphore, 1> wait_semaphores = {
+      image_available_semaphores[current_frame()],
+  };
+  constexpr std::array<VkPipelineStageFlags, 1> wait_stages = {
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+  };
+  submit_info.waitSemaphoreCount = static_cast<u32>(wait_semaphores.size());
+  submit_info.pWaitSemaphores = wait_semaphores.data();
+  submit_info.pWaitDstStageMask = wait_stages.data();
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers =
       &command_buffers[current_frame()].command_buffer;

@@ -160,8 +160,10 @@ auto Framebuffer::create_framebuffer() -> void {
                                           ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                           : VK_ATTACHMENT_LOAD_OP_LOAD;
       attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachment_description.stencilLoadOp = properties.clear_stencil_on_load
+                                                 ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                                 : VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
       attachment_description.initialLayout =
           properties.clear_depth_on_load
               ? VK_IMAGE_LAYOUT_UNDEFINED

@@ -170,8 +170,8 @@ auto TextureCube::generate_mips(bool readonly) -> void {
   auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
 
   auto extent_as_i32 = extent.as<i32>();
-  uint32_t mipLevels = calculate_mips(extent);
-  for (uint32_t face = 0; face < 6; face++) {
+  u32 mip_levels = calculate_mips(extent);
+  for (u32 face = 0; face < 6; face++) {
     VkImageSubresourceRange mip_subrange = {};
     mip_subrange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     mip_subrange.baseMipLevel = 0;
@@ -186,24 +186,26 @@ auto TextureCube::generate_mips(bool readonly) -> void {
         VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
   }
 
-  for (uint32_t i = 1; i < mipLevels; i++) {
-    for (uint32_t face = 0; face < 6; face++) {
+  vkDeviceWaitIdle(device->get_device());
+
+  for (u32 i = 1; i < mip_levels; i++) {
+    for (u32 face = 0; face < 6; face++) {
       VkImageBlit image_blit{};
 
       image_blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
       image_blit.srcSubresource.layerCount = 1;
       image_blit.srcSubresource.mipLevel = i - 1;
       image_blit.srcSubresource.baseArrayLayer = face;
-      image_blit.srcOffsets[1].x = int32_t(extent_as_i32.width >> (i - 1));
-      image_blit.srcOffsets[1].y = int32_t(extent_as_i32.height >> (i - 1));
+      image_blit.srcOffsets[1].x = i32(extent_as_i32.width >> (i - 1));
+      image_blit.srcOffsets[1].y = i32(extent_as_i32.height >> (i - 1));
       image_blit.srcOffsets[1].z = 1;
 
       image_blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
       image_blit.dstSubresource.layerCount = 1;
       image_blit.dstSubresource.mipLevel = i;
       image_blit.dstSubresource.baseArrayLayer = face;
-      image_blit.dstOffsets[1].x = int32_t(extent_as_i32.width >> i);
-      image_blit.dstOffsets[1].y = int32_t(extent_as_i32.height >> i);
+      image_blit.dstOffsets[1].x = i32(extent_as_i32.width >> i);
+      image_blit.dstOffsets[1].y = i32(extent_as_i32.height >> i);
       image_blit.dstOffsets[1].z = 1;
 
       VkImageSubresourceRange mip_subrange = {};
@@ -218,11 +220,13 @@ auto TextureCube::generate_mips(bool readonly) -> void {
           VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
           VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
+      vkDeviceWaitIdle(device->get_device());
 
       vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_blit,
                      VK_FILTER_LINEAR);
+      vkDeviceWaitIdle(device->get_device());
 
       insert_image_memory_barrier(
           command_buffer.get_command_buffer(), impl->image,
@@ -230,13 +234,14 @@ auto TextureCube::generate_mips(bool readonly) -> void {
           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
           VK_PIPELINE_STAGE_TRANSFER_BIT, mip_subrange);
+      vkDeviceWaitIdle(device->get_device());
     }
   }
 
   VkImageSubresourceRange subresourceRange = {};
   subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   subresourceRange.layerCount = 6;
-  subresourceRange.levelCount = mipLevels;
+  subresourceRange.levelCount = mip_levels;
 
   insert_image_memory_barrier(
       command_buffer.get_command_buffer(), impl->image,
@@ -246,6 +251,7 @@ auto TextureCube::generate_mips(bool readonly) -> void {
                : VK_IMAGE_LAYOUT_GENERAL,
       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
       subresourceRange);
+  vkDeviceWaitIdle(device->get_device());
 
   mips_generated = true;
 
@@ -281,7 +287,7 @@ auto TextureCube::create_empty_texture_cube() -> void {
   destroy();
 
   VkFormat format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  uint32_t mipCount = calculate_mips(extent);
+  u32 mipCount = calculate_mips(extent);
 
   VkMemoryAllocateInfo memAllocInfo{};
   memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -333,17 +339,17 @@ auto TextureCube::create_empty_texture_cube() -> void {
   sampler.magFilter = VK_FILTER_LINEAR;
   sampler.minFilter = VK_FILTER_LINEAR;
   sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-  sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-  sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-  sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.mipLodBias = 0.0f;
   sampler.compareOp = VK_COMPARE_OP_NEVER;
   sampler.minLod = 0.0f;
   sampler.maxLod = static_cast<float>(mipCount);
 
-  sampler.maxAnisotropy = 1.0;
-  sampler.anisotropyEnable = VK_FALSE;
-  sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+  sampler.anisotropyEnable = VK_TRUE;
+  sampler.maxAnisotropy =
+      device->get_device_properties().limits.maxSamplerAnisotropy;
   verify(vkCreateSampler(vulkanDevice, &sampler, nullptr, &impl->sampler),
          "vkCreateSampler", "Could not create sampler");
 
@@ -351,8 +357,12 @@ auto TextureCube::create_empty_texture_cube() -> void {
   view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
   view.format = format;
-  view.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
-                     VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
+  view.components = {
+      VK_COMPONENT_SWIZZLE_R,
+      VK_COMPONENT_SWIZZLE_G,
+      VK_COMPONENT_SWIZZLE_B,
+      VK_COMPONENT_SWIZZLE_A,
+  };
   view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   view.subresourceRange.baseMipLevel = 0;
   view.subresourceRange.baseArrayLayer = 0;

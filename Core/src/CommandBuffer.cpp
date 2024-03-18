@@ -3,6 +3,7 @@
 #include "CommandBuffer.hpp"
 
 #include "Device.hpp"
+#include "Formatters.hpp"
 #include "Swapchain.hpp"
 #include "Verify.hpp"
 
@@ -39,8 +40,8 @@ ImmediateCommandBuffer::ImmediateCommandBuffer(const Device &device,
 ImmediateCommandBuffer::~ImmediateCommandBuffer() {
   try {
     command_buffer->end_and_submit();
-  } catch (...) {
-    error("Failed to submit command buffer");
+  } catch (const std::exception &exc) {
+    error("Failed to submit command buffer. Reason: {}", exc);
   }
 }
 
@@ -192,8 +193,15 @@ auto CommandBuffer::submit() -> void {
   verify(vkResetFences(device->get_device(), 1, &active_frame->fence),
          "vkResetFences", "Failed to reset fence");
 
-  verify(vkQueueSubmit(relevant_queue, 1, &submit_info, active_frame->fence),
-         "vkQueueSubmit", "Failed to submit queue");
+  if (properties.mutex_around_queue) {
+    static std::mutex queue_mutex;
+    std::scoped_lock lock{queue_mutex};
+    verify(vkQueueSubmit(relevant_queue, 1, &submit_info, active_frame->fence),
+           "vkQueueSubmit", "Failed to submit queue");
+  } else {
+    verify(vkQueueSubmit(relevant_queue, 1, &submit_info, active_frame->fence),
+           "vkQueueSubmit", "Failed to submit queue");
+  }
   verify(vkWaitForFences(device->get_device(), 1, &active_frame->fence, VK_TRUE,
                          timeout),
          "vkWaitForFences", "Failed to wait for fence");

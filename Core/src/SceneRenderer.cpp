@@ -251,7 +251,8 @@ auto SceneRenderer::explicit_clear(const Framebuffer &framebuffer) -> void {
   }
 
   if (framebuffer.has_depth_attachment()) {
-    attachments[color_attachment_count].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    auto aspect_bits = framebuffer.get_depth_image()->get_aspect_bits();
+    attachments[color_attachment_count].aspectMask = aspect_bits;
     attachments[color_attachment_count].clearValue =
         fb_clear_values[color_attachment_count];
     clear_rects[color_attachment_count].rect.offset = {0, 0};
@@ -533,6 +534,12 @@ auto SceneRenderer::geometry_pass() -> void {
 }
 
 void SceneRenderer::bloom_pass() {
+  static auto first_iteration = true;
+  if (first_iteration) {
+    first_iteration = false;
+    return;
+  }
+
   if (!bloom_settings.enabled)
     return;
 
@@ -544,11 +551,14 @@ void SceneRenderer::bloom_pass() {
   } bloom_compute_push_constants;
 
   bloom_compute_push_constants.params = {
-      bloom_settings.threshold, bloom_settings.threshold - bloom_settings.knee,
-      bloom_settings.knee * 2.0f, 0.25f / bloom_settings.knee};
+      bloom_settings.threshold,
+      bloom_settings.threshold - bloom_settings.knee,
+      bloom_settings.knee * 2.0f,
+      0.25f / bloom_settings.knee,
+  };
   bloom_compute_push_constants.mode = 0;
 
-  const auto &inputImage = geometry_framebuffer->get_image();
+  const auto &input_image = geometry_framebuffer->get_image();
 
   // m_GPUTimeQueries.BloomComputePassQuery =
   //    m_CommandBuffer->BeginTimestampQuery();
@@ -592,12 +602,12 @@ void SceneRenderer::bloom_pass() {
       *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
   writeDescriptors[1].dstSet =
       descriptorSet; // Should this be set inside the shader?
-  writeDescriptors[1].pImageInfo = &inputImage->get_descriptor_info();
+  writeDescriptors[1].pImageInfo = &input_image->get_descriptor_info();
 
   writeDescriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
   writeDescriptors[2].dstSet =
       descriptorSet; // Should this be set inside the shader?
-  writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+  writeDescriptors[2].pImageInfo = &input_image->get_descriptor_info();
 
   vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
                          writeDescriptors.data(), 0, nullptr);
@@ -680,7 +690,7 @@ void SceneRenderer::bloom_pass() {
           *shader.get_descriptor_set("bloom_output_texture", 0);
       writeDescriptors[2].dstSet =
           descriptorSet; // Should this be set inside the shader?
-      writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+      writeDescriptors[2].pImageInfo = &input_image->get_descriptor_info();
 
       vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
                              writeDescriptors.data(), 0, nullptr);
@@ -744,7 +754,7 @@ void SceneRenderer::bloom_pass() {
           *shader.get_descriptor_set("bloom_output_texture", 0);
       writeDescriptors[2].dstSet =
           descriptorSet; // Should this be set inside the shader?
-      writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+      writeDescriptors[2].pImageInfo = &input_image->get_descriptor_info();
 
       vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
                              writeDescriptors.data(), 0, nullptr);
@@ -808,7 +818,7 @@ void SceneRenderer::bloom_pass() {
   writeDescriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
   writeDescriptors[2].dstSet =
       descriptorSet; // Should this be set inside the shader?
-  writeDescriptors[2].pImageInfo = &inputImage->get_descriptor_info();
+  writeDescriptors[2].pImageInfo = &input_image->get_descriptor_info();
 
   vkUpdateDescriptorSets(device->get_device(), (u32)writeDescriptors.size(),
                          writeDescriptors.data(), 0, nullptr);
@@ -1233,6 +1243,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .height = 1.0F / static_cast<float>(extent.height),
   };
 
+  // This preloads some basic meshes. :)
   Mesh::reference_import_from(*device, FS::model("cube.gltf"));
   Mesh::reference_import_from(*device, FS::model("sphere.fbx"));
 
@@ -1307,7 +1318,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
                   .format = ImageFormat::SRGB_RGBA32,
               },
               FramebufferTextureSpecification{
-                  .format = ImageFormat::DEPTH32F,
+                  .format = ImageFormat::DEPTH24STENCIL8,
                   .blend = false,
               },
           },

@@ -256,16 +256,6 @@ auto Device::create_vulkan_device(
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
   }
-
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_features = {};
-  acceleration_features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-
-  VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_pipeline_features =
-      {};
-  ray_tracing_pipeline_features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-
   VkPhysicalDeviceFeatures2 device_features{};
   device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   vkGetPhysicalDeviceFeatures2(physical_device, &device_features);
@@ -276,12 +266,6 @@ auto Device::create_vulkan_device(
   device_features.features.fillModeNonSolid = VK_TRUE;
   device_features.features.samplerAnisotropy = VK_TRUE;
 
-  device_features.pNext = &acceleration_features;
-  acceleration_features.pNext = &ray_tracing_pipeline_features;
-
-  acceleration_features.accelerationStructure = VK_TRUE;
-  ray_tracing_pipeline_features.rayTracingPipeline = VK_TRUE;
-
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = nullptr,
@@ -290,6 +274,23 @@ auto Device::create_vulkan_device(
       .enabledExtensionCount = static_cast<u32>(extensions.size()),
       .ppEnabledExtensionNames = extensions.data(),
   };
+
+  if (Config::enable_ray_tracing) {
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_features = {};
+    acceleration_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR
+        ray_tracing_pipeline_features = {};
+    ray_tracing_pipeline_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+
+    acceleration_features.pNext = &ray_tracing_pipeline_features;
+    device_features.pNext = &acceleration_features;
+
+    acceleration_features.accelerationStructure = VK_TRUE;
+    ray_tracing_pipeline_features.rayTracingPipeline = VK_TRUE;
+  }
 
   create_info.pNext = &device_features;
 

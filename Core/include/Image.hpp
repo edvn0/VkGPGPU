@@ -64,6 +64,7 @@ public:
   ~Image();
 
   auto recreate() -> void;
+  auto transition_image_to(ImageLayout) -> void;
 
   auto get_properties() noexcept -> ImageProperties & { return properties; }
   [[nodiscard]] auto get_properties() const noexcept
@@ -80,6 +81,8 @@ public:
   auto get_mip_size(u32) const -> std::pair<u32, u32>;
   auto get_image() const -> VkImage;
 
+  auto get_aspect_bits() const { return aspect_bit; }
+
   static auto construct_reference(const Device &device,
                                   const ImageProperties &properties)
       -> Ref<Image>;
@@ -90,10 +93,11 @@ private:
   ImageProperties properties;
   VkDescriptorImageInfo descriptor_image_info{};
   Scope<ImageStorageImpl> impl{nullptr};
+  ImageLayout current{ImageLayout::Undefined};
   VkImageAspectFlags aspect_bit{VK_IMAGE_ASPECT_COLOR_BIT};
 
   auto create_mips() -> void;
-  auto load_image_data_from_buffer(const DataBuffer &) const -> void;
+  auto load_image_data_from_buffer(const DataBuffer &) -> void;
   auto initialise_vulkan_image() -> void;
   auto initialise_vulkan_descriptor_info() -> void;
   auto initialise_per_mip_image_views() -> void;

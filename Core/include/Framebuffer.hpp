@@ -45,6 +45,7 @@ struct FramebufferProperties {
   const floating depth_clear_value{0.0f}; // We use inverted z-buffer
   const bool clear_colour_on_load{true};
   const bool clear_depth_on_load{true};
+  const bool clear_stencil_on_load{true};
 
   const bool blend{true};
   const bool invert_viewport{true};
