@@ -1386,7 +1386,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = shadow_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
-      .depth_comparison_operator = DepthCompareOperator::Greater,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
       .cull_mode = CullMode::Front,
       .face_mode = FaceMode::CounterClockwise,
   };

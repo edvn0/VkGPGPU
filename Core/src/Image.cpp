@@ -741,7 +741,6 @@ auto Image::initialise_vulkan_image() -> void {
   sampler_create_info.addressModeU =
       static_cast<VkSamplerAddressMode>(properties.address_mode);
   sampler_create_info.addressModeV =
-
       static_cast<VkSamplerAddressMode>(properties.address_mode);
   sampler_create_info.addressModeW =
       static_cast<VkSamplerAddressMode>(properties.address_mode);

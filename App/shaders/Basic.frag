@@ -68,8 +68,7 @@ vec3 getNormal() {
   if (pc.use_normal_map <= 0.0F)
     return normalize(in_normals);
 
-  vec3 world_normal_from_map =
-      normalize(texture(normal_map, in_uvs).rgb * 2.0f - 1.0f);
+  vec3 world_normal_from_map = texture(normal_map, in_uvs).rgb * 2.0f - 1.0f;
   world_normal_from_map = normalize(world_normal_from_map * in_normals);
 
   return world_normal_from_map;
@@ -147,16 +146,16 @@ void main() {
   vec3 ambient = vec3(0.03) * albedo * getAO(); // Ambient light
 
   vec3 direct = kD * diffuse + specular;
+
   // Adjusting the x and y coordinates remains the same, mapping from [-1, 1] to
   // [0, 1]
-  vec3 xy_coords_remapped = (in_shadow_pos.xyz / in_shadow_pos.w) * 0.5 + 0.5;
+  vec3 xy_coords_remapped = (in_shadow_pos.xyz / in_shadow_pos.w);
 
   // Combining the adjusted x, y, and z into the remapped shadow coordinates
-  vec3 shadow_pos_coords_remapped = vec3(xy_coords_remapped);
-  direct *= 1.0F - calculateSoftShadow(shadow_map, shadow_pos_coords_remapped,
-                                       normal, L, 3, shadow.bias_and_default.x);
+  float shadow =
+      PCSS_DirectionalLight(shadow_map, normal, L, xy_coords_remapped, 2.0F);
 
-  vec3 final = ambient + direct * radiance;
+  vec3 final = ambient + shadow * direct * radiance;
 
-  out_colour = vec4(gamma_correct(final), 1.0);
+  out_colour = vec4(gamma_correct(final), 1.0F);
 }

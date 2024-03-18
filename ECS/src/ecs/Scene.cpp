@@ -179,16 +179,37 @@ Scene::~Scene() {
   info("Scene {} destroyed and serialised.", name);
 }
 
-auto Scene::save(std::string_view path) -> void {
+auto Scene::save(std::string_view path) -> bool {
+  Core::FS::Path chosen = path.empty()
+                              ? name + ".scene"
+                              : std::string{path} + "-" + name + ".scene";
+  if (path.empty()) {
+    auto maybe_full_path =
+        Core::UI::save_file_dialog(Core::FS::scenes_directory());
+
+    if (!maybe_full_path) {
+      Core::UI::Toast::error(3000, "No path chosen in the dialog.");
+      return false;
+    }
+
+    chosen = maybe_full_path.value();
+
+    if (!Core::FS::exists(chosen)) {
+      Core::UI::Toast::error(
+          3000, "The path chosen in the dialog did not exist. Terrible error!");
+      return false;
+    }
+  }
+
   SceneSerialiser serialiser;
   try {
-    auto chosen = path.empty() ? name + ".scene"
-                               : std::string{path} + "-" + name + ".scene";
     serialiser.serialise(*this, Core::FS::Path{chosen});
+    Core::UI::Toast::success(3000, "Saved the scene to: '{}'", chosen);
+    return true;
   } catch (const std::exception &e) {
-    error("Failed to serialise scene: {}", e.what());
+    Core::UI::Toast::error(3000, "Exception: {}", e);
+    return false;
   }
-  info("Scene {} serialised.", name);
 }
 
 auto Scene::create_entity(const std::string_view entity_name, bool add_observer)

@@ -480,18 +480,23 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                  scene_renderer.get_current_index(),
                  gpu_times.composite_pass_query));
 
-    const PipelineStatistics &pipelineStats =
+    const PipelineStatistics &pipeline_stats =
         graphics_command_buffer.get_pipeline_statistics(
             scene_renderer.get_current_index());
     UI::text("Input Assembly Vertices: {}",
-             pipelineStats.input_assembly_vertices);
+             pipeline_stats.input_assembly_vertices);
     UI::text("Input Assembly Primitives: {}",
-             pipelineStats.input_assembly_primitives);
-    UI::text("Vertex Shader Invocations: {}", pipelineStats.vs_invocations);
-    UI::text("Clipping Invocations: {}", pipelineStats.clip_invocations);
-    UI::text("Clipping Primitives: {}", pipelineStats.clip_primitives);
-    UI::text("Fragment Shader Invocations: {}", pipelineStats.fs_invocations);
-    UI::text("Compute Shader Invocations: {}", pipelineStats.cs_invocations);
+             pipeline_stats.input_assembly_primitives);
+    UI::text("Vertex Shader Invocations: {}", pipeline_stats.vs_invocations);
+    UI::text("Clipping Invocations: {}", pipeline_stats.clip_invocations);
+    UI::text("Clipping Primitives: {}", pipeline_stats.clip_primitives);
+    UI::text("Fragment Shader Invocations: {}", pipeline_stats.fs_invocations);
+
+    const PipelineStatistics &compute_pipeline_statistics =
+        compute_command_buffer.get_pipeline_statistics(
+            scene_renderer.get_current_index());
+    UI::text("Compute Shader Invocations: {}",
+             compute_pipeline_statistics.cs_invocations);
   });
 
   if (load_entity()) {
@@ -682,8 +687,9 @@ void ClientApp::on_event(Event &event) {
 
     if (event.get_keycode() == KeyCode::KEY_N &&
         Input::pressed<KeyCode::KEY_LEFT_CONTROL>()) {
-      active_scene->save();
-      active_scene->clear();
+      if (active_scene->save()) {
+        active_scene->clear();
+      }
       return true;
     }
 
@@ -828,7 +834,8 @@ void ClientApp::on_scene_stop() {
   // ScriptEngine::SetSceneContext(editor_scene, m_ViewportRenderer);
   // AssetEditorPanel::SetSceneContext(editor_scene);
   // MiniAudioEngine::SetSceneContext(editor_scene);
-  active_scene.swap(editor_scene);
+  active_scene = editor_scene;
+  active_scene->initialise_device_dependent_objects(*get_device());
   set_scene_context();
 }
 

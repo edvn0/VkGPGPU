@@ -107,6 +107,8 @@ endfunction()
 
 add_assimp()
 
+add_subdirectory(portable-file-dialogs)
+
 add_subdirectory(magic_enum)
 
 if(ENABLE_TESTING)

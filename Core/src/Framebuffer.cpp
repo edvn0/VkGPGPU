@@ -144,7 +144,7 @@ auto Framebuffer::create_framebuffer() -> void {
                   .min_filter = SamplerFilter::Nearest,
                   .max_filter = SamplerFilter::Nearest,
                   .address_mode = SamplerAddressMode::ClampToBorder,
-                  .border_color = SamplerBorderColor::FloatOpaqueBlack,
+                  .border_color = SamplerBorderColor::FloatOpaqueWhite,
                   .compare_op = CompareOperation::Less,
               });
         }

@@ -24,6 +24,8 @@ auto resolve(StringLike auto path) -> FS::Path {
   return std::filesystem::absolute(path);
 }
 
+inline auto scenes_directory() { return std::filesystem::path("scenes"); }
+
 inline auto editor_resources_directory() {
   return std::filesystem::path("editor");
 }

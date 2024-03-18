@@ -6,10 +6,10 @@
 
 #include <backends/imgui_impl_vulkan.h>
 #include <fmt/format.h>
+#include <imgui-notify/ImGuiNotify.hpp>
 #include <iomanip>
+#include <portable-file-dialogs/portable-file-dialogs.h>
 #include <sstream>
-
-#include "imgui-notify/ImGuiNotify.hpp"
 
 template <typename... Args> auto make_id(Args &&...data) {
   // Use a fold expression to concatenate the formatted pointer strings
@@ -214,9 +214,20 @@ constexpr auto to_imgui_notify_type(Toast::Type type) {
 }
 
 auto toast(Toast::Type type, u32 duration_ms, std::string_view data) -> void {
-  ImGuiToast toast{to_imgui_notify_type(type), static_cast<i32>(duration_ms),
-                   "%s", data.data()};
+  ImGuiToast toast{
+      to_imgui_notify_type(type),
+      static_cast<i32>(duration_ms),
+      "%s",
+      data.data(),
+  };
   ImGui::InsertNotification(toast);
+}
+
+auto save_file_dialog(const std::string_view path) -> std::optional<FS::Path> {
+  auto destination = pfd::save_file("Select a file").result();
+
+  return destination.empty() ? std::optional<FS::Path>{}
+                             : FS::resolve(destination);
 }
 
 } // namespace Core::UI::Detail

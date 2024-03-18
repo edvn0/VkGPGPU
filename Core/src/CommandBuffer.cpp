@@ -160,7 +160,8 @@ auto CommandBuffer::begin(u32 current_frame,
                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                         query_pools[current_frame], 0);
 
-    if (properties.queue_type == Queue::Type::Graphics) {
+    if (properties.queue_type == Queue::Type::Graphics ||
+        properties.queue_type == Queue::Type::Compute) {
       // Pipeline stats query
       vkCmdResetQueryPool(get_command_buffer(),
                           pipeline_statistics_query_pools[current_frame], 0,
@@ -215,14 +216,14 @@ auto CommandBuffer::submit() -> void {
                           sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 
     for (u32 i = 0; i < timestamp_next_available_query; i += 2) {
-      uint64_t startTime = timestamp_query_results[active_frame_index][i];
-      uint64_t endTime = timestamp_query_results[active_frame_index][i + 1];
-      float nsTime =
-          endTime > startTime
-              ? (endTime - startTime) *
+      uint64_t start_time = timestamp_query_results[active_frame_index][i];
+      uint64_t end_time = timestamp_query_results[active_frame_index][i + 1];
+      auto nsTime =
+          end_time > start_time
+              ? (end_time - start_time) *
                     device->get_device_properties().limits.timestampPeriod
-              : 0.0f;
-      execution_gpu_times[active_frame_index][i / 2] = nsTime * 0.000001f;
+              : 0.0F;
+      execution_gpu_times[active_frame_index][i / 2] = nsTime * 0.000001F;
     }
 
     if (properties.queue_type == Queue::Type::Graphics) {
@@ -232,6 +233,18 @@ auto CommandBuffer::submit() -> void {
           sizeof(PipelineStatistics),
           &pipeline_statistics_query_results[active_frame_index],
           sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+    }
+    if (properties.queue_type == Queue::Type::Compute) {
+      // some dumb pointer arithmetic to get to the actual field
+      auto offset = offsetof(PipelineStatistics, cs_invocations);
+      const auto &current_query_info =
+          pipeline_statistics_query_results.at(active_frame_index);
+      auto *calculated = std::bit_cast<u8 *>(&current_query_info) + offset;
+
+      vkGetQueryPoolResults(device->get_device(),
+                            pipeline_statistics_query_pools[active_frame_index],
+                            0, 1, sizeof(PipelineStatistics), calculated,
+                            sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
     }
   }
 
@@ -244,7 +257,8 @@ auto CommandBuffer::end() -> void {
     vkCmdWriteTimestamp(get_command_buffer(),
                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                         query_pools[active_frame_index], 1);
-    if (properties.queue_type == Queue::Type::Graphics) {
+    if (properties.queue_type == Queue::Type::Graphics ||
+        properties.queue_type == Queue::Type::Compute) {
       vkCmdEndQuery(get_command_buffer(),
                     pipeline_statistics_query_pools[active_frame_index], 0);
     }
@@ -260,18 +274,18 @@ auto CommandBuffer::end_and_submit() -> void {
 }
 
 void CommandBuffer::create_query_objects() {
-  VkQueryPoolCreateInfo queryPoolCreateInfo = {};
-  queryPoolCreateInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-  queryPoolCreateInfo.pNext = nullptr;
+  VkQueryPoolCreateInfo query_pool_create_info = {};
+  query_pool_create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+  query_pool_create_info.pNext = nullptr;
 
-  const u32 maxUserQueries = 16;
-  timestamp_query_count = 2 + 2 * maxUserQueries;
+  constexpr u32 max_user_queries = 16;
+  timestamp_query_count = 2 + 2 * max_user_queries;
 
-  queryPoolCreateInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-  queryPoolCreateInfo.queryCount = timestamp_query_count;
+  query_pool_create_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+  query_pool_create_info.queryCount = timestamp_query_count;
   query_pools.resize(properties.count);
   for (auto &timestampQueryPool : query_pools)
-    vkCreateQueryPool(device->get_device(), &queryPoolCreateInfo, nullptr,
+    vkCreateQueryPool(device->get_device(), &query_pool_create_info, nullptr,
                       &timestampQueryPool);
 
   timestamp_query_results.resize(properties.count);
@@ -284,9 +298,9 @@ void CommandBuffer::create_query_objects() {
 
   if (properties.queue_type == Queue::Type::Graphics) {
     pipeline_query_count = 7;
-    queryPoolCreateInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
-    queryPoolCreateInfo.queryCount = pipeline_query_count;
-    queryPoolCreateInfo.pipelineStatistics =
+    query_pool_create_info.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+    query_pool_create_info.queryCount = pipeline_query_count;
+    query_pool_create_info.pipelineStatistics =
         VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
         VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
         VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
@@ -296,9 +310,24 @@ void CommandBuffer::create_query_objects() {
         VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
 
     pipeline_statistics_query_pools.resize(properties.count);
-    for (auto &pipelineStatisticsQueryPools : pipeline_statistics_query_pools)
-      vkCreateQueryPool(device->get_device(), &queryPoolCreateInfo, nullptr,
-                        &pipelineStatisticsQueryPools);
+    for (auto &pipeline_statistics_query_pool : pipeline_statistics_query_pools)
+      vkCreateQueryPool(device->get_device(), &query_pool_create_info, nullptr,
+                        &pipeline_statistics_query_pool);
+
+    pipeline_statistics_query_results.resize(properties.count);
+  }
+
+  if (properties.queue_type == Queue::Type::Compute) {
+    pipeline_query_count = 1;
+    query_pool_create_info.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+    query_pool_create_info.queryCount = pipeline_query_count;
+    query_pool_create_info.pipelineStatistics =
+        VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+
+    pipeline_statistics_query_pools.resize(properties.count);
+    for (auto &pipeline_statistics_query_pool : pipeline_statistics_query_pools)
+      vkCreateQueryPool(device->get_device(), &query_pool_create_info, nullptr,
+                        &pipeline_statistics_query_pool);
 
     pipeline_statistics_query_results.resize(properties.count);
   }
@@ -308,7 +337,8 @@ void CommandBuffer::destroy_query_objects() {
   for (auto i = 0U; i < properties.count; ++i) {
     vkDestroyQueryPool(device->get_device(), query_pools[i], nullptr);
 
-    if (properties.queue_type == Queue::Type::Graphics) {
+    if (properties.queue_type == Queue::Type::Graphics ||
+        properties.queue_type == Queue::Type::Compute) {
       vkDestroyQueryPool(device->get_device(),
                          pipeline_statistics_query_pools[i], nullptr);
     }

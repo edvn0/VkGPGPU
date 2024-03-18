@@ -29,6 +29,7 @@ auto text_wrapped_impl(std::string_view) -> void;
 auto set_drag_drop_payload_impl(std::string_view, std::string_view data)
     -> bool;
 auto toast(Toast::Type type, u32 duration_ms, std::string_view) -> void;
+auto save_file_dialog(std::string_view) -> std::optional<FS::Path>;
 } // namespace Detail
 
 auto push_id() -> void;
@@ -108,6 +109,17 @@ auto set_drag_drop_payload(std::string_view payload_type,
   return Detail::set_drag_drop_payload_impl(payload_type, data);
 }
 auto set_drag_drop_payload(std::string_view, const FS::Path &) -> bool;
+
+auto save_file_dialog(const Core::StringLike auto &string_like)
+    -> std::optional<FS::Path> {
+  if constexpr (std::is_same_v<std::decay_t<decltype(string_like)>,
+                               std::filesystem::path>) {
+    const auto as_string = string_like.string();
+    return Detail::save_file_dialog(as_string);
+  } else {
+    return Detail::save_file_dialog(string_like);
+  }
+}
 
 template <typename... Args>
 auto text(fmt::format_string<Args...> format, Args &&...args) -> void {
