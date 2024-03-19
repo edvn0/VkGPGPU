@@ -124,6 +124,11 @@ public:
     opacity = new_opacity;
   }
 
+  static auto begin_gpu_debug_frame_marker(const CommandBuffer &,
+                                           std::string_view) -> void;
+  static auto end_gpu_debug_frame_marker(const CommandBuffer &,
+                                         std::string_view) -> void;
+
 private:
   const Device *device;
   Scope<CommandBuffer> command_buffer{nullptr};
@@ -239,6 +244,8 @@ private:
   auto set_frame_index(FrameIndex frame_index) -> void {
     current_frame = frame_index;
   }
+
+  static inline std::stack<std::string> debug_marker_stack{};
 };
 
 } // namespace Core

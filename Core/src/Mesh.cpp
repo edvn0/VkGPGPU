@@ -483,20 +483,12 @@ void Mesh::handle_albedo_map(const aiMaterial *ai_material,
     bool texture_loaded = false;
     if (const aiTexture *ai_texture_embedded =
             importer->scene->GetEmbeddedTexture(key.c_str())) {
-      // Handle embedded texture.
-      // Check if the embedded texture is uncompressed (RAW) or compressed.
       if (ai_texture_embedded->mHeight == 0) {
-        // The embedded texture is compressed (e.g., PNG, JPG).
-        // Use your method to create a texture from the compressed data in
-        // memory.
         auto texture = create_texture_from_memory(
             device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth);
         mesh_owned_textures.try_emplace(key, std::move(texture));
         texture_loaded = true;
       } else {
-        // The embedded texture is uncompressed (RAW).
-        // mWidth and mHeight specify the dimensions, and pcData contains the
-        // pixel data.
         auto texture = create_texture_from_raw_data(
             device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth,
             ai_texture_embedded->mHeight);
@@ -504,7 +496,6 @@ void Mesh::handle_albedo_map(const aiMaterial *ai_material,
         texture_loaded = true;
       }
     } else {
-      // Texture is not embedded, read from file path.
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
       texture_loaded = true;
     }
