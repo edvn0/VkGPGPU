@@ -125,6 +125,7 @@
     "execution": "cpp",
     "valarray": "cpp",
     "expected": "cpp",
-    "*.glsl": "cpp"
+    "*.glsl": "cpp",
+    "cassert": "cpp"
   }
 }

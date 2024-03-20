@@ -3,6 +3,7 @@
 #include "DescriptorResource.hpp"
 #include "Device.hpp"
 #include "DynamicLibraryLoader.hpp"
+#include "FilesystemListener.hpp"
 #include "Instance.hpp"
 #include "Swapchain.hpp"
 #include "Types.hpp"
@@ -116,12 +117,20 @@ protected:
 
   [[nodiscard]] auto get_timer() const -> const auto & { return fps_average; };
 
+  [[nodiscard]] auto file_system_hook(Scope<IFilesystemChangeListener> change) {
+    if (!change) {
+      return;
+    }
+    watcher->add_change_listener(std::move(change));
+  }
+
 private:
   Scope<Instance> instance;
   Scope<Device> device;
   Scope<Bus::MessagingClient> message_client;
   Scope<Window> window;
   Scope<Swapchain> swapchain;
+  Scope<FilesystemWatcher> watcher;
 
   Extent<u32> extent{1280, 720};
   FPSAverage<2 * 144> fps_average{};

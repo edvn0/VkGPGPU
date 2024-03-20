@@ -122,6 +122,8 @@ auto exists(StringLike auto path) -> bool {
   return std::filesystem::exists(resolved);
 }
 
+inline auto get_current_path() { return std::filesystem::current_path(); }
+
 auto set_current_path(StringLike auto path) -> bool {
   const auto resolved = FS::resolve(path);
   if (!std::filesystem::exists(resolved)) {

@@ -101,12 +101,26 @@ void ClientApp::on_update(floating ts) {
   timer.end();
 }
 
+struct Watcher : public IFilesystemChangeListener {
+  ~Watcher() override = default;
+
+  auto get_file_extension_filter()
+      -> const std::unordered_set<std::string> & override {
+    return filetype_extensions;
+  }
+
+  std::unordered_set<std::string> filetype_extensions{".glsl", ".vert",
+                                                      ".frag"};
+};
+
 void ClientApp::on_create() {
   scene_renderer.create(*get_swapchain());
 
   editor_scene = make_ref<ECS::Scene>("Default");
   active_scene = editor_scene;
   active_scene->on_create(*get_device(), *get_window(), *get_swapchain());
+
+  this->file_system_hook(make_scope<Watcher>());
 
   // ECS::SceneSerialiser serialiser;
   // serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});

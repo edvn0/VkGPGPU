@@ -1,5 +1,7 @@
 #pragma once
 
+#include "IterationDecision.hpp"
+
 #include <algorithm>
 #include <concepts>
 #include <memory>
@@ -63,8 +65,20 @@ concept Container = requires(T t) {
   std::empty(t);
 };
 
+auto for_each_with_decision(Container auto &container, auto &&func) -> void {
+  for (auto &val : container) {
+    if (func(val) == IterationDecision::Break)
+      break;
+  }
+}
+
 auto for_each(Container auto &container, auto &&func) -> void {
-  std::ranges::for_each(std::begin(container), std::end(container), func);
+  if constexpr (std::is_same_v<decltype(func(*std::begin(container))),
+                               IterationDecision>) {
+    for_each_with_decision(container, func);
+  } else {
+    std::ranges::for_each(std::begin(container), std::end(container), func);
+  }
 }
 
 auto sort(Container auto &container) -> void {

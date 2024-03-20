@@ -23,6 +23,7 @@ add_subdirectory(ThirdParty)
 add_subdirectory(App)
 add_subdirectory(Platform)
 add_subdirectory(ECS)
+add_subdirectory(ShaderCompilation)
 
 # IF enable testing
 if(ENABLE_TESTING)
@@ -32,5 +33,3 @@ if(ENABLE_TESTING)
     enable_testing()
     add_subdirectory(Test)
 endif()
-
-add_subdirectory(Reflection)

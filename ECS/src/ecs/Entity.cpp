@@ -16,14 +16,16 @@ namespace ECS {
 Entity::Entity(Scene *scene, std::string_view input_name)
     : Entity(scene, scene->registry.create(), input_name) {}
 
-Entity::Entity(Scene *scene, entt::entity entity_handle, std::string_view name)
-    : scene(scene) {
+Entity::Entity(Scene *new_scene, entt::entity entity_handle,
+               std::string_view name)
+    : scene(new_scene) {
   handle = entity_handle;
   add_component<IdentityComponent>(std::string{name});
   add_component<TransformComponent>();
 }
 
-Entity::Entity(Scene *scene, entt::entity entity_handle) : scene(scene) {
+Entity::Entity(Scene *new_scene, entt::entity entity_handle)
+    : scene(new_scene) {
   handle = entity_handle;
 }
 

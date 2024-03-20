@@ -23,6 +23,8 @@ auto AppDeleter::operator()(App *app) const noexcept -> void {
 }
 
 App::App(const ApplicationProperties &props) : properties(props) {
+  watcher = make_scope<FilesystemWatcher>(FS::get_current_path());
+
   // Initialize the instance
   instance = Instance::construct(properties.headless);
 
@@ -54,6 +56,7 @@ App::App(const ApplicationProperties &props) : properties(props) {
 }
 
 App::~App() {
+  watcher.reset();
   Allocator::destroy();
   swapchain.reset();
   window.reset();
