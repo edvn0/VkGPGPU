@@ -15,16 +15,13 @@ GeometryRenderer::GeometryRenderer(Badge<SceneRenderer>, const Device &dev)
 auto GeometryRenderer::create(Framebuffer &framebuffer,
                               usize max_geometry_count) -> void {
   // Create subrenderers
-  std::apply(
-      [&](auto &...subrenderers) {
-        (subrenderers.create(*device, framebuffer, max_geometry_count), ...);
-      },
-      subrenderers);
+  std::apply([&dev = *device, &fb = framebuffer, &geom = max_geometry_count](
+                 auto &&...renderer) { (renderer.create(dev, fb, geom), ...); },
+             subrenderers);
 }
 
 auto GeometryRenderer::clear() -> void {
-  std::apply([&](auto &...subrenderers) { (subrenderers.clear(), ...); },
-             subrenderers);
+  std::apply([](auto &&...renderer) { (renderer.clear(), ...); }, subrenderers);
 }
 
 auto GeometryRenderer::submit_aabb(const AABB &aabb,
@@ -79,9 +76,9 @@ auto GeometryRenderer::submit_frustum(const glm::mat4 &inverse_view_projection,
 
   std::array<glm::vec4, 8> world_corners{};
   for (int i = 0; i < 8; ++i) {
-    glm::vec4 worldCorner =
+    glm::vec4 world_corner =
         inverse_view_projection * glm::vec4(ndc_corners[i], 1.0);
-    world_corners[i] = worldCorner / worldCorner.w; // Perspective divide
+    world_corners[i] = world_corner / world_corner.w; // Perspective divide
   }
 
   // Define lines based on world corners
@@ -108,8 +105,8 @@ auto GeometryRenderer::submit_frustum(const glm::mat4 &inverse_view_projection,
 auto GeometryRenderer::update_all_materials_for_rendering(
     SceneRenderer &scene_renderer) -> void {
   std::apply(
-      [&](auto &...subrenderers) {
-        (subrenderers.update_material_for_rendering(scene_renderer), ...);
+      [&scene_rend = scene_renderer](auto &&...renderer) {
+        (renderer.update_material_for_rendering(scene_rend), ...);
       },
       subrenderers);
 }
@@ -119,18 +116,17 @@ auto GeometryRenderer::flush(const CommandBuffer &buffer, FrameIndex index,
                              const Material *preferred_material) -> void {
   // Assume we are in an active renderpass?
   std::apply(
-      [&](auto &...subrenderers) {
-        (subrenderers.flush(buffer, index, preferred_pipeline,
-                            preferred_material),
-         ...);
+      [&buf = buffer, &ind = index, &pipe = preferred_pipeline,
+       &mat = preferred_material](auto &&...renderer) {
+        (renderer.flush(buf, ind, pipe, mat), ...);
       },
       subrenderers);
 }
 auto GeometryRenderer::get_all_materials() -> std::vector<Material *> {
   std::vector<Material *> materials;
   std::apply(
-      [&](auto &...subrenderers) {
-        (materials.push_back(subrenderers.material.get()), ...);
+      [&mats = materials](auto &&...renderer) {
+        (mats.push_back(renderer.material.get()), ...);
       },
       subrenderers);
   return materials;
@@ -143,8 +139,8 @@ auto LineRenderer::create(const Device &dev, Framebuffer &framebuffer,
 
   lines.reserve(max_geometry_count);
 
-  shader = Shader::construct(*device, FS::shader("Line.vert.spv"),
-                             FS::shader("Line.frag.spv"));
+  shader = Shader::compile_graphics_scoped(*device, FS::shader("Line.vert"),
+                                           FS::shader("Line.frag"));
 
   // Create pipeline
   const GraphicsPipelineConfiguration config{

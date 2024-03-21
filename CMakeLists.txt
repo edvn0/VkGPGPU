@@ -3,7 +3,7 @@ project(VkGPGPU)
 
 set(CMAKE_CXX_STANDARD 20)
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 find_program(CCACHE_FOUND ccache)
 

@@ -8,8 +8,9 @@ namespace Core {
 
 auto DataBuffer::allocate_storage(usize new_size) -> void {
   if (data) {
-    info("Resetting data storage at {}. Old size was: {}", fmt::ptr(data.get()),
-         human_readable_size(size()));
+    info("Resetting data storage at {}. Old size was: {}, new size is: {}",
+         fmt::ptr(data.get()), human_readable_size(size()),
+         human_readable_size(new_size));
     data.reset();
   }
   data = std::make_unique<u8[]>(new_size);

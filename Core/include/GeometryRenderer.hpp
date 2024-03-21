@@ -38,7 +38,7 @@ struct LineRenderer {
   Scope<Buffer> index_buffer;
   std::vector<LineInstance> lines;
   usize max_geometry_count{};
-  static constexpr floating load_factor = 1.333;
+  static constexpr floating load_factor = static_cast<floating>(1.333);
 
 private:
   auto recreate_buffers(bool increase_by_load_factor = false) -> void;

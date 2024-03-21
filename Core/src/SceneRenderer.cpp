@@ -6,6 +6,8 @@
 #include "Input.hpp"
 #include "Random.hpp"
 
+#include "compilation/ShaderCompiler.hpp"
+
 namespace Core {
 
 auto SceneRenderer::begin_gpu_debug_frame_marker(
@@ -1218,6 +1220,16 @@ auto SceneRenderer::get_depth_image() const -> const Image & {
 }
 
 auto SceneRenderer::create(const Swapchain &swapchain) -> void {
+  Shader::initialise_compiler(
+      *device,
+      Compilation::ShaderCompilerConfiguration{
+          .optimisation_level = 0,
+          .debug_information_level = Compilation::DebugInformationLevel::None,
+          .warnings_as_errors = false,
+          .include_directories = {FS::shader_directory()},
+          .macro_definitions = {},
+      });
+
   DataBuffer white_data(sizeof(u32));
   u32 white = 0xFFFFFFFF;
   white_data.write(&white, sizeof(u32));
@@ -1301,7 +1313,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   shader_cache.try_emplace(
       "PreethamSky",
-      Shader::construct(*device, FS::shader("PreethamSky.comp.spv")));
+      Shader::compile_compute_scoped(*device, FS::shader("PreethamSky.comp")));
 
   buffer_for_transform_data.transforms.resize(100 *
                                               Config::transform_buffer_size);
@@ -1373,13 +1385,14 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   shadow_framebuffer = Framebuffer::construct(*device, shadow_props);
 
-  shader_cache.try_emplace(
-      "Shadow", Shader::construct(*device, FS::shader("Shadow.vert.spv"),
-                                  FS::shader("Shadow.frag.spv")));
+  shader_cache.try_emplace("Shadow", Shader::compile_graphics_scoped(
+                                         *device, FS::shader("Shadow.vert"),
+                                         FS::shader("Shadow.frag")));
   shadow_material = Material::construct(*device, *shader_cache.at("Shadow"));
   shader_cache.try_emplace(
-      "BasicGeometry", Shader::construct(*device, FS::shader("Basic.vert.spv"),
-                                         FS::shader("Basic.frag.spv")));
+      "BasicGeometry",
+      Shader::compile_graphics_scoped(*device, FS::shader("Basic.vert"),
+                                      FS::shader("Basic.frag")));
 
   GraphicsPipelineConfiguration config{
       .name = "DefaultGraphicsPipeline",
@@ -1397,8 +1410,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   wireframed_geometry_pipeline = GraphicsPipeline::construct(*device, config);
 
   shader_cache.try_emplace(
-      "Grid", Shader::construct(*device, FS::shader("Grid.vert.spv"),
-                                FS::shader("Grid.frag.spv")));
+      "Grid", Shader::compile_graphics_scoped(*device, FS::shader("Grid.vert"),
+                                              FS::shader("Grid.frag")));
   grid_material = Material::construct(*device, *shader_cache.at("Grid"));
   GraphicsPipelineConfiguration grid_config{
       .name = "GridPipeline",
@@ -1424,8 +1437,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   shader_cache.try_emplace(
       "Fullscreen",
-      Shader::construct(*device, FS::shader("Fullscreen.vert.spv"),
-                        FS::shader("Fullscreen.frag.spv")));
+      Shader::compile_graphics_scoped(*device, FS::shader("Fullscreen.vert"),
+                                      FS::shader("Fullscreen.frag")));
   fullscreen_material =
       Material::construct(*device, *shader_cache.at("Fullscreen"));
   FramebufferProperties fullscreen_props{
@@ -1453,9 +1466,9 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
   };
   fullscreen_pipeline = GraphicsPipeline::construct(*device, fullscreen_config);
 
-  shader_cache.try_emplace(
-      "Skybox", Shader::construct(*device, FS::shader("Skybox.vert.spv"),
-                                  FS::shader("Skybox.frag.spv")));
+  shader_cache.try_emplace("Skybox", Shader::compile_graphics_scoped(
+                                         *device, FS::shader("Skybox.vert"),
+                                         FS::shader("Skybox.frag")));
   GraphicsPipelineConfiguration skybox_config{
       .name = "FullscreenPipeline",
       .shader = shader_cache.at("Skybox").get(),
@@ -1482,9 +1495,9 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
     // Point/spot lights + culled lights
     ssbos->create(1, SetBinding(7));
     ssbos->create(1, SetBinding(8));
-    shader_cache.try_emplace(
-        "LightCulling",
-        Shader::construct(*device, FS::shader("LightCulling.comp.spv")));
+    shader_cache.try_emplace("LightCulling",
+                             Shader::compile_compute_scoped(
+                                 *device, FS::shader("LightCulling.comp")));
     light_culling_material =
         Material::construct(*device, *shader_cache.at("LightCulling"));
     light_culling_pipeline = ComputePipeline::construct(
@@ -1504,8 +1517,8 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
 
   create_pool_and_layout();
 
-  shader_cache.try_emplace(
-      "Bloom", Shader::construct(*device, FS::shader("Bloom.comp.spv")));
+  shader_cache.try_emplace("Bloom", Shader::compile_compute_scoped(
+                                        *device, FS::shader("Bloom.comp")));
   bloom_pipeline = ComputePipeline::construct(
       *device, {"Bloom", PipelineStage::Compute, *shader_cache.at("Bloom")});
   bloom_material = Material::construct(*device, *shader_cache.at("Bloom"));

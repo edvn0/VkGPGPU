@@ -32,7 +32,7 @@
 ClientApp::ClientApp(const ApplicationProperties &props)
     : App(props), camera(75.0F, get_swapchain()->get_extent().as<float>().width,
                          get_swapchain()->get_extent().as<float>().height, 0.1F,
-                         100000.0F, nullptr),
+                         1000.0F, nullptr),
       timer(*get_messaging_client()), scene_renderer(*get_device()){};
 
 void ClientApp::on_update(floating ts) {
@@ -105,12 +105,12 @@ struct Watcher : public IFilesystemChangeListener {
   ~Watcher() override = default;
 
   auto get_file_extension_filter()
-      -> const std::unordered_set<std::string> & override {
+      -> const Container::StringLikeUnorderedSet<std::string> & override {
     return filetype_extensions;
   }
 
-  std::unordered_set<std::string> filetype_extensions{".glsl", ".vert",
-                                                      ".frag"};
+  Container::StringLikeUnorderedSet<std::string> filetype_extensions{
+      ".glsl", ".vert", ".frag"};
 };
 
 void ClientApp::on_create() {
@@ -536,9 +536,9 @@ auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
     ext = get_window()->get_extent();
   }
 
-  scene_renderer.on_resize(new_extent);
+  scene_renderer.on_resize(ext);
 
-  info("New extent: {}", new_extent);
+  info("New extent: {}", ext);
 }
 
 auto ClientApp::delete_selected_entity() -> void {

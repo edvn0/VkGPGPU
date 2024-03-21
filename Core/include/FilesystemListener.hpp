@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Containers.hpp"
 #include "IterationDecision.hpp"
 #include "Types.hpp"
 
@@ -20,7 +21,7 @@ class IFilesystemChangeListener {
 public:
   virtual ~IFilesystemChangeListener() = default;
   virtual auto get_file_extension_filter()
-      -> const std::unordered_set<std::string> & = 0;
+      -> const Container::StringLikeSet<std::string> & = 0;
 
   virtual auto on_file_created(const FileInfo &) -> IterationDecision {
     return IterationDecision::Break;

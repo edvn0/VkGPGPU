@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+#include "compilation/Forward.hpp"
 #include "reflection/ReflectionData.hpp"
 
 namespace Core {
@@ -19,6 +20,31 @@ public:
     Vertex,
     Fragment,
   };
+  struct PathShaderType {
+    const std::filesystem::path path;
+    const Type type;
+
+    auto operator<=>(const PathShaderType &other) const {
+      return type <=> other.type;
+    }
+    auto operator==(const PathShaderType &other) const {
+      return type == other.type;
+    }
+  };
+
+  struct Hasher {
+    using is_transparent = void;
+    auto operator()(const PathShaderType &type) const noexcept -> usize {
+      static std::hash<u32> hasher;
+      return hasher(static_cast<u32>(type.type));
+    }
+  };
+
+  explicit Shader(
+      const Device &device,
+      const std::unordered_set<PathShaderType, Hasher, std::equal_to<>> &);
+  explicit Shader(const Device &, std::unordered_map<Type, std::vector<u32>>,
+                  std::string_view name = "");
 
   ~Shader();
   auto on_resize(const Extent<u32> &) -> void {}
@@ -31,6 +57,13 @@ public:
 
   [[nodiscard]] auto get_code(Type t = Type::Compute) const
       -> std::optional<std::string> {
+    // First check parsed_spirv_per_stage_u32
+    if (parsed_spirv_per_stage_u32.contains(t)) {
+      std::vector<u32> spirv = parsed_spirv_per_stage_u32.at(t);
+      return std::string(std::bit_cast<const char *>(spirv.data()),
+                         spirv.size() * sizeof(u32));
+    }
+
     return parsed_spirv_per_stage.contains(t) ? parsed_spirv_per_stage.at(t)
                                               : std::optional<std::string>{};
   }
@@ -56,36 +89,23 @@ public:
   [[nodiscard]] auto hash() const -> usize;
   [[nodiscard]] auto has_descriptor_set(u32 set) const -> bool;
 
-  static auto construct(const Device &device, const std::filesystem::path &path)
+  static auto compile_graphics(const Device &, const std::filesystem::path &,
+                               const std::filesystem::path &) -> Ref<Shader>;
+  static auto compile_compute(const Device &, const std::filesystem::path &)
+      -> Ref<Shader>;
+  static auto compile_graphics_scoped(const Device &,
+                                      const std::filesystem::path &,
+                                      const std::filesystem::path &)
       -> Scope<Shader>;
-  static auto construct(const Device &device,
-                        const std::filesystem::path &vertex_path,
-                        const std::filesystem::path &fragment_path)
+  static auto compile_compute_scoped(const Device &,
+                                     const std::filesystem::path &)
       -> Scope<Shader>;
+
+  static auto
+  initialise_compiler(const Device &device,
+                      const Compilation::ShaderCompilerConfiguration &) -> void;
 
 private:
-  struct PathShaderType {
-    const std::filesystem::path path;
-    const Type type;
-
-    auto operator<=>(const PathShaderType &other) const {
-      return type <=> other.type;
-    }
-    auto operator==(const PathShaderType &other) const {
-      return type == other.type;
-    }
-  };
-  struct Hasher {
-    using is_transparent = void;
-    auto operator()(const PathShaderType &type) const noexcept -> usize {
-      static std::hash<u32> hasher;
-      return hasher(static_cast<u32>(type.type));
-    }
-  };
-  explicit Shader(
-      const Device &device,
-      const std::unordered_set<PathShaderType, Hasher, std::equal_to<>> &);
-
   const Device &device;
   std::string name{};
   usize hash_value{0};
@@ -93,8 +113,12 @@ private:
   Reflection::ReflectionData reflection_data{};
   std::unordered_map<Type, VkShaderModule> shader_modules{};
   std::unordered_map<Type, std::string> parsed_spirv_per_stage{};
+  std::unordered_map<Type, std::vector<u32>> parsed_spirv_per_stage_u32{};
 
   void create_descriptor_set_layouts();
+
+  // Using forward declaration to avoid circular dependency of ShaderCompiler
+  static inline Scope<Compilation::ShaderCompiler> compiler{nullptr};
 };
 
 } // namespace Core

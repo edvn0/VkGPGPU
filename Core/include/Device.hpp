@@ -6,6 +6,7 @@
 #include "Types.hpp"
 
 #include <fmt/core.h>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>

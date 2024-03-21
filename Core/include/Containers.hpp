@@ -7,9 +7,11 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Core::Container {
@@ -42,6 +44,14 @@ struct StringLikeEqual {
 template <typename Value>
 using StringLikeMap =
     std::unordered_map<std::string, Value, StringLikeHasher, StringLikeEqual>;
+
+template <typename Value>
+using StringLikeSet =
+    std::unordered_set<std::string, StringLikeHasher, StringLikeEqual>;
+
+template <typename T>
+using StringLikeUnorderedSet =
+    std::unordered_set<T, StringLikeHasher, StringLikeEqual>;
 
 template <typename T>
 concept Container = requires(T t) {

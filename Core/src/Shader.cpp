@@ -13,6 +13,7 @@
 #include <sstream>
 #include <vulkan/vulkan.h>
 
+#include "compilation/ShaderCompiler.hpp"
 #include "reflection/ReflectionData.hpp"
 #include "reflection/Reflector.hpp"
 
@@ -41,6 +42,44 @@ auto read_file(const std::filesystem::path &path) -> std::string {
 
   // Return the contents of the file as a string
   return buffer.str();
+}
+
+Shader::Shader(const Device &dev,
+               std::unordered_map<Type, std::vector<u32>> spirv_stages,
+               std::string_view input_name)
+    : device(dev) {
+  for (const auto &[type, spirv] : spirv_stages) {
+    parsed_spirv_per_stage_u32[type] = spirv;
+    VkShaderModuleCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    create_info.codeSize =
+        parsed_spirv_per_stage_u32[type].size() * sizeof(u32);
+    create_info.pCode = parsed_spirv_per_stage_u32[type].data();
+
+    verify(vkCreateShaderModule(device.get_device(), &create_info, nullptr,
+                                &shader_modules[type]),
+           "vkCreateShaderModule", "Failed to create shader module");
+  }
+  std::stringstream name_stream;
+  name_stream << input_name;
+  name = name_stream.str();
+  const Reflection::Reflector reflector{*this};
+  reflector.reflect(descriptor_set_layouts, reflection_data);
+  create_descriptor_set_layouts();
+
+  static constexpr std::hash<std::string> string_hasher;
+  auto name_hash = string_hasher(name);
+  /*if (parsed_spirv_per_stage_u32.contains(Type::Compute)) {
+    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Compute);
+  }
+  if (parsed_spirv_per_stage_u32.contains(Type::Vertex)) {
+    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Vertex);
+  }
+  if (parsed_spirv_per_stage_u32.contains(Type::Fragment)) {
+    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Fragment);
+  }*/
+
+  hash_value = name_hash;
 }
 
 Shader::Shader(
@@ -364,29 +403,40 @@ auto to_shader_type(const std::filesystem::path &path) {
   return from_extension;
 }
 
-auto Shader::construct(const Device &device, const std::filesystem::path &path)
-    -> Scope<Shader> {
-  PathShaderType shader_type{
-      .path = path,
-      .type = to_shader_type(path),
-  };
-  return Scope<Shader>{new Shader{device, {shader_type}}};
+auto Shader::compile_graphics(const Device &device,
+                              const std::filesystem::path &vertex_path,
+                              const std::filesystem::path &fragment_path)
+    -> Ref<Shader> {
+  ensure(compiler != nullptr, "ShaderCompiler is not initialized!");
+  return compiler->compile_graphics(vertex_path, fragment_path);
 }
 
-auto Shader::construct(const Device &device,
-                       const std::filesystem::path &vertex_path,
-                       const std::filesystem::path &fragment_path)
+auto Shader::compile_compute(const Device &device,
+                             const std::filesystem::path &compute_path)
+    -> Ref<Shader> {
+  ensure(compiler != nullptr, "ShaderCompiler is not initialized!");
+  return compiler->compile_compute(compute_path);
+}
+
+auto Shader::compile_graphics_scoped(const Device &device,
+                                     const std::filesystem::path &vertex_path,
+                                     const std::filesystem::path &fragment_path)
     -> Scope<Shader> {
-  std::unordered_set<PathShaderType, Hasher, std::equal_to<>> loaded{
-      {
-          .path = vertex_path,
-          .type = Shader::Type::Vertex,
-      },
-      {
-          .path = fragment_path,
-          .type = Shader::Type::Fragment,
-      }};
-  return Scope<Shader>{new Shader{device, loaded}};
+  ensure(compiler != nullptr, "ShaderCompiler is not initialized!");
+  return compiler->compile_graphics_scoped(vertex_path, fragment_path);
+}
+
+auto Shader::compile_compute_scoped(const Device &device,
+                                    const std::filesystem::path &compute_path)
+    -> Scope<Shader> {
+  ensure(compiler != nullptr, "ShaderCompiler is not initialized!");
+  return compiler->compile_compute_scoped(compute_path);
+}
+
+auto Shader::initialise_compiler(
+    const Device &device, const Compilation::ShaderCompilerConfiguration &conf)
+    -> void {
+  compiler = make_scope<Compilation::ShaderCompiler>(device, conf);
 }
 
 } // namespace Core

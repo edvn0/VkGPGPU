@@ -211,8 +211,8 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
 
   importer->importer = make_scope<Assimp::Importer>();
 
-  default_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
-                                     FS::shader("Basic.frag.spv"));
+  default_shader = Shader::compile_graphics_scoped(
+      *device, FS::shader("Basic.vert"), FS::shader("Basic.frag"));
 
   const aiScene *loaded_scene =
       importer->importer->ReadFile(file_path.string(), mesh_import_flags);

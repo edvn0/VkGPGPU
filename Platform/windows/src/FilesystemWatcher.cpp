@@ -1,5 +1,6 @@
 #include "Containers.hpp"
 #include "Ensure.hpp"
+#include "Filesystem.hpp"
 #include "FilesystemListener.hpp"
 #include "Formatters.hpp"
 
@@ -37,26 +38,25 @@ private:
   auto notify_listeners(const FileInfo &info) {
     warn("[FilesystemWatcher] FileInfo: {}, Type: {}", info.path,
          magic_enum::enum_name(info.change_type));
-    Container::for_each(
-        change_listeners, [&fi = info](Scope<IFilesystemChangeListener> &ptr) {
-          if (!ptr->get_file_extension_filter().contains(
-                  fi.path.extension().string())) {
-            return IterationDecision::Continue;
-          }
+    Container::for_each(change_listeners, [&fi = info](const auto &ptr) {
+      if (!ptr->get_file_extension_filter().contains(
+              fi.path.extension().string())) {
+        return IterationDecision::Continue;
+      }
 
-          IterationDecision decision{IterationDecision::Continue};
-          if (fi.change_type == FileChangeType::Created) {
-            decision = ptr->on_file_created(fi);
-          }
-          if (fi.change_type == FileChangeType::Modified) {
-            decision = ptr->on_file_modified(fi);
-          }
-          if (fi.change_type == FileChangeType::Deleted) {
-            decision = ptr->on_file_deleted(fi);
-          }
+      IterationDecision decision;
+      if (fi.change_type == FileChangeType::Created) {
+        decision = ptr->on_file_created(fi);
+      } else if (fi.change_type == FileChangeType::Modified) {
+        decision = ptr->on_file_modified(fi);
+      } else if (fi.change_type == FileChangeType::Deleted) {
+        decision = ptr->on_file_deleted(fi);
+      } else {
+        decision = IterationDecision::Continue;
+      }
 
-          return decision;
-        });
+      return decision;
+    });
   }
 
   static auto close_handle(HANDLE handle) -> void {
@@ -70,7 +70,6 @@ void FilesystemWatcher::Impl::monitor_directory(
     const std::stop_token &stop_token) {
   constexpr DWORD buffer_length = 10 * 1024;
   std::array<BYTE, buffer_length> buffer{};
-  DWORD bytes_returned;
 
   auto dir_handle = std::unique_ptr<void, decltype(&Impl::close_handle)>(
       CreateFileA(dir_path.c_str(), FILE_LIST_DIRECTORY,
@@ -97,12 +96,10 @@ void FilesystemWatcher::Impl::monitor_directory(
 
   while (!stop_token.stop_requested()) {
     DWORD dw_bytes_returned = 0;
-    BOOL result = ReadDirectoryChangesW(
-        dir_handle.get(), buffer.data(), buffer_length, TRUE,
-        FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE,
-        &dw_bytes_returned, &overlapped, nullptr);
-
-    if (!result) {
+    if (!ReadDirectoryChangesW(
+            dir_handle.get(), buffer.data(), buffer_length, TRUE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE,
+            &dw_bytes_returned, &overlapped, nullptr)) {
       cleanup();
       return;
     }
@@ -112,15 +109,15 @@ void FilesystemWatcher::Impl::monitor_directory(
     if (wait_status == WAIT_OBJECT_0) {
       DWORD next_entry_offset = 0;
       do {
-        FILE_NOTIFY_INFORMATION *notifyInfo =
-            reinterpret_cast<FILE_NOTIFY_INFORMATION *>(buffer.data() +
-                                                        next_entry_offset);
+        const auto *notify_info = std::bit_cast<FILE_NOTIFY_INFORMATION *>(
+            buffer.data() + next_entry_offset);
         FileInfo fileInfo;
 
-        fileInfo.path = std::wstring(
-            notifyInfo->FileName, notifyInfo->FileNameLength / sizeof(WCHAR));
+        fileInfo.path = FS::resolve(
+            std::wstring(notify_info->FileName,
+                         notify_info->FileNameLength / sizeof(WCHAR)));
 
-        switch (notifyInfo->Action) {
+        switch (notify_info->Action) {
         case FILE_ACTION_ADDED:
           fileInfo.change_type = FileChangeType::Created;
           break;
@@ -136,7 +133,7 @@ void FilesystemWatcher::Impl::monitor_directory(
 
         notify_listeners(fileInfo);
 
-        next_entry_offset = notifyInfo->NextEntryOffset;
+        next_entry_offset = notify_info->NextEntryOffset;
       } while (next_entry_offset != 0);
 
       ResetEvent(overlapped.hEvent);
