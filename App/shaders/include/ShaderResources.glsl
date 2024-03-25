@@ -1,8 +1,11 @@
 #ifndef BUFFER_VKGPU
 #define BUFFER_VKGPU
 
-mat4 depth_bias = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
-                       0.0, 0.5, 0.5, 0.5, 1.0);
+const mat4 depth_bias = mat4(
+  0.5, 0.0, 0.0, 0.0,
+  0.0, 0.5, 0.0, 0.0,
+  0.0, 0.0, 1.0, 0.0,
+  0.5, 0.5, 0.0, 1.0 );
 
 layout(std140, set = 0, binding = 1) uniform ShadowData {
   mat4 view;

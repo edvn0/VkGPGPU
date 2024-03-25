@@ -111,27 +111,27 @@ void FilesystemWatcher::Impl::monitor_directory(
       do {
         const auto *notify_info = std::bit_cast<FILE_NOTIFY_INFORMATION *>(
             buffer.data() + next_entry_offset);
-        FileInfo fileInfo;
+        FileInfo file_info{};
 
-        fileInfo.path = FS::resolve(
+        file_info.path = FS::resolve(
             std::wstring(notify_info->FileName,
                          notify_info->FileNameLength / sizeof(WCHAR)));
 
         switch (notify_info->Action) {
         case FILE_ACTION_ADDED:
-          fileInfo.change_type = FileChangeType::Created;
+          file_info.change_type = FileChangeType::Created;
           break;
         case FILE_ACTION_REMOVED:
-          fileInfo.change_type = FileChangeType::Deleted;
+          file_info.change_type = FileChangeType::Deleted;
           break;
         case FILE_ACTION_MODIFIED:
-          fileInfo.change_type = FileChangeType::Modified;
+          file_info.change_type = FileChangeType::Modified;
           break;
         default:
           break;
         }
 
-        notify_listeners(fileInfo);
+        notify_listeners(file_info);
 
         next_entry_offset = notify_info->NextEntryOffset;
       } while (next_entry_offset != 0);

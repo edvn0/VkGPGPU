@@ -53,7 +53,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
   return VK_FALSE;
 }
 
-void populateDebugMessengerCreateInfo(
+void populate_debug_messenger_create_info(
     VkDebugUtilsMessengerCreateInfoEXT &createInfo) {
   createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -103,6 +103,10 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
 
   std::vector<const char *> enabled_extensions = {
       VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+#ifndef GPGPU_DEBUG
+  enabled_extensions.clear();
+#endif
+
   if (!headless) {
     if (!glfwInit()) {
       error("Failed to initialize GLFW");
@@ -128,17 +132,16 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
   };
 
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
+  VkValidationFeaturesEXT validation_features{};
+  validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
   if (enable_validation_layers) {
     std::array<VkValidationFeatureEnableEXT, 1> enabled_features{};
-    enabled_features[0] =
-        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+    // enabled_features[0] =
+    //    VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
 
-    VkValidationFeaturesEXT validation_features{};
-    validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
     validation_features.enabledValidationFeatureCount = enabled_features.size();
     validation_features.pEnabledValidationFeatures = enabled_features.data();
-
-    populateDebugMessengerCreateInfo(debug_create_info);
+    populate_debug_messenger_create_info(debug_create_info);
     create_info.pNext = &debug_create_info;
     debug_create_info.pNext = &validation_features;
   }
@@ -159,8 +162,8 @@ auto Instance::setup_debug_messenger() -> void {
   if (!enable_validation_layers)
     return;
 
-  VkDebugUtilsMessengerCreateInfoEXT createInfo;
-  populateDebugMessengerCreateInfo(createInfo);
+  VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+  populate_debug_messenger_create_info(createInfo);
 
   verify(create_debug_utils_messenger_ext(instance, &createInfo, nullptr,
                                           &debug_messenger),

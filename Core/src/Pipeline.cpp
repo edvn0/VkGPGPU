@@ -199,6 +199,7 @@ ComputePipeline::ComputePipeline(
     const Device &dev, const ComputePipelineConfiguration &configuration)
     : device(dev), name(configuration.name) {
   construct_pipeline(configuration);
+  cached_shader_hash = configuration.shader.hash();
 }
 
 ComputePipeline::~ComputePipeline() {
@@ -294,6 +295,7 @@ GraphicsPipeline::GraphicsPipeline(const Device &dev,
                                    const GraphicsPipelineConfiguration &config)
     : device(&dev), configuration(config) {
   construct_pipeline(configuration);
+  cached_shader_hash = config.shader->hash();
 }
 
 auto GraphicsPipeline::on_resize(const Extent<u32> &extent) -> void {

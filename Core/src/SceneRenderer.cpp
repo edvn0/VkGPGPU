@@ -180,6 +180,10 @@ auto SceneRenderer::on_resize(const Extent<u32> &new_extent) -> void {
       .width = 1.0F / static_cast<float>(extent.width),
       .height = 1.0F / static_cast<float>(extent.height),
   };
+  predepth_framebuffer->on_resize(extent);
+
+  geometry_framebuffer->set_existing_image(
+      1, predepth_framebuffer->get_depth_image());
   geometry_framebuffer->on_resize(extent);
   shadow_framebuffer->on_resize(extent);
   fullscreen_framebuffer->on_resize(extent);
@@ -447,7 +451,19 @@ auto SceneRenderer::begin_frame(const glm::mat4 &, const glm::mat4 &) -> void {
                          nullptr);
 }
 
+auto SceneRenderer::on_flush() -> void {
+  if (fullscreen_pipeline->get_cached_shader_hash() !=
+      fullscreen_pipeline->get_shader()->hash()) {
+    fullscreen_pipeline->set_shader(shader_cache.at("Fullscreen").get());
+    fullscreen_pipeline->resize(*geometry_framebuffer);
+    fullscreen_material =
+        Material::construct(*device, *shader_cache.at("Fullscreen"));
+  }
+}
+
 auto SceneRenderer::shadow_pass() -> void {
+  gpu_time_queries.directional_shadow_pass_query =
+      command_buffer->begin_timestamp_query();
   bind_pipeline(*shadow_pipeline);
   for (const auto &[key, value] : shadow_draw_commands) {
     auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
@@ -467,6 +483,8 @@ auto SceneRenderer::shadow_pass() -> void {
                        mesh_transform_map.at(key).offset, 1);
     bind_index_buffer(*mesh_ptr->get_index_buffer());
 
+    push_constants(*shadow_pipeline, *shadow_material);
+
     draw({
         .index_count = submesh.index_count,
         .instance_count = instance_count,
@@ -477,29 +495,84 @@ auto SceneRenderer::shadow_pass() -> void {
 
   geometry_renderer.flush(*command_buffer, current_frame, shadow_pipeline.get(),
                           shadow_material.get());
+  command_buffer->end_timestamp_query(
+      gpu_time_queries.directional_shadow_pass_query);
 }
 
-auto SceneRenderer::light_culling_pass() -> void {
+auto SceneRenderer::spot_shadow_pass() -> void {
+  gpu_time_queries.spot_shadow_pass_query =
+      command_buffer->begin_timestamp_query();
+  bind_pipeline(*spot_shadow_pipeline);
+  for (const auto &[key, value] : shadow_draw_commands) {
+    auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
 
-  compute_command_buffer->begin(current_frame);
-  gpu_time_queries.light_culling_pass_query =
-      compute_command_buffer->begin_timestamp_query();
-  light_culling_material->set("shadow_map", get_depth_image());
-  light_culling_pipeline->bind(*compute_command_buffer);
+    const auto &submesh = mesh_ptr->get_submesh(submesh_index);
 
-  update_material_for_rendering(current_frame, *light_culling_material,
-                                ubos.get(), ssbos.get());
-  light_culling_material->bind(*compute_command_buffer, *light_culling_pipeline,
+    update_material_for_rendering(current_frame, *spot_shadow_material,
+                                  ubos.get(), ssbos.get());
+    spot_shadow_material->bind(*command_buffer, *spot_shadow_pipeline,
                                current_frame);
 
-  push_constants(*light_culling_pipeline, *light_culling_material);
-  vkCmdDispatch(compute_command_buffer->get_command_buffer(),
-                light_culling_workgroup_size.x, light_culling_workgroup_size.y,
-                1);
+    const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
+    const auto &transform_vertex_buffer =
+        *transform_buffers[current_frame].vertex_buffer;
 
-  compute_command_buffer->end_timestamp_query(
-      gpu_time_queries.light_culling_pass_query);
-  compute_command_buffer->end_and_submit();
+    bind_vertex_buffer(mesh_vertex_buffer);
+    bind_vertex_buffer(transform_vertex_buffer,
+                       mesh_transform_map.at(key).offset, 1);
+    bind_index_buffer(*mesh_ptr->get_index_buffer());
+
+    push_constants(*spot_shadow_pipeline, *spot_shadow_material);
+
+    draw({
+        .index_count = submesh.index_count,
+        .instance_count = instance_count,
+        .first_index = submesh.base_index,
+        .vertex_offset = submesh.base_vertex,
+    });
+  }
+
+  geometry_renderer.flush(*command_buffer, current_frame,
+                          spot_shadow_pipeline.get(),
+                          spot_shadow_material.get());
+  command_buffer->end_timestamp_query(gpu_time_queries.spot_shadow_pass_query);
+}
+
+auto SceneRenderer::predepth_pass() -> void {
+  auto &selected_pipeline = predepth_pipeline;
+  bind_pipeline(*selected_pipeline);
+  for (auto &&[key, value] : draw_commands) {
+    auto &&[mesh_ptr, submesh_index, instance_count, material] = value;
+    const auto &submesh = mesh_ptr->get_submesh(submesh_index);
+
+    if (predepth_material) {
+      update_material_for_rendering(current_frame, *predepth_material,
+                                    ubos.get(), ssbos.get());
+      predepth_material->bind(*command_buffer, *selected_pipeline,
+                              current_frame);
+      push_constants(*selected_pipeline, *predepth_material);
+    }
+
+    const auto &mesh_vertex_buffer = *mesh_ptr->get_vertex_buffer();
+    const auto &transform_vertex_buffer =
+        *transform_buffers[current_frame].vertex_buffer;
+
+    bind_vertex_buffer(mesh_vertex_buffer);
+    bind_vertex_buffer(transform_vertex_buffer,
+                       mesh_transform_map.at(key).offset, 1);
+    bind_index_buffer(*mesh_ptr->get_index_buffer());
+
+    draw({
+        .index_count = submesh.index_count,
+        .instance_count = instance_count,
+        .first_index = submesh.base_index,
+        .vertex_offset = submesh.base_vertex,
+    });
+  }
+
+  geometry_renderer.update_all_materials_for_rendering(*this);
+  geometry_renderer.flush(*command_buffer, current_frame,
+                          predepth_pipeline.get(), predepth_material.get());
 }
 
 auto SceneRenderer::geometry_pass() -> void {
@@ -507,7 +580,8 @@ auto SceneRenderer::geometry_pass() -> void {
   if (Input::pressed(KeyCode::KEY_F3)) {
     wireframe = !wireframe;
   }
-
+  gpu_time_queries.geometry_pass_query =
+      command_buffer->begin_timestamp_query();
   const auto *selected_pipeline =
       wireframe ? wireframed_geometry_pipeline.get() : geometry_pipeline.get();
 
@@ -538,7 +612,8 @@ auto SceneRenderer::geometry_pass() -> void {
     bind_index_buffer(*mesh_ptr->get_index_buffer());
 
     if (wireframe) {
-      vkCmdSetLineWidth(command_buffer->get_command_buffer(), 2.0F);
+      vkCmdSetLineWidth(command_buffer->get_command_buffer(),
+                        selected_pipeline->get_line_width());
     }
 
     draw({
@@ -551,417 +626,8 @@ auto SceneRenderer::geometry_pass() -> void {
 
   geometry_renderer.update_all_materials_for_rendering(*this);
   geometry_renderer.flush(*command_buffer, current_frame);
-}
 
-void SceneRenderer::bloom_pass() {
-  static auto first_iteration = true;
-  if (first_iteration) {
-    first_iteration = false;
-    return;
-  }
-
-  if (!bloom_settings.enabled)
-    return;
-
-  enum class BloomMode : int {
-    Prefilter,
-    Downsample,
-    FirstUpsample,
-    Upsample,
-  };
-
-  struct {
-    glm::vec4 params;
-    float LOD = 0.0f;
-    // 0 = prefilter, 1 = downsample, 2 = firstUpsample, 3 = upsample
-    BloomMode mode = BloomMode::Prefilter;
-  } bloom_compute_push_constants;
-
-  bloom_compute_push_constants.params = {
-      bloom_settings.threshold, bloom_settings.threshold - bloom_settings.knee,
-      bloom_settings.knee * 2.0f, 0.25f / bloom_settings.knee};
-  bloom_compute_push_constants.mode = BloomMode::Prefilter;
-
-  const auto &input_image = geometry_framebuffer->get_image();
-
-  std::array images = {
-      &bloom_textures.at(0)->get_image(),
-      &bloom_textures.at(1)->get_image(),
-      &bloom_textures.at(2)->get_image(),
-  };
-
-  const auto &shader = bloom_material->get_shader();
-
-  auto descriptor_image_info = images[0]->get_descriptor_info();
-  descriptor_image_info.imageView = images[0]->get_mip_image_view_at(0);
-
-  std::array<VkWriteDescriptorSet, 3> write_descriptors{};
-
-  VkDescriptorSetLayout descriptorSetLayout =
-      shader.get_descriptor_set_layouts().at(0);
-
-  VkDescriptorSetAllocateInfo allocInfo = {};
-  allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocInfo.descriptorSetCount = 1;
-  allocInfo.pSetLayouts = &descriptorSetLayout;
-
-  compute_command_buffer->begin(current_frame);
-  gpu_time_queries.bloom_compute_pass_query =
-      compute_command_buffer->begin_timestamp_query();
-
-  // Output image
-  VkDescriptorSet descriptor_set =
-      device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-  write_descriptors[0] =
-      *shader.get_descriptor_set("bloom_output_storage_image", 0);
-  write_descriptors[0].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[0].pImageInfo = &descriptor_image_info;
-
-  // Input image
-  write_descriptors[1] =
-      *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
-  write_descriptors[1].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[1].pImageInfo = &input_image->get_descriptor_info();
-
-  write_descriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
-  write_descriptors[2].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[2].pImageInfo = &input_image->get_descriptor_info();
-
-  vkUpdateDescriptorSets(device->get_device(), (u32)write_descriptors.size(),
-                         write_descriptors.data(), 0, nullptr);
-
-  u32 workgroups_x =
-      bloom_textures[0]->get_extent().width / bloom_workgroup_size;
-  u32 workgroups_y =
-      bloom_textures[0]->get_extent().height / bloom_workgroup_size;
-
-  SceneRenderer::begin_gpu_debug_frame_marker(*compute_command_buffer,
-                                              "Bloom-Prefilter");
-  bloom_pipeline->bind(*compute_command_buffer);
-  vkCmdPushConstants(compute_command_buffer->get_command_buffer(),
-                     bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL,
-                     0, sizeof(bloom_compute_push_constants),
-                     &bloom_compute_push_constants);
-  vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
-                          bloom_pipeline->get_bind_point(),
-                          bloom_pipeline->get_pipeline_layout(), 0, 1,
-                          &descriptor_set, 0, nullptr);
-  vkCmdDispatch(compute_command_buffer->get_command_buffer(), workgroups_x,
-                workgroups_y, 1);
-  SceneRenderer::end_gpu_debug_frame_marker(*compute_command_buffer,
-                                            "Bloom-Prefilter");
-
-  {
-    VkImageMemoryBarrier imageMemoryBarrier = {};
-    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imageMemoryBarrier.image = images[0]->get_image();
-    imageMemoryBarrier.subresourceRange = {
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        0,
-        images[0]->get_properties().mip_info.mips,
-        0,
-        1,
-    };
-    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &imageMemoryBarrier);
-  }
-
-  bloom_compute_push_constants.mode = BloomMode::Downsample;
-
-  u32 offset = 2;
-  u32 mips =
-      bloom_textures[0]->get_image().get_properties().mip_info.mips - offset;
-  SceneRenderer::begin_gpu_debug_frame_marker(*compute_command_buffer,
-                                              "Bloom-DownSample");
-  for (u32 i = 1; i < mips; i++) {
-    auto [mip_width, mip_height] = bloom_textures[0]->get_mip_size(i);
-    workgroups_x =
-        (u32)glm::ceil((float)mip_width / (float)bloom_workgroup_size);
-    workgroups_y =
-        (u32)glm::ceil((float)mip_height / (float)bloom_workgroup_size);
-
-    {
-      // Output image
-      descriptor_image_info.imageView = images[1]->get_mip_image_view_at(i);
-
-      descriptor_set =
-          device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-      write_descriptors[0] =
-          *shader.get_descriptor_set("bloom_output_storage_image", 0);
-      write_descriptors[0].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      write_descriptors[0].pImageInfo = &descriptor_image_info;
-
-      // Input image
-      write_descriptors[1] =
-          *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
-      write_descriptors[1].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      auto descriptor = bloom_textures[0]->get_image().get_descriptor_info();
-      // descriptor.sampler = samplerClamp;
-      write_descriptors[1].pImageInfo = &descriptor;
-
-      write_descriptors[2] =
-          *shader.get_descriptor_set("bloom_output_texture", 0);
-      write_descriptors[2].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      write_descriptors[2].pImageInfo = &input_image->get_descriptor_info();
-
-      vkUpdateDescriptorSets(device->get_device(),
-                             (u32)write_descriptors.size(),
-                             write_descriptors.data(), 0, nullptr);
-
-      bloom_compute_push_constants.LOD = static_cast<float>(i) - 1.0f;
-      vkCmdPushConstants(
-          compute_command_buffer->get_command_buffer(),
-          bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
-          sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
-      vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
-                              bloom_pipeline->get_bind_point(),
-                              bloom_pipeline->get_pipeline_layout(), 0, 1,
-                              &descriptor_set, 0, nullptr);
-      vkCmdDispatch(compute_command_buffer->get_command_buffer(), workgroups_x,
-                    workgroups_y, 1);
-    }
-
-    {
-      VkImageMemoryBarrier imageMemoryBarrier = {};
-      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.image = images[1]->get_image();
-      imageMemoryBarrier.subresourceRange = {
-          VK_IMAGE_ASPECT_COLOR_BIT,
-          0,
-          images[1]->get_properties().mip_info.mips,
-          0,
-          1,
-      };
-      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
-                           0, nullptr, 1, &imageMemoryBarrier);
-    }
-
-    {
-      descriptor_image_info.imageView = images[0]->get_mip_image_view_at(i);
-
-      // Output image
-      descriptor_set =
-          device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-      write_descriptors[0] =
-          *shader.get_descriptor_set("bloom_output_storage_image", 0);
-      write_descriptors[0].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      write_descriptors[0].pImageInfo = &descriptor_image_info;
-
-      // Input image
-      write_descriptors[1] =
-          *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
-      write_descriptors[1].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      auto descriptor = bloom_textures[1]->get_image().get_descriptor_info();
-      // descriptor.sampler = samplerClamp;
-      write_descriptors[1].pImageInfo = &descriptor;
-
-      write_descriptors[2] =
-          *shader.get_descriptor_set("bloom_output_texture", 0);
-      write_descriptors[2].dstSet =
-          descriptor_set; // Should this be set inside the shader?
-      write_descriptors[2].pImageInfo = &input_image->get_descriptor_info();
-
-      vkUpdateDescriptorSets(device->get_device(),
-                             (u32)write_descriptors.size(),
-                             write_descriptors.data(), 0, nullptr);
-
-      bloom_compute_push_constants.LOD = (float)i;
-      vkCmdPushConstants(
-          compute_command_buffer->get_command_buffer(),
-          bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
-          sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
-      vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
-                              bloom_pipeline->get_bind_point(),
-                              bloom_pipeline->get_pipeline_layout(), 0, 1,
-                              &descriptor_set, 0, nullptr);
-      vkCmdDispatch(compute_command_buffer->get_command_buffer(), workgroups_x,
-                    workgroups_y, 1);
-    }
-
-    {
-      VkImageMemoryBarrier imageMemoryBarrier = {};
-      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.image = images[0]->get_image();
-      imageMemoryBarrier.subresourceRange = {
-          VK_IMAGE_ASPECT_COLOR_BIT, 0,
-          images[0]->get_properties().mip_info.mips, 0, 1};
-      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
-                           0, nullptr, 1, &imageMemoryBarrier);
-    }
-  }
-  SceneRenderer::end_gpu_debug_frame_marker(*compute_command_buffer,
-                                            "Bloom-DownSample");
-
-  SceneRenderer::begin_gpu_debug_frame_marker(*compute_command_buffer,
-                                              "Bloom-FirstUpsample");
-  bloom_compute_push_constants.mode = BloomMode::FirstUpsample;
-  workgroups_x *= 2;
-  workgroups_y *= 2;
-
-  // Output image
-  descriptor_set =
-      device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-  descriptor_image_info.imageView = images[2]->get_mip_image_view_at(mips - 2);
-
-  write_descriptors[0] =
-      *shader.get_descriptor_set("bloom_output_storage_image", 0);
-  write_descriptors[0].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[0].pImageInfo = &descriptor_image_info;
-
-  // Input image
-  write_descriptors[1] =
-      *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
-  write_descriptors[1].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[1].pImageInfo =
-      &bloom_textures[0]->get_image().get_descriptor_info();
-
-  write_descriptors[2] = *shader.get_descriptor_set("bloom_output_texture", 0);
-  write_descriptors[2].dstSet =
-      descriptor_set; // Should this be set inside the shader?
-  write_descriptors[2].pImageInfo = &input_image->get_descriptor_info();
-
-  vkUpdateDescriptorSets(device->get_device(), (u32)write_descriptors.size(),
-                         write_descriptors.data(), 0, nullptr);
-
-  bloom_compute_push_constants.LOD--;
-  vkCmdPushConstants(compute_command_buffer->get_command_buffer(),
-                     bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL,
-                     0, sizeof(bloom_compute_push_constants),
-                     &bloom_compute_push_constants);
-
-  auto &&[mip_width, mip_height] = bloom_textures[2]->get_mip_size(mips - 2);
-  workgroups_x = (u32)glm::ceil((float)mip_width / (float)bloom_workgroup_size);
-  workgroups_y =
-      (u32)glm::ceil((float)mip_height / (float)bloom_workgroup_size);
-  vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
-                          bloom_pipeline->get_bind_point(),
-                          bloom_pipeline->get_pipeline_layout(), 0, 1,
-                          &descriptor_set, 0, nullptr);
-  vkCmdDispatch(compute_command_buffer->get_command_buffer(), workgroups_x,
-                workgroups_y, 1);
-  {
-    VkImageMemoryBarrier imageMemoryBarrier = {};
-    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imageMemoryBarrier.image = images[2]->get_image();
-    imageMemoryBarrier.subresourceRange = {
-        VK_IMAGE_ASPECT_COLOR_BIT, 0, images[2]->get_properties().mip_info.mips,
-        0, 1};
-    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &imageMemoryBarrier);
-  }
-
-  SceneRenderer::end_gpu_debug_frame_marker(*compute_command_buffer,
-                                            "Bloom-FirstUpsample");
-
-  SceneRenderer::begin_gpu_debug_frame_marker(*compute_command_buffer,
-                                              "Bloom-Upsample");
-  bloom_compute_push_constants.mode = BloomMode::Upsample;
-
-  // Upsample
-  for (i32 mip = static_cast<i32>(mips) - 3; mip >= 0; mip--) {
-    auto [texture_mip_width, texture_mip_height] =
-        bloom_textures[2]->get_mip_size(mip);
-    workgroups_x =
-        (u32)glm::ceil((float)texture_mip_width / (float)bloom_workgroup_size);
-    workgroups_y =
-        (u32)glm::ceil((float)texture_mip_height / (float)bloom_workgroup_size);
-
-    // Output image
-    descriptor_image_info.imageView = images[2]->get_mip_image_view_at(mip);
-    auto descriptorSet =
-        device->get_descriptor_resource()->allocate_descriptor_set(allocInfo);
-    write_descriptors[0] =
-        *shader.get_descriptor_set("bloom_output_storage_image", 0);
-    write_descriptors[0].dstSet =
-        descriptorSet; // Should this be set inside the shader?
-    write_descriptors[0].pImageInfo = &descriptor_image_info;
-
-    // Input image
-    write_descriptors[1] =
-        *shader.get_descriptor_set("bloom_geometry_input_texture", 0);
-    write_descriptors[1].dstSet =
-        descriptorSet; // Should this be set inside the shader?
-    write_descriptors[1].pImageInfo =
-        &bloom_textures[0]->get_image().get_descriptor_info();
-
-    write_descriptors[2] =
-        *shader.get_descriptor_set("bloom_output_texture", 0);
-    write_descriptors[2].dstSet =
-        descriptorSet; // Should this be set inside the shader?
-    write_descriptors[2].pImageInfo = &images[2]->get_descriptor_info();
-
-    vkUpdateDescriptorSets(device->get_device(), (u32)write_descriptors.size(),
-                           write_descriptors.data(), 0, nullptr);
-
-    bloom_compute_push_constants.LOD = (float)mip;
-    vkCmdPushConstants(
-        compute_command_buffer->get_command_buffer(),
-        bloom_pipeline->get_pipeline_layout(), VK_SHADER_STAGE_ALL, 0,
-        sizeof(bloom_compute_push_constants), &bloom_compute_push_constants);
-    vkCmdBindDescriptorSets(compute_command_buffer->get_command_buffer(),
-                            bloom_pipeline->get_bind_point(),
-                            bloom_pipeline->get_pipeline_layout(), 0, 1,
-                            &descriptorSet, 0, nullptr);
-    vkCmdDispatch(compute_command_buffer->get_command_buffer(), workgroups_x,
-                  workgroups_y, 1);
-
-    {
-      VkImageMemoryBarrier imageMemoryBarrier = {};
-      imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-      imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-      imageMemoryBarrier.image = images[2]->get_image();
-      imageMemoryBarrier.subresourceRange = {
-          VK_IMAGE_ASPECT_COLOR_BIT, 0,
-          images[2]->get_properties().mip_info.mips, 0, 1};
-      imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-      imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      vkCmdPipelineBarrier(compute_command_buffer->get_command_buffer(),
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
-                           0, nullptr, 1, &imageMemoryBarrier);
-    }
-  }
-  SceneRenderer::end_gpu_debug_frame_marker(*compute_command_buffer,
-                                            "Bloom-Upsample");
-
-  compute_command_buffer->end_timestamp_query(
-      gpu_time_queries.bloom_compute_pass_query);
-  compute_command_buffer->end_and_submit();
+  command_buffer->end_timestamp_query(gpu_time_queries.geometry_pass_query);
 }
 
 auto SceneRenderer::debug_pass() -> void {
@@ -975,7 +641,7 @@ auto SceneRenderer::environment_pass() -> void {
   update_material_for_rendering(current_frame, *skybox_material, ubos.get(),
                                 nullptr);
   skybox_material->bind(*command_buffer, *skybox_pipeline, current_frame);
-  push_constants(*skybox_pipeline, *skybox_material);
+  // push_constants(*skybox_pipeline, *skybox_material);
 
   draw_vertices({
       .vertex_count = 6,
@@ -999,27 +665,28 @@ auto SceneRenderer::grid_pass() -> void {
 auto SceneRenderer::fullscreen_pass() -> void {
   bind_pipeline(*fullscreen_pipeline);
 
-  float Exposure = 0.8F;
-  float BloomIntensity = bloom_settings.intensity;
-  float BloomDirtIntensity = bloom_settings.dirt_intensity;
-  float Opacity = 1.0F;
+  float bloom_exposure = 0.8F;
+  float bloom_intensity = bloom_settings.intensity;
+  float bloom_dirt_intensity = bloom_settings.dirt_intensity;
+  float bloom_opacity = bloom_settings.opacity;
 
   fullscreen_material->set("bloom_geometry_input_texture",
                            *geometry_framebuffer->get_image(0));
-  fullscreen_material->set("u_DepthTexture", get_depth_image());
+  fullscreen_material->set("depth_texture", get_depth_image());
 
   if (!bloom_settings.enabled) {
-    BloomIntensity = 0.0f;
-    BloomDirtIntensity = 0.0f;
+    bloom_intensity = 0.0f;
+    bloom_dirt_intensity = 0.0f;
     fullscreen_material->set("bloom_output_texture",
                              SceneRenderer::get_white_texture());
+  } else {
+    fullscreen_material->set("bloom_output_texture", *bloom_textures[2]);
   }
-  fullscreen_material->set("bloom_output_texture", *bloom_textures[2]);
-  fullscreen_material->set("u_BloomDirtTexture",
+  fullscreen_material->set("bloom_dirt_texture",
                            SceneRenderer::get_black_texture());
 
-  const auto data =
-      glm::vec4{Exposure, BloomIntensity, BloomDirtIntensity, Opacity};
+  const auto data = glm::vec4{bloom_exposure, bloom_intensity,
+                              bloom_dirt_intensity, bloom_opacity};
   fullscreen_material->set("bloom_uniforms.values", data);
 
   push_constants(*fullscreen_pipeline, *fullscreen_material);
@@ -1039,29 +706,27 @@ auto SceneRenderer::begin_scene(const ECS::Scene &scene, FrameIndex frame_index)
 
   scene_data.light_environment = scene.get_light_environment();
 
-  const auto &lightEnvironment = scene_data.light_environment;
-  const std::vector<ECS::PointLight> &pointLightsVec =
-      lightEnvironment.point_light_buffer;
-  point_light_ubo.count = int(pointLightsVec.size());
-  std::memcpy(point_light_ubo.lights.data(), pointLightsVec.data(),
-              lightEnvironment.get_point_light_buffer_size_bytes());
+  const auto &light_environment = scene_data.light_environment;
+  const auto &point_lights_vector = light_environment.point_light_buffer;
+  point_light_ubo.count = static_cast<u32>(point_lights_vector.size());
+  std::memcpy(point_light_ubo.lights.data(), point_lights_vector.data(),
+              light_environment.get_point_light_buffer_size_bytes());
 
   auto &point_light_ubo_write = ubos->get(4, frame_index);
   point_light_ubo_write->write(&point_light_ubo,
                                16ull + sizeof(ECS::PointLight) *
                                            point_light_ubo.count);
 
-  const std::vector<ECS::SpotLight> &spotLightsVec =
-      lightEnvironment.spot_light_buffer;
-  spot_light_ubo.count = int(spotLightsVec.size());
-  std::memcpy(spot_light_ubo.lights.data(), spotLightsVec.data(),
-              lightEnvironment.get_spot_light_buffer_size_bytes());
+  const auto &spot_lights_vector = light_environment.spot_light_buffer;
+  spot_light_ubo.count = static_cast<u32>(spot_lights_vector.size());
+  std::memcpy(spot_light_ubo.lights.data(), spot_lights_vector.data(),
+              light_environment.get_spot_light_buffer_size_bytes());
   auto &spot_light_ubo_write = ubos->get(5, frame_index);
   spot_light_ubo_write->write(
       &spot_light_ubo, 16ull + sizeof(ECS::SpotLight) * spot_light_ubo.count);
 
-  for (size_t i = 0; i < spotLightsVec.size(); ++i) {
-    auto &light = spotLightsVec[i];
+  for (usize i = 0; i < spot_lights_vector.size(); ++i) {
+    auto &light = spot_lights_vector[i];
     if (!light.casts_shadows)
       continue;
 
@@ -1076,13 +741,16 @@ auto SceneRenderer::begin_scene(const ECS::Scene &scene, FrameIndex frame_index)
   auto &spot_light_matrix_data = ubos->get(6, frame_index);
   spot_light_matrix_data->write(
       &spot_shadows_ubo,
-      static_cast<u32>(sizeof(glm::mat4) * spotLightsVec.size()));
+      static_cast<u32>(sizeof(glm::mat4) * spot_lights_vector.size()));
 
-  const glm::uvec2 viewportSize = {extent.width, extent.height};
+  const glm::uvec2 viewport_size = {
+      extent.width,
+      extent.height,
+  };
 
   screen_data_ubo.full_resolution = {
-      viewportSize.x,
-      viewportSize.y,
+      viewport_size.x,
+      viewport_size.y,
   };
   screen_data_ubo.inverse_full_resolution = {
       inverse_extent.width,
@@ -1090,8 +758,8 @@ auto SceneRenderer::begin_scene(const ECS::Scene &scene, FrameIndex frame_index)
   };
   screen_data_ubo.half_resolution =
       glm::ivec2{
-          viewportSize.x,
-          viewportSize.y,
+          viewport_size.x,
+          viewport_size.y,
       } /
       2;
   screen_data_ubo.inverse_half_resolution = {
@@ -1103,6 +771,10 @@ auto SceneRenderer::begin_scene(const ECS::Scene &scene, FrameIndex frame_index)
 }
 
 auto SceneRenderer::flush() -> void {
+  if (!extent.valid())
+    return;
+  on_flush();
+
   u32 offset = 0;
   auto &&[vb, tb] = transform_buffers.at(current_frame);
 
@@ -1127,16 +799,27 @@ auto SceneRenderer::flush() -> void {
     end_renderpass();
   }
   {
+    begin_renderpass(*spot_shadow_framebuffer);
+    spot_shadow_pass();
+    end_renderpass();
+  }
+  {
+    begin_renderpass(*predepth_framebuffer);
+    predepth_pass();
+    end_renderpass();
+  }
+  {
     begin_renderpass(*geometry_framebuffer);
     environment_pass();
     light_culling_pass();
     geometry_pass();
     debug_pass();
-
-    bloom_pass();
-
     // grid_pass();
     end_renderpass();
+  }
+  {
+    // All other Post processing steps
+    bloom_pass();
   }
   {
     begin_renderpass(*fullscreen_framebuffer);
@@ -1335,24 +1018,51 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
                                             .owned_by_swapchain = false,
                                             .record_stats = true,
                                         });
-  auto vector = Random::vec3(-2 * glm::pi<float>(), 2 * glm::pi<float>());
-  auto texture_cube = create_preetham_sky(3.1, vector.y, vector.z);
+  auto texture_cube = create_preetham_sky(3.1, 2.0F * glm::pi<float>() / 3.0F,
+                                          glm::pi<float>() / 4.0F);
   scene_environment.radiance_texture = texture_cube;
   scene_environment.irradiance_texture = texture_cube;
+
+  FramebufferProperties predepth_props{
+      .width = swapchain.get_extent().width,
+      .height = swapchain.get_extent().height,
+      .depth_clear_value = 0.0F,
+      .blend = false,
+      .attachments =
+          FramebufferAttachmentSpecification{
+              FramebufferTextureSpecification{
+                  .format = ImageFormat::DEPTH24STENCIL8,
+                  .blend = false,
+              },
+          },
+      .debug_name = "PredepthFramebuffer",
+  };
+  predepth_framebuffer = Framebuffer::construct(*device, predepth_props);
+
+  shader_cache.try_emplace("Predepth", Shader::compile_graphics_scoped(
+                                           *device, FS::shader("Predepth.vert"),
+                                           FS::shader("Predepth.frag")));
+
+  predepth_material =
+      Material::construct(*device, *shader_cache.at("Predepth"));
+  GraphicsPipelineConfiguration predepth_config{
+      .name = "PredepthPipeline",
+      .shader = shader_cache.at("Predepth").get(),
+      .framebuffer = predepth_framebuffer.get(),
+      .layout = default_vertex_layout,
+      .instance_layout = default_instance_layout,
+      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
+      .cull_mode = CullMode::Back,
+      .face_mode = FaceMode::CounterClockwise,
+  };
+  predepth_pipeline = GraphicsPipeline::construct(*device, predepth_config);
 
   FramebufferProperties props{
       .width = swapchain.get_extent().width,
       .height = swapchain.get_extent().height,
-      .clear_colour =
-          {
-              0.1F,
-              0.1F,
-              0.1F,
-              1.0F,
-          },
       .depth_clear_value = 0.0F,
       .clear_colour_on_load = true,
-      .clear_depth_on_load = true,
+      .clear_depth_on_load = false,
       .blend = true,
       .attachments =
           FramebufferAttachmentSpecification{
@@ -1366,6 +1076,7 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
           },
       .debug_name = "DefaultFramebuffer",
   };
+  props.existing_images[1] = predepth_framebuffer->get_depth_image();
   geometry_framebuffer = Framebuffer::construct(*device, props);
 
   FramebufferProperties shadow_props{
@@ -1377,18 +1088,52 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .attachments =
           FramebufferAttachmentSpecification{
               FramebufferTextureSpecification{
-                  .format = ImageFormat::DEPTH32F,
+                  .format = ImageFormat::DEPTH24STENCIL8,
               },
           },
       .flip_viewport = false,
       .debug_name = "ShadowFramebuffer",
   };
   shadow_framebuffer = Framebuffer::construct(*device, shadow_props);
-
   shader_cache.try_emplace("Shadow", Shader::compile_graphics_scoped(
                                          *device, FS::shader("Shadow.vert"),
                                          FS::shader("Shadow.frag")));
   shadow_material = Material::construct(*device, *shader_cache.at("Shadow"));
+
+  FramebufferProperties spot_shadow_props{
+      .width = Config::shadow_map_size,
+      .height = Config::shadow_map_size,
+      .resizeable = false,
+      .depth_clear_value = 1.0F,
+      .blend = false,
+      .attachments =
+          FramebufferAttachmentSpecification{
+              FramebufferTextureSpecification{
+                  .format = ImageFormat::DEPTH32F,
+              },
+          },
+      .debug_name = "SpotShadowFramebuffer",
+  };
+  spot_shadow_framebuffer = Framebuffer::construct(*device, spot_shadow_props);
+  shader_cache.try_emplace(
+      "SpotShadow",
+      Shader::compile_graphics_scoped(*device, FS::shader("SpotShadow.vert"),
+                                      FS::shader("Shadow.frag")));
+  spot_shadow_material =
+      Material::construct(*device, *shader_cache.at("SpotShadow"));
+  GraphicsPipelineConfiguration spot_shadow_config{
+      .name = "SpotShadowGraphicsPipeline",
+      .shader = shader_cache.at("SpotShadow").get(),
+      .framebuffer = spot_shadow_framebuffer.get(),
+      .layout = default_vertex_layout,
+      .instance_layout = default_instance_layout,
+      .depth_comparison_operator = DepthCompareOperator::LessOrEqual,
+      .cull_mode = CullMode::Front,
+      .face_mode = FaceMode::CounterClockwise,
+  };
+  spot_shadow_pipeline =
+      GraphicsPipeline::construct(*device, spot_shadow_config);
+
   shader_cache.try_emplace(
       "BasicGeometry",
       Shader::compile_graphics_scoped(*device, FS::shader("Basic.vert"),
@@ -1400,9 +1145,10 @@ auto SceneRenderer::create(const Swapchain &swapchain) -> void {
       .framebuffer = geometry_framebuffer.get(),
       .layout = default_vertex_layout,
       .instance_layout = default_instance_layout,
-      .depth_comparison_operator = DepthCompareOperator::GreaterOrEqual,
+      .depth_comparison_operator = DepthCompareOperator::Equal,
       .cull_mode = CullMode::Back,
       .face_mode = FaceMode::CounterClockwise,
+      .write_depth = false,
   };
   geometry_pipeline = GraphicsPipeline::construct(*device, config);
   config.polygon_mode = PolygonMode::Line;

@@ -26,6 +26,8 @@ template <> struct std::hash<Core::CommandKey> {
 
 namespace Core {
 
+using ShaderCache = Container::StringLikeMap<Scope<Shader>>;
+
 struct CommandKey {
   const Mesh *mesh_ptr{nullptr};
   u32 submesh_index{0};
@@ -89,7 +91,6 @@ public:
   auto get_shadow_configuration() -> auto & { return shadow_ubo; }
   auto get_scene_environment() -> auto & { return scene_environment; }
   auto get_bloom_configuration() -> auto & { return bloom_settings; }
-  auto create_pool_and_layout() -> void;
 
   [[nodiscard]] static auto get_white_texture() -> const Texture & {
     return *white_texture;
@@ -129,7 +130,11 @@ public:
   static auto end_gpu_debug_frame_marker(const CommandBuffer &,
                                          std::string_view) -> void;
 
+  [[nodiscard]] auto get_shader_cache() -> auto & { return shader_cache; }
+
 private:
+  auto create_pool_and_layout() -> void;
+
   const Device *device;
   Scope<CommandBuffer> command_buffer{nullptr};
   Scope<CommandBuffer> compute_command_buffer{nullptr};
@@ -157,11 +162,12 @@ private:
 
   struct BloomSettings {
     bool enabled = true;
-    floating threshold = 1.0f;
-    floating knee = 0.1f;
-    floating upsample_scale = 1.0f;
-    floating intensity = 1.0f;
-    floating dirt_intensity = 0.0f;
+    floating threshold = 1.0F;
+    floating knee = 0.1F;
+    floating upsample_scale = 1.0F;
+    floating intensity = 1.0F;
+    floating dirt_intensity = 0.0F;
+    floating opacity = 1.0F;
   };
   u32 bloom_workgroup_size = 4;
   BloomSettings bloom_settings{};
@@ -179,6 +185,14 @@ private:
   Scope<GraphicsPipeline> shadow_pipeline;
   Scope<Material> shadow_material;
   Scope<Framebuffer> shadow_framebuffer;
+
+  Scope<GraphicsPipeline> spot_shadow_pipeline;
+  Scope<Material> spot_shadow_material;
+  Scope<Framebuffer> spot_shadow_framebuffer;
+
+  Scope<GraphicsPipeline> predepth_pipeline;
+  Scope<Material> predepth_material;
+  Scope<Framebuffer> predepth_framebuffer;
 
   Scope<GraphicsPipeline> grid_pipeline;
   Scope<Material> grid_material;
@@ -209,7 +223,9 @@ private:
   ScreenData screen_data_ubo{};
 
   struct GPUTimeQueries {
+    u32 predepth_query{0};
     u32 directional_shadow_pass_query{0};
+    u32 spot_shadow_pass_query{0};
     u32 light_culling_pass_query{0};
     u32 geometry_pass_query{0};
     u32 bloom_compute_pass_query{0};
@@ -226,13 +242,16 @@ private:
   VkDescriptorSet active = nullptr;
   VkDescriptorSetLayout layout = nullptr;
 
-  using ShaderCache = Container::StringLikeMap<Scope<Shader>>;
   ShaderCache shader_cache{};
 
   auto create_preetham_sky(float turbidity, float azimuth, float inclination)
       -> Ref<TextureCube>;
 
+  auto on_flush() -> void;
+
+  auto predepth_pass() -> void;
   auto shadow_pass() -> void;
+  auto spot_shadow_pass() -> void;
   auto grid_pass() -> void;
   auto light_culling_pass() -> void;
   auto geometry_pass() -> void;

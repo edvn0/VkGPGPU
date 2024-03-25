@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AABB.hpp"
 #include "Camera.hpp"
 #include "Mesh.hpp"
 #include "RenderingDefinitions.hpp"
@@ -89,6 +90,9 @@ struct CubeParameters {
 using GeometryVariant =
     std::variant<QuadParameters, TriangleParameters, CircleParameters,
                  SphereParameters, CubeParameters>;
+
+auto get_aabb_for_geometry(const ECS::BasicGeometry::GeometryVariant &geom,
+                           const glm::mat4 &transform) -> Core::AABB;
 
 } // namespace BasicGeometry
 struct GeometryComponent {

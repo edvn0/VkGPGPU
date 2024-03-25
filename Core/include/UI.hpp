@@ -41,13 +41,14 @@ auto add_image(VkSampler sampler, VkImageView image_view, VkImageLayout layout)
     -> VkDescriptorSet;
 
 auto begin(std::string_view) -> bool;
+auto begin(std::string_view, i32) -> bool;
 auto end() -> void;
 
 auto window_size() -> Extent<float>;
 auto window_position() -> std::tuple<u32, u32>;
 
-auto widget(const std::string_view name, auto &&func) {
-  if (UI::begin(name)) {
+auto widget(const std::string_view name, i32 flags, auto &&func) {
+  if (UI::begin(name, flags)) {
     if constexpr (std::is_invocable_r_v<void, decltype(func),
                                         const Extent<float> &,
                                         const std::tuple<u32, u32> &>) {
@@ -64,6 +65,25 @@ auto widget(const std::string_view name, auto &&func) {
     UI::end();
   }
 }
+auto widget(const std::string_view name, auto &&func) {
+  if (UI::begin(name, 0)) {
+    if constexpr (std::is_invocable_r_v<void, decltype(func),
+                                        const Extent<float> &,
+                                        const std::tuple<u32, u32> &>) {
+      const auto &current_size = UI::window_size();
+      const auto &current_position = UI::window_position();
+      func(current_size, current_position);
+    } else if constexpr (std::is_invocable_r_v<void, decltype(func),
+                                               const Extent<float> &>) {
+      const auto &current_size = UI::window_size();
+      func(current_size);
+    } else {
+      func();
+    }
+    UI::end();
+  }
+}
+
 namespace Toast {
 enum class Type : u8 { None, Success, Warning, Error, Info };
 template <class... Args>
@@ -94,6 +114,7 @@ auto error(u32 duration_ms, fmt::format_string<Args...> fmt, Args &&...args) {
 struct InterfaceImageProperties {
   Extent<u32> extent{64, 64};
   Colours::Colour colour{Colours::white};
+  bool flipped{false};
 };
 
 auto image(const Texture &, InterfaceImageProperties = {}) -> void;

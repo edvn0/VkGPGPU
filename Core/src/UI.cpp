@@ -78,6 +78,10 @@ auto begin(const std::string_view name) -> bool {
   return ImGui::Begin(name.data());
 }
 
+auto begin(const std::string_view name, i32 flags) -> bool {
+  return ImGui::Begin(name.data(), nullptr, flags);
+}
+
 auto end() -> void { return ImGui::End(); }
 
 auto window_size() -> Extent<float> {
@@ -113,7 +117,10 @@ auto image(const Texture &texture, InterfaceImageProperties properties)
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
   ImGui::PushID(made.c_str());
-  ImGui::Image(set, to_imvec2(properties.extent));
+  static constexpr ImVec2 uv0 = ImVec2(0, 0);
+  static constexpr ImVec2 uv1 = ImVec2(1, 1);
+  ImGui::Image(set, to_imvec2(properties.extent),
+               properties.flipped ? uv1 : uv0, properties.flipped ? uv0 : uv1);
   ImGui::PopID();
 }
 
@@ -122,7 +129,10 @@ auto image(const Image &image, InterfaceImageProperties properties) -> void {
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, image.hash());
   ImGui::PushID(made.c_str());
-  ImGui::Image(set, to_imvec2(properties.extent));
+  static constexpr ImVec2 uv0 = ImVec2(0, 0);
+  static constexpr ImVec2 uv1 = ImVec2(1, 1);
+  ImGui::Image(set, to_imvec2(properties.extent),
+               properties.flipped ? uv1 : uv0, properties.flipped ? uv0 : uv1);
   ImGui::PopID();
 }
 

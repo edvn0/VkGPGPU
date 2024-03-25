@@ -2,6 +2,7 @@
 
 #include "UI.hpp"
 
+#include <cstdlib> // For std::system
 #include <imgui.h>
 #include <imgui_internal.h>
 

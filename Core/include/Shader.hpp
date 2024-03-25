@@ -8,7 +8,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include "compilation/Forward.hpp"
+#include "compilation/ShaderCompiler.hpp"
 #include "reflection/ReflectionData.hpp"
 
 namespace Core {

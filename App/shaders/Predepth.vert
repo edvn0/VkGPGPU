@@ -14,13 +14,6 @@ layout(location = 7) in vec4 transform_row_one;
 layout(location = 8) in vec4 transform_row_two;
 layout(location = 9) in vec4 instance_colour;
 
-layout(location = 0) out vec2 out_uvs;
-layout(location = 1) out vec4 out_fragment_pos;
-layout(location = 2) out vec4 out_shadow_pos;
-layout(location = 3) out vec4 out_colour;
-layout(location = 4) out vec3 out_normals;
-layout(location = 5) out mat3 out_normal_matrix;
-
 precise invariant gl_Position;
 
 void main() {
@@ -33,17 +26,4 @@ void main() {
 
   vec4 computed = transform * vec4(pos, 1.0F);
   gl_Position = renderer.view_projection * computed;
-  out_shadow_pos = depth_bias * shadow.view_projection * computed;
-
-  out_uvs = uvs;
-  out_fragment_pos = computed;
-
-  // Calculate TBN
-  out_normal_matrix = mat3(transform) * mat3(tangent, bitangents, normals);
-  out_normals = mat3(transform) * normals;
-  if (all(equal(colour, vec4(1.0, 1.0, 1.0, 1.0)))) {
-    out_colour = instance_colour;
-  } else {
-    out_colour = colour;
-  }
 }

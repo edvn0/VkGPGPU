@@ -149,13 +149,14 @@ void main() {
 
   // Adjusting the x and y coordinates remains the same, mapping from [-1, 1] to
   // [0, 1]
-  vec3 xy_coords_remapped = (in_shadow_pos.xyz / in_shadow_pos.w);
+  vec4 xy_coords_remapped = (in_shadow_pos / in_shadow_pos.w);
+// The z coordinate is the depth value, which is in [0, 1] range
+  float shadow = 1.0F;
+  if (texture(shadow_map, xy_coords_remapped.xy).r < xy_coords_remapped.z - 0.005)
+	shadow = 0.0F;
 
-  // Combining the adjusted x, y, and z into the remapped shadow coordinates
-  float shadow =
-      PCSS_DirectionalLight(shadow_map, normal, L, xy_coords_remapped, 2.0F);
 
-  vec3 final = ambient + shadow * direct * radiance;
+  vec3 final = ambient + (1.0F - shadow) * direct * radiance;
 
   out_colour = vec4(gamma_correct(final), 1.0F);
 }

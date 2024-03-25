@@ -7,6 +7,8 @@
 #include "Pipeline.hpp"
 #include "SceneRenderer.hpp"
 
+#include "compilation/ShaderCompiler.hpp"
+
 namespace Core {
 
 GeometryRenderer::GeometryRenderer(Badge<SceneRenderer>, const Device &dev)

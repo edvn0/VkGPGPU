@@ -406,7 +406,7 @@ auto Material::set(const std::string_view name, const Image &image) -> bool {
   PendingDescriptor descriptor{
       .type = PendingDescriptorType::Image2D,
       .write_set = *wds,
-      .image_info = {},
+      .image_info = image.get_descriptor_info(),
       .buffer_info = {},
       .image = images.at(binding),
   };

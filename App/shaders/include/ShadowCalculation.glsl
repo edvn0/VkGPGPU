@@ -180,7 +180,8 @@ float PCF_DirectionalLight(sampler2D shadowMap, vec3 normal,
   float sum = 0;
   for (int i = 0; i < numPCFSamples; i++) {
     vec2 offset = SamplePoisson(i) * uvRadius;
-    float z = texture(shadowMap, shadowCoords.xy * 0.5 + 0.5 + offset).r;
+    vec2 flipped_uv_on_y = vec2(offset.x, 1.0 - offset.y);
+    float z = texture(shadowMap, flipped_uv_on_y.xy * 0.5 + 0.5 + offset).r;
     sum += step(shadowCoords.z - bias, z);
   }
   return sum / numPCFSamples;

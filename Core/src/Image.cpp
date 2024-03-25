@@ -197,7 +197,7 @@ auto to_vulkan_layout(ImageLayout layout) -> VkImageLayout {
   case ColorAttachmentOptimal:
     return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   case DepthStencilAttachmentOptimal:
-    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   case DepthStencilReadOnlyOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   case ShaderReadOnlyOptimal:
@@ -499,8 +499,10 @@ auto Image::initialise_vulkan_descriptor_info() -> void {
   descriptor_image_info.imageLayout = to_vulkan_layout(properties.layout);
 }
 
-auto Image::initialise_per_mip_image_views() -> void {
-  for (auto mip = 0U; mip < properties.mip_info.mips; mip++) {
+auto Image::initialise_per_mip_image_views(u32 override_count) -> void {
+  const auto actual_count =
+      override_count > 0 ? override_count : properties.mip_info.mips;
+  for (auto mip = 0U; mip < actual_count; mip++) {
     VkImageAspectFlags aspectMask = aspect_bit;
     if (properties.format == ImageFormat::DEPTH24STENCIL8)
       aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -718,12 +720,25 @@ auto Image::initialise_vulkan_image() -> void {
           .creation = creation,
       });
 
+  static constexpr auto is_depth_format = [](ImageFormat format) -> bool {
+    switch (format) {
+    case ImageFormat::DEPTH16:
+    case ImageFormat::DEPTH32F:
+    case ImageFormat::DEPTH24STENCIL8:
+      return true;
+    default:
+      return false;
+    }
+  };
+
   VkImageViewCreateInfo image_view_create_info{};
   image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   image_view_create_info.image = impl->image;
   image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
   image_view_create_info.format = to_vulkan_format(properties.format);
-  image_view_create_info.subresourceRange.aspectMask = aspect_bit;
+  image_view_create_info.subresourceRange.aspectMask =
+      is_depth_format(properties.format) ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                         : VK_IMAGE_ASPECT_COLOR_BIT;
   image_view_create_info.subresourceRange.baseMipLevel = 0;
   image_view_create_info.subresourceRange.levelCount =
       properties.mip_info.valid() ? properties.mip_info.mips : 1;

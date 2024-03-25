@@ -105,29 +105,29 @@ struct DrawParameters {
 };
 
 struct PointLight {
-  glm::vec3 position = {0.0f, 0.0f, 0.0f};
-  float intensity = 0.0f;
-  glm::vec3 radiance = {0.0f, 0.0f, 0.0f};
-  float min_radius = 0.001f;
-  float radius = 25.0f;
-  float falloff = 1.f;
-  float source_size = 0.1f;
-  bool casts_shadows = true;
+  glm::vec3 position{0.0f, 0.0f, 0.0f};
+  float intensity{0.0f};
+  glm::vec3 radiance{0.0f, 0.0f, 0.0f};
+  float min_radius{0.001f};
+  float radius{25.0f};
+  float falloff{1.f};
+  float source_size{0.1f};
+  bool casts_shadows{true};
   std::array<char, 3> padding{0, 0, 0};
 };
 
 struct SpotLight {
-  glm::vec3 position = {0.0f, 0.0f, 0.0f};
-  float intensity = 0.0f;
-  glm::vec3 direction = {0.0f, 0.0f, 0.0f};
-  float angle_attenuation = 0.0f;
-  glm::vec3 radiance = {0.0f, 0.0f, 0.0f};
-  float range = 0.1f;
-  float angle = 0.0f;
-  float falloff = 1.0f;
-  bool soft_shadows = true;
+  glm::vec3 position{0.0f, 0.0f, 0.0f};
+  float intensity{0.0f};
+  glm::vec3 direction{0.0f, 0.0f, 0.0f};
+  float angle_attenuation{0.0f};
+  glm::vec3 radiance{0.0f, 0.0f, 0.0f};
+  float range{0.1f};
+  float angle{0.0f};
+  float falloff{1.0f};
+  bool soft_shadows{true};
   std::array<char, 3> padding0{0, 0, 0};
-  bool casts_shadows = true;
+  bool casts_shadows{true};
   std::array<char, 3> padding1{0, 0, 0};
 };
 

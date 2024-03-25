@@ -106,6 +106,10 @@ public:
     return {width, height};
   }
 
+  auto set_existing_image(u32 index, const Ref<Image> &img) {
+    properties.existing_images[index] = img;
+  }
+
   auto add_resize_dependent(IResizeDependent<Framebuffer> *dependent) -> void {
     if (resize_dependents.contains(dependent))
       return;

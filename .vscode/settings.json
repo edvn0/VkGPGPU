@@ -20,8 +20,9 @@
     "Unremovable"
   ],
   "files.associations": {
-    "*.frag": "hlsl",
-    "*.vert": "hlsl",
+    "*.frag": "glsl",
+    "*.vert": "glsl",
+    "*.comp": "glsl",
     "any": "cpp",
     "array": "cpp",
     "atomic": "cpp",
@@ -125,7 +126,7 @@
     "execution": "cpp",
     "valarray": "cpp",
     "expected": "cpp",
-    "*.glsl": "cpp",
+    "*.glsl": "glsl",
     "cassert": "cpp"
   }
 }

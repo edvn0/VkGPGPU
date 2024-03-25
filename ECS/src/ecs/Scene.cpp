@@ -17,63 +17,6 @@
 
 namespace ECS {
 
-static Core::AABB
-get_aabb_for_geometry(const BasicGeometry::GeometryVariant &geom,
-                      const glm::mat4 &transform) {
-  Core::AABB aabb;
-
-  std::visit(
-      [&](auto &&arg) {
-        using T = std::decay_t<decltype(arg)>;
-        std::vector<glm::vec3>
-            points; // Used for geometries defined by vertices
-
-        if constexpr (std::is_same_v<T, BasicGeometry::QuadParameters>) {
-          // Assuming Quad is centered at origin; adjust if not
-          float halfWidth = arg.width / 2.0f;
-          float halfHeight = arg.height / 2.0f;
-          points = {{-halfWidth, -halfHeight, 0.0f},
-                    {halfWidth, halfHeight, 0.0f}};
-        } else if constexpr (std::is_same_v<
-                                 T, BasicGeometry::TriangleParameters>) {
-          // Assuming Triangle is equilateral and centered at origin; adjust if
-          // not
-          float halfBase = arg.base / 2.0f;
-          points = {{-halfBase, 0.0f, 0.0f},
-                    {halfBase, 0.0f, 0.0f},
-                    {0.0f, arg.height, 0.0f}};
-        } else if constexpr (std::is_same_v<T,
-                                            BasicGeometry::CircleParameters> ||
-                             std::is_same_v<T,
-                                            BasicGeometry::SphereParameters>) {
-          // For Circle/Sphere, adjust AABB based on radius and scale; assuming
-          // centered at origin
-          glm::vec3 scaleFactors =
-              glm::vec3(transform[0][0], transform[1][1], transform[2][2]) *
-              arg.radius;
-          glm::vec3 center =
-              glm::vec3(transform[3]); // Translation component of the matrix
-          glm::vec3 min = center - scaleFactors;
-          glm::vec3 max = center + scaleFactors;
-          aabb.update(min, max);
-          return; // Early return as we've already calculated AABB
-        } else if constexpr (std::is_same_v<T, BasicGeometry::CubeParameters>) {
-          float halfSide = arg.side_length / 2.0f;
-          points = {{-halfSide, -halfSide, -halfSide},
-                    {halfSide, halfSide, halfSide}};
-        }
-
-        // Transform points and update AABB for non-spherical objects
-        for (auto &point : points) {
-          glm::vec4 worldPoint = transform * glm::vec4(point, 1.0f);
-          aabb.update(glm::vec3(worldPoint));
-        }
-      },
-      geom);
-
-  return aabb;
-}
-
 static std::tuple<glm::vec3, float, glm::vec3, glm::vec3>
 compute_scene_center_and_radius(Scene &scene) {
   glm::vec3 scene_min(std::numeric_limits<float>::max());
@@ -102,7 +45,8 @@ compute_scene_center_and_radius(Scene &scene) {
        registry.view<const TransformComponent, const GeometryComponent>()
            .each()) {
     // Hypothetical function to get AABB for geometry
-    auto aabb = get_aabb_for_geometry(geometry.parameters, transform.compute());
+    auto aabb = BasicGeometry::get_aabb_for_geometry(geometry.parameters,
+                                                     transform.compute());
     glm::vec3 min_corners = aabb.min(); // Assuming first is min_vector
     glm::vec3 max_corners = aabb.max(); // Assuming second is max_vector
 
@@ -419,7 +363,7 @@ auto Scene::on_render_runtime(Core::SceneRenderer &renderer, Core::floating dt)
     // Step 2: Compute the Light View Matrix
     glm::mat4 light_view_matrix =
         compute_light_view_matrix(transform.position, sun.depth_params.center);
-
+  glm_:
     auto &shadow_ubo = renderer.get_shadow_configuration();
     glm::mat4 light_proj =
         glm::ortho(sun.depth_params.lrbt.x, sun.depth_params.lrbt.y,
@@ -529,6 +473,8 @@ auto Scene::on_render_editor(Core::SceneRenderer &renderer, Core::floating dt,
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, ECS::BasicGeometry::CubeParameters>) {
             renderer.submit_cube(computed, col);
+            renderer.submit_aabb(
+                BasicGeometry::get_aabb_for_geometry(arg, computed));
           }
         },
         geom.parameters);

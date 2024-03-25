@@ -89,6 +89,8 @@ set(SOURCES
     src/Verify.cpp
     src/Input.cpp
     src/Window.cpp
+    src/post-processing-effects/Bloom.cpp
+    src/post-processing-effects/LightCulling.cpp
 )
 
 add_library(Core STATIC ${SOURCES})

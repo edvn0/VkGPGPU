@@ -35,6 +35,7 @@ public:
   [[nodiscard]] auto get_native() const -> const GLFWwindow *;
   [[nodiscard]] auto get_native() -> GLFWwindow *;
   [[nodiscard]] auto get_surface() const -> VkSurfaceKHR;
+  [[nodiscard]] auto get_position() const -> std::tuple<u32, u32>;
   [[nodiscard]] auto should_close() const -> bool;
 
   [[nodiscard]] auto was_resized() -> bool;

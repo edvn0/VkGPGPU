@@ -1,7 +1,15 @@
 #pragma once
 
+#include "Containers.hpp"
 #include "Device.hpp"
-#include "Shader.hpp"
+#include "Types.hpp"
+
+#include <filesystem>
+#include <vector>
+
+namespace Core {
+class Shader;
+}
 
 namespace Compilation {
 
@@ -23,7 +31,7 @@ struct ShaderCompilerConfiguration {
   // The debug information level to use when compiling the shader.
   // The default value is None.
   const DebugInformationLevel debug_information_level =
-      DebugInformationLevel::Minimal;
+      DebugInformationLevel::None;
 
   // Whether to treat warnings as errors when compiling the shader.
   // The default value is false.

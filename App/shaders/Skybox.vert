@@ -8,8 +8,7 @@ const vec2 quadVertices[6] =
     vec2[](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0), vec2(-1.0, 3.0),
            vec2(3.0, -1.0), vec2(3.0, 3.0));
 
-void main()
-{
+void main() {
   vec2 position = quadVertices[gl_VertexIndex % 6];
   gl_Position = vec4(position, 1.0, 1.0);
 
@@ -17,8 +16,7 @@ void main()
   gl_Position.z = gl_Position.w * 0.999999;
 
   // Unproject vertex positions to world space
-  mat4 inverseProjection = inverse(renderer.projection);
-  mat3 inverseModelview = transpose(mat3(renderer.view));
-  vec3 unprojected = (inverseProjection * gl_Position).xyz;
-  eyeDirection = normalize(inverseModelview * unprojected);
+  mat3 inverse_model_view = transpose(mat3(renderer.view));
+  vec3 unprojected = (renderer.inverse_projection * gl_Position).xyz;
+  eyeDirection = normalize(inverse_model_view * unprojected);
 }

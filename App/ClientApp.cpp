@@ -5,6 +5,7 @@
 #include "BufferSet.hpp"
 #include "Config.hpp"
 #include "FilesystemWidget.hpp"
+#include "Formatters.hpp"
 #include "Framebuffer.hpp"
 #include "Input.hpp"
 #include "Material.hpp"
@@ -14,6 +15,7 @@
 #include "SceneWidget.hpp"
 #include "UI.hpp"
 
+#include <GLFW/glfw3.h>
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
@@ -101,7 +103,10 @@ void ClientApp::on_update(floating ts) {
   timer.end();
 }
 
-struct Watcher : public IFilesystemChangeListener {
+class Watcher : public IFilesystemChangeListener {
+public:
+  Watcher(const Device &dev, ShaderCache &shader_cache)
+      : device(&dev), cache(shader_cache) {}
   ~Watcher() override = default;
 
   auto get_file_extension_filter()
@@ -109,8 +114,91 @@ struct Watcher : public IFilesystemChangeListener {
     return filetype_extensions;
   }
 
+  auto on_file_created(const FileInfo &info) -> IterationDecision override {
+    return handle(info.path);
+  };
+
+  auto on_file_modified(const FileInfo &info) -> IterationDecision override {
+    return handle(info.path);
+  };
+
+private:
+  auto handle(const FS::Path &path) -> IterationDecision {
+    const auto maybe_type = determine_shader_type(path);
+    if (!maybe_type)
+      return IterationDecision::Continue;
+
+    try {
+      std::scoped_lock lock{mutex};
+      auto &shader =
+          get_or_create(path.filename().replace_extension().string());
+
+      if (*maybe_type == Shader::Type::Vertex) {
+        auto fragment_path =
+            FS::resolve(FS::shader_directory() /
+                        path.filename().replace_extension(".frag"));
+        if (!FS::exists(fragment_path)) {
+          error("Could not find fragment shader '{}' associated with this "
+                "vertex shader '{}'",
+                path, fragment_path);
+          return IterationDecision::Continue;
+        }
+        auto compiled =
+            Shader::compile_graphics_scoped(*device, path, fragment_path);
+        if (!compiled)
+          return IterationDecision::Continue;
+        shader.swap(compiled);
+      } else if (*maybe_type == Shader::Type::Fragment) {
+        auto vertex_path =
+            FS::resolve(FS::shader_directory() /
+                        path.filename().replace_extension(".vert"));
+        if (!FS::exists(vertex_path)) {
+          error("Could not find vertex shader '{}' associated with this "
+                "fragment shader '{}'",
+                vertex_path, path);
+          return IterationDecision::Continue;
+        }
+        auto compiled =
+            Shader::compile_graphics_scoped(*device, vertex_path, path);
+        if (!compiled)
+          return IterationDecision::Continue;
+        shader.swap(compiled);
+      } else if (*maybe_type == Shader::Type::Compute) {
+        auto compiled = Shader::compile_compute_scoped(*device, path);
+        if (!compiled)
+          return IterationDecision::Continue;
+        shader.swap(compiled);
+      }
+    } catch (const std::exception &) {
+      return IterationDecision::Continue;
+    }
+    return IterationDecision::Break;
+  }
+
+  auto determine_shader_type(const FS::Path &path)
+      -> std::optional<Shader::Type> {
+    if (path.extension().string() == ".vert")
+      return Shader::Type::Vertex;
+    if (path.extension().string() == ".frag")
+      return Shader::Type::Fragment;
+    if (path.extension().string() == ".comp")
+      return Shader::Type::Compute;
+    return {};
+  };
+
+  auto get_or_create(const std::string &filename) -> Scope<Shader> & {
+    if (cache.contains(filename))
+      return cache.at(filename);
+    cache[filename] = nullptr;
+    return cache.at(filename);
+  }
+
   Container::StringLikeUnorderedSet<std::string> filetype_extensions{
-      ".glsl", ".vert", ".frag"};
+      ".glsl", ".vert", ".frag", ".comp"};
+
+  std::mutex mutex;
+  const Device *device;
+  ShaderCache &cache;
 };
 
 void ClientApp::on_create() {
@@ -120,7 +208,8 @@ void ClientApp::on_create() {
   active_scene = editor_scene;
   active_scene->on_create(*get_device(), *get_window(), *get_swapchain());
 
-  this->file_system_hook(make_scope<Watcher>());
+  this->file_system_hook(
+      make_scope<Watcher>(*get_device(), scene_renderer.get_shader_cache()));
 
   // ECS::SceneSerialiser serialiser;
   // serialiser.deserialise(*scene, Core::FS::Path{"Default.scene"});
@@ -278,8 +367,12 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                scene_renderer.get_compute_command_buffer());
   });
 
+  auto window_pos = get_window()->get_position();
   UI::widget("Scene", [&](const Extent<float> &extent,
                           const std::tuple<u32, u32> &position) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     viewport_mouse_hovered = ImGui::IsWindowHovered();
     viewport_focused = ImGui::IsWindowFocused();
 
@@ -294,19 +387,25 @@ void ClientApp::on_interface(InterfaceSystem &system) {
                                                  });
     camera.set_viewport_size(extent);
 
-    auto &&[x, y] = position;
-    viewport_bounds[0] = glm::vec2{
-        static_cast<float>(x),
-        static_cast<float>(y),
+    // These are relative to bottom right
+    ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+    ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+    vMin.x += ImGui::GetWindowPos().x;
+    vMin.y += ImGui::GetWindowPos().y;
+    vMax.x += ImGui::GetWindowPos().x;
+    vMax.y += ImGui::GetWindowPos().y;
+
+    auto &&[window_pos_x, window_pos_y] = window_pos;
+    viewport_bounds[0] = {
+        vMin.x - window_pos_x,
+        vMin.y - window_pos_y,
     };
     viewport_bounds[1] = {
-        viewport_bounds[0].x + extent.width,
-        viewport_bounds[0].y + extent.height,
+        vMax.x - window_pos_x,
+        vMax.y - window_pos_y,
     };
-
-    const auto is_hovering = ImGui::IsMouseHoveringRect(
-        ImVec2(viewport_bounds[0].x, viewport_bounds[0].y),
-        ImVec2(viewport_bounds[1].x, viewport_bounds[1].y));
+    const auto is_hovering = ImGui::IsWindowHovered();
 
     camera_can_receive_events =
         (is_hovering && viewport_focused) || right_click_started_in_viewport;
@@ -335,8 +434,10 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     }
 
     auto entity = load_entity();
-    if (!entity)
+    if (!entity) {
+      ImGui::PopStyleVar(3);
       return;
+    }
 
     auto &transform_component = entity->get_transform();
     auto transform = transform_component.compute();
@@ -389,12 +490,14 @@ void ClientApp::on_interface(InterfaceSystem &system) {
         break;
       }
     }
+
+    ImGui::PopStyleVar(3);
   });
 
   UI::widget("Depth", [&](const Extent<float> &extent) {
     UI::image(scene_renderer.get_depth_image(), {
-                                                    extent.as<u32>().width,
-                                                    extent.as<u32>().height,
+                                                    .extent = extent.as<u32>(),
+                                                    .flipped = true,
                                                 });
   });
 
@@ -414,6 +517,7 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     ImGui::SliderFloat("Threshold", &bloom.threshold, 0.0f, 5.0f, "%.3f",
                        ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("Knee", &bloom.knee, 0.0f, 1.0f, "%.3f");
+    ImGui::SliderFloat("Opacity", &bloom.opacity, 0.0f, 1.0f, "%.3f");
     ImGui::SliderFloat("Upsample Scale", &bloom.upsample_scale, 0.5f, 2.0f,
                        "%.3f");
     ImGui::SliderFloat("Intensity", &bloom.intensity, 0.0f, 20.0f, "%.3f");
@@ -427,19 +531,18 @@ void ClientApp::on_interface(InterfaceSystem &system) {
     const auto &compute_command_buffer =
         scene_renderer.get_compute_command_buffer();
     const auto &gpu_times = scene_renderer.get_gpu_execution_times();
-    UI::text("Dir Shadow Map Pass: {}ms",
+    UI::text("Predepth pass: {}ms",
+             graphics_command_buffer.get_execution_gpu_time(
+                 scene_renderer.get_current_index(), gpu_times.predepth_query));
+    UI::text("Sun shadow pass: {}ms",
              graphics_command_buffer.get_execution_gpu_time(
                  scene_renderer.get_current_index(),
                  gpu_times.directional_shadow_pass_query));
-    // ImGui::Text("Spot Shadow Map Pass: %.3fms",
-    //             commandBuffer->get_execution_gpu_time(
-    //                 scene_renderer.get_current_index(),
-    //                 gpu_times.SpotShadowMapPassQuery));
-    // ImGui::Text(
-    //     "Depth Pre-Pass: %.3fms",
-    //     commandBuffer->get_execution_gpu_time(
-    //         scene_renderer.get_current_index(),
-    //         gpu_times.DepthPrePassQuery));
+    ImGui::Text("Spot Shadow Map Pass: %.3fms",
+                graphics_command_buffer.get_execution_gpu_time(
+                    scene_renderer.get_current_index(),
+                    gpu_times.spot_shadow_pass_query));
+
     /*ImGui::Text("Hierarchical Depth: %.3fms",
                 commandBuffer->get_execution_gpu_time(
                     scene_renderer.get_current_index(),
@@ -529,7 +632,6 @@ void ClientApp::on_interface(InterfaceSystem &system) {
 }
 
 auto ClientApp::on_resize(const Extent<u32> &new_extent) -> void {
-  // Dummy glfw loop to check if the window size > 0
   Extent ext = new_extent;
   while (ext.width == 0 || ext.height == 0) {
     get_window()->wait_for_events();
@@ -576,7 +678,9 @@ static auto cast_ray(const glm::mat4 &projection, const glm::mat4 &view,
       1.0f,
   };
 
-  auto inverse_proj = glm::inverse(projection);
+  auto copy = projection;
+  copy[1][1] *= -1;
+  auto inverse_proj = glm::inverse(copy);
   auto inverse_view = glm::inverse(glm::mat3(view));
 
   glm::vec4 ray = inverse_proj * mouse_clip_pos;
@@ -591,11 +695,13 @@ static auto get_mouse_position_viewport_space(auto x, auto y,
     -> std::pair<float, float> {
   x -= bounds[0].x;
   y -= bounds[0].y;
-  auto viewportWidth = bounds[1].x - bounds[0].x;
-  auto viewportHeight = bounds[1].y - bounds[0].y;
+  auto viewport_width = bounds[1].x - bounds[0].x;
+  auto viewport_height = bounds[1].y - bounds[0].y;
 
-  return {(x / viewportWidth) * 2.0f - 1.0f,
-          ((y / viewportHeight) * 2.0f - 1.0f) * -1.0f};
+  return {
+      (x / viewport_width) * 2.0f - 1.0f,
+      ((y / viewport_height) * 2.0f - 1.0f) * -1.0f,
+  };
 }
 
 auto ClientApp::pick_object(const glm::vec3 &origin, const glm::vec3 &direction)
@@ -624,6 +730,26 @@ auto ClientApp::pick_object(const glm::vec3 &origin, const glm::vec3 &direction)
           closest_value = t;
           closest = entity;
         }
+      }
+    }
+  }
+
+  for (auto &&[entity, transform_component, component] :
+       active_scene->view<ECS::TransformComponent, ECS::GeometryComponent>()
+           .each()) {
+    glm::mat4 transform = transform_component.compute();
+    Ray ray = {
+        glm::inverse(transform) * glm::vec4(origin, 1.0f),
+        glm::inverse(glm::mat3(transform)) * direction,
+    };
+
+    float t{};
+    bool intersects = ray.intersects_aabb(
+        get_aabb_for_geometry(component.parameters, transform), t);
+    if (intersects) {
+      if (t < closest_value) {
+        closest_value = t;
+        closest = entity;
       }
     }
   }
@@ -735,7 +861,7 @@ void ClientApp::on_event(Event &event) {
   });
   dispatcher.dispatch<MouseButtonPressedEvent>(
       [this](MouseButtonPressedEvent &event) {
-        if (ImGuizmo::IsUsing())
+        if (ImGuizmo::IsUsingAny())
           return false;
 
         if (event.get_button() != MouseCode::MOUSE_BUTTON_LEFT)
@@ -755,7 +881,7 @@ void ClientApp::on_event(Event &event) {
                      camera.get_position(), mouse_x, mouse_y);
 
         auto maybe = pick_object(origin, direction);
-        if (maybe != entt::null) {
+        if (maybe != entt::null && !ImGuizmo::IsUsingAny()) {
           selected_entity = maybe;
           return true;
         }
@@ -823,6 +949,7 @@ void ClientApp::create_dummy_scene() {
 }
 
 void ClientApp::on_scene_play() {
+  selected_entity.reset();
   scene_state_fsm.transition_to(SceneState::Play);
 
   runtime_scene = make_scope<ECS::Scene>("Default");
@@ -837,6 +964,7 @@ void ClientApp::on_scene_play() {
 }
 
 void ClientApp::on_scene_stop() {
+  selected_entity.reset();
 
   runtime_scene->on_runtime_stop();
   scene_state_fsm.transition_to(SceneState::Edit);
@@ -854,6 +982,8 @@ void ClientApp::on_scene_stop() {
 }
 
 void ClientApp::on_scene_start_simulation() {
+  selected_entity.reset();
+
   scene_state_fsm.transition_to(SceneState::Simulate);
 
   simulation_scene.reset(new ECS::Scene("Simulation"));
@@ -866,6 +996,8 @@ void ClientApp::on_scene_start_simulation() {
 }
 
 void ClientApp::on_scene_stop_simulation() {
+  selected_entity.reset();
+
   simulation_scene->on_simulation_stop();
   scene_state_fsm.transition_to(SceneState::Edit);
   simulation_scene.reset();

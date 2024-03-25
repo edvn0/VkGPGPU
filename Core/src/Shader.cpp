@@ -9,6 +9,7 @@
 #include "Verify.hpp"
 
 #include <bit>
+#include <execution>
 #include <fstream>
 #include <sstream>
 #include <vulkan/vulkan.h>
@@ -16,6 +17,39 @@
 #include "compilation/ShaderCompiler.hpp"
 #include "reflection/ReflectionData.hpp"
 #include "reflection/Reflector.hpp"
+
+namespace std {
+template <std::integral T> struct hash<vector<T>> {
+  const size_t chunk_size = 10;
+
+  size_t operator()(const vector<T> &v) const {
+
+    vector<size_t> chunk_hashes((v.size() + chunk_size - 1) / chunk_size, 0);
+
+    // Hash each chunk in parallel.
+    std::for_each(std::execution::par, chunk_hashes.begin(), chunk_hashes.end(),
+                  [&](size_t &chunk_hash) {
+                    const size_t chunk_index = &chunk_hash - &chunk_hashes[0];
+                    const size_t start_index = chunk_index * chunk_size;
+                    const size_t end_index =
+                        std::min(start_index + chunk_size, v.size());
+
+                    for (size_t i = start_index; i < end_index; ++i) {
+                      // Simple hash combination within each chunk.
+                      chunk_hash ^= std::hash<T>{}(v[i]) + 0x9e3779b9 +
+                                    (chunk_hash << 6) + (chunk_hash >> 2);
+                    }
+                  });
+
+    // Combine chunk hashes in a final step.
+    return std::accumulate(chunk_hashes.begin(), chunk_hashes.end(), size_t(0),
+                           [](size_t acc, size_t h) {
+                             return acc ^=
+                                    h + 0x9e3779b9 + (acc << 6) + (acc >> 2);
+                           });
+  }
+};
+} // namespace std
 
 namespace Core {
 
@@ -68,16 +102,19 @@ Shader::Shader(const Device &dev,
   create_descriptor_set_layouts();
 
   static constexpr std::hash<std::string> string_hasher;
+  static constexpr std::hash<std::vector<u32>> vector_hasher{
+      .chunk_size = 16,
+  };
   auto name_hash = string_hasher(name);
-  /*if (parsed_spirv_per_stage_u32.contains(Type::Compute)) {
-    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Compute);
+  if (parsed_spirv_per_stage_u32.contains(Type::Compute)) {
+    name_hash ^= vector_hasher(parsed_spirv_per_stage_u32.at(Type::Compute));
   }
   if (parsed_spirv_per_stage_u32.contains(Type::Vertex)) {
-    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Vertex);
+    name_hash ^= vector_hasher(parsed_spirv_per_stage_u32.at(Type::Vertex));
   }
   if (parsed_spirv_per_stage_u32.contains(Type::Fragment)) {
-    name_hash ^= parsed_spirv_per_stage_u32.at(Type::Fragment);
-  }*/
+    name_hash ^= vector_hasher(parsed_spirv_per_stage_u32.at(Type::Fragment));
+  }
 
   hash_value = name_hash;
 }

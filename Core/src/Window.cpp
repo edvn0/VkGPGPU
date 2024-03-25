@@ -186,6 +186,14 @@ auto Window::get_native() const -> const GLFWwindow * { return window; }
 auto Window::get_native() -> GLFWwindow * { return window; }
 auto Window::get_surface() const -> VkSurfaceKHR { return surface; }
 
+auto Window::get_position() const -> std::tuple<u32, u32> {
+  int xpos{};
+  int ypos{};
+  glfwGetWindowPos(window, &xpos, &ypos);
+
+  return {static_cast<u32>(xpos), static_cast<u32>(ypos)};
+}
+
 auto Window::construct(const Instance &instance,
                        const WindowProperties &properties) -> Scope<Window> {
   return Scope<Window>{new Window{instance, properties}};

@@ -177,6 +177,7 @@ private:
 
   const Device &device;
   std::string name{};
+  std::size_t cached_shader_hash;
   VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_COMPUTE};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};
@@ -217,6 +218,7 @@ public:
   [[nodiscard]] auto get_bind_point() const -> const VkPipelineBindPoint & {
     return bind_point;
   }
+  [[nodiscard]] auto get_line_width() const { return configuration.line_width; }
   [[nodiscard]] auto hash() const noexcept -> usize {
     static constexpr std::hash<std::string> hasher;
     static constexpr std::hash<const void *> void_hasher;
@@ -230,6 +232,10 @@ public:
                         const GraphicsPipelineConfiguration &)
       -> Scope<GraphicsPipeline>;
 
+  auto get_cached_shader_hash() const { return cached_shader_hash; }
+  auto get_shader() const { return configuration.shader; }
+  auto set_shader(const Shader *shader) { configuration.shader = shader; }
+
 private:
   explicit GraphicsPipeline(const Device &dev,
                             const GraphicsPipelineConfiguration &);
@@ -239,6 +245,7 @@ private:
   auto destroy() -> void;
 
   const Device *device;
+  std::size_t cached_shader_hash;
   GraphicsPipelineConfiguration configuration;
   VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_GRAPHICS};
   VkPipelineLayout pipeline_layout{};

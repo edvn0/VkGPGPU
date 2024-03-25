@@ -87,6 +87,8 @@ public:
                                   const ImageProperties &properties)
       -> Ref<Image>;
 
+  auto initialise_per_mip_image_views(u32 override_count = 0) -> void;
+
 private:
   const Device *device{nullptr};
   CommandBuffer *override_command_buffer{nullptr};
@@ -100,7 +102,6 @@ private:
   auto load_image_data_from_buffer(const DataBuffer &) -> void;
   auto initialise_vulkan_image() -> void;
   auto initialise_vulkan_descriptor_info() -> void;
-  auto initialise_per_mip_image_views() -> void;
 
 public:
   Image(const Image &) = delete;

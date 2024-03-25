@@ -62,15 +62,15 @@ auto Framebuffer::on_resize(u32 w, u32 h, bool should_clean) -> void {
   width = w;
   height = h;
 
-  for (auto &dependent : resize_dependents) {
-    dependent->resize(*this);
-  }
-
   if (should_clean) {
     clean();
   }
 
   create_framebuffer();
+
+  for (auto &dependent : resize_dependents) {
+    dependent->resize(*this);
+  }
 }
 
 auto Framebuffer::clean() -> void {
@@ -97,7 +97,7 @@ auto Framebuffer::create_framebuffer() -> void {
   std::vector<VkAttachmentDescription> attachmentDescriptions;
 
   std::vector<VkAttachmentReference> color_attachment_references;
-  VkAttachmentReference depthAttachmentReference;
+  VkAttachmentReference depth_attachment_reference;
 
   const auto &attachments = properties.attachments.attachments;
   clear_values.resize(attachments.size());
@@ -169,11 +169,11 @@ auto Framebuffer::create_framebuffer() -> void {
               ? VK_IMAGE_LAYOUT_UNDEFINED
               : VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
       attachment_description.finalLayout =
-          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-      attachment_description.finalLayout =
           VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-      depthAttachmentReference = {
-          attachment_index, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+      depth_attachment_reference = {
+          attachment_index,
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+      };
       clear_values[attachment_index].depthStencil = {
           .depth = properties.depth_clear_value,
           .stencil = 0,
@@ -265,7 +265,7 @@ auto Framebuffer::create_framebuffer() -> void {
       static_cast<u32>(color_attachment_references.size());
   subpassDescription.pColorAttachments = color_attachment_references.data();
   if (depth_attachment_image) {
-    subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+    subpassDescription.pDepthStencilAttachment = &depth_attachment_reference;
   }
 
   std::vector<VkSubpassDependency> dependencies;
@@ -345,17 +345,17 @@ auto Framebuffer::create_framebuffer() -> void {
     view_attachments.emplace_back(image->get_descriptor_info().imageView);
   }
 
-  VkFramebufferCreateInfo framebufferCreateInfo = {};
-  framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebufferCreateInfo.renderPass = render_pass;
-  framebufferCreateInfo.attachmentCount =
+  VkFramebufferCreateInfo framebuffer_create_info = {};
+  framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebuffer_create_info.renderPass = render_pass;
+  framebuffer_create_info.attachmentCount =
       static_cast<u32>(view_attachments.size());
-  framebufferCreateInfo.pAttachments = view_attachments.data();
-  framebufferCreateInfo.width = width;
-  framebufferCreateInfo.height = height;
-  framebufferCreateInfo.layers = 1;
+  framebuffer_create_info.pAttachments = view_attachments.data();
+  framebuffer_create_info.width = width;
+  framebuffer_create_info.height = height;
+  framebuffer_create_info.layers = 1;
 
-  verify(vkCreateFramebuffer(device->get_device(), &framebufferCreateInfo,
+  verify(vkCreateFramebuffer(device->get_device(), &framebuffer_create_info,
                              nullptr, &framebuffer),
          "vkCreateFramebuffer", "Failed to create framebuffer!");
   DebugMarker::set_object_name(*device, framebuffer,

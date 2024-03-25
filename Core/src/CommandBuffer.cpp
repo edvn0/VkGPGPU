@@ -65,7 +65,7 @@ CommandBuffer::CommandBuffer(const Device &dev, CommandBufferProperties props)
   VkCommandPoolCreateInfo pool_info{};
   pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   pool_info.queueFamilyIndex = *device->get_family_index(properties.queue_type);
-  pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  // pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
   verify(vkCreateCommandPool(device->get_device(), &pool_info, nullptr,
                              &command_pool),
@@ -146,6 +146,8 @@ auto CommandBuffer::begin(u32 current_frame,
 
   active_frame_index = current_frame;
   active_frame = &command_buffers.at(current_frame);
+
+  vkResetCommandPool(device->get_device(), command_pool, 0);
 
   verify(vkBeginCommandBuffer(get_command_buffer(), &begin_info),
          "vkBeginCommandBuffer", "Failed to begin recording command buffer");
@@ -348,15 +350,15 @@ void CommandBuffer::destroy_query_objects() {
 auto CommandBuffer::begin_timestamp_query() -> u32 {
   u32 query_index = timestamp_next_available_query;
   timestamp_next_available_query += 2;
-  auto commandBuffer = command_buffers[active_frame_index].command_buffer;
-  vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+  auto cmd_buffer = command_buffers[active_frame_index].command_buffer;
+  vkCmdWriteTimestamp(cmd_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                       query_pools[active_frame_index], query_index);
   return query_index;
 }
 
 void CommandBuffer::end_timestamp_query(u32 query_index) {
-  auto commandBuffer = command_buffers[active_frame_index].command_buffer;
-  vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+  auto cmd_buffer = command_buffers[active_frame_index].command_buffer;
+  vkCmdWriteTimestamp(cmd_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                       query_pools[active_frame_index], query_index + 1);
 }
 

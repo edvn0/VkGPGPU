@@ -167,8 +167,6 @@ auto Swapchain::recreate(const Extent<u32> &extent, bool should_clean) -> void {
 
     VkCommandPoolCreateInfo command_pool_create_info{};
     command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    command_pool_create_info.flags =
-        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     command_pool_create_info.queueFamilyIndex =
         device->get_family_index(Queue::Type::Graphics).value();
     vkCreateCommandPool(device->get_device(), &command_pool_create_info,

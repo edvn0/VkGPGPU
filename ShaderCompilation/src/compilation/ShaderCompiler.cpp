@@ -1,8 +1,7 @@
-#pragma once
-
 #include "compilation/ShaderCompiler.hpp"
 
 #include "Exception.hpp"
+#include "Shader.hpp"
 
 #include <fstream>
 #include <istream>
@@ -147,6 +146,12 @@ auto ShaderCompiler::compile_graphics(
       impl->compiler, impl->options, fragment_shader_path.string(),
       shaderc_glsl_fragment_shader, preprocessed_fragment_shader);
 
+  if (compiled_vertex_shader.empty() || compiled_fragment_shader.empty() ||
+      preprocessed_vertex_shader.empty() ||
+      preprocessed_fragment_shader.empty()) {
+    return nullptr;
+  }
+
   std::unordered_map<Core::Shader::Type, std::vector<Core::u32>>
       compiled_spirv_per_stage{
           {
@@ -158,8 +163,10 @@ auto ShaderCompiler::compile_graphics(
               compiled_fragment_shader,
           },
       };
+  auto name = vertex_shader_path.filename().replace_extension().string();
 
-  return make_ref<Core::Shader>(*device, std::move(compiled_spirv_per_stage));
+  return make_ref<Core::Shader>(*device, std::move(compiled_spirv_per_stage),
+                                name);
 }
 
 auto ShaderCompiler::compile_compute(
@@ -177,6 +184,10 @@ auto ShaderCompiler::compile_compute(
       impl->compiler, impl->options, compute_shader_path.string(),
       shaderc_glsl_compute_shader, preprocessed_compute_shader);
 
+  if (compiled_compute_shader.empty() || preprocessed_compute_shader.empty()) {
+    return nullptr;
+  }
+
   std::unordered_map<Core::Shader::Type, std::vector<Core::u32>>
       compiled_spirv_per_stage{
           {
@@ -185,7 +196,10 @@ auto ShaderCompiler::compile_compute(
           },
       };
 
-  return make_ref<Core::Shader>(*device, std::move(compiled_spirv_per_stage));
+  auto name = compute_shader_path.filename().replace_extension().string();
+
+  return make_ref<Core::Shader>(*device, std::move(compiled_spirv_per_stage),
+                                name);
 }
 
 auto ShaderCompiler::compile_graphics_scoped(
@@ -213,6 +227,12 @@ auto ShaderCompiler::compile_graphics_scoped(
       impl->compiler, impl->options, fragment_shader_path.string(),
       shaderc_glsl_fragment_shader, preprocessed_fragment_shader);
 
+  if (compiled_vertex_shader.empty() || compiled_fragment_shader.empty() ||
+      preprocessed_vertex_shader.empty() ||
+      preprocessed_fragment_shader.empty()) {
+    return nullptr;
+  }
+
   std::unordered_map<Core::Shader::Type, std::vector<Core::u32>>
       compiled_spirv_per_stage{
           {
@@ -225,7 +245,10 @@ auto ShaderCompiler::compile_graphics_scoped(
           },
       };
 
-  return make_scope<Core::Shader>(*device, std::move(compiled_spirv_per_stage));
+  auto name = vertex_shader_path.filename().replace_extension().string();
+
+  return make_scope<Core::Shader>(*device, std::move(compiled_spirv_per_stage),
+                                  name);
 }
 
 auto ShaderCompiler::compile_compute_scoped(
@@ -243,6 +266,10 @@ auto ShaderCompiler::compile_compute_scoped(
       impl->compiler, impl->options, compute_shader_path.string(),
       shaderc_glsl_compute_shader, preprocessed_compute_shader);
 
+  if (compiled_compute_shader.empty() || preprocessed_compute_shader.empty()) {
+    return nullptr;
+  }
+
   std::unordered_map<Core::Shader::Type, std::vector<Core::u32>>
       compiled_spirv_per_stage{
           {
@@ -250,8 +277,10 @@ auto ShaderCompiler::compile_compute_scoped(
               compiled_compute_shader,
           },
       };
+  auto name = compute_shader_path.filename().replace_extension().string();
 
-  return make_scope<Core::Shader>(*device, std::move(compiled_spirv_per_stage));
+  return make_scope<Core::Shader>(*device, std::move(compiled_spirv_per_stage),
+                                  name);
 }
 
 ShaderCompiler::ShaderCompiler(const Core::Device &dev,
@@ -284,7 +313,7 @@ ShaderCompiler::ShaderCompiler(const Core::Device &dev,
   impl->options.SetInvertY(true);
   impl->options.SetTargetSpirv(shaderc_spirv_version_1_6);
   impl->options.SetSourceLanguage(shaderc_source_language_glsl);
-  impl->options.SetForcedVersionProfile(460, shaderc_profile_core);
+  impl->options.SetForcedVersionProfile(460, shaderc_profile_none);
   impl->options.SetPreserveBindings(true);
 
   impl->options.SetIncluder(std::make_unique<ShaderIncluder>(
