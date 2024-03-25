@@ -86,47 +86,47 @@ void DescriptorResource::create_pool() {
   pool_sizes = {
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_SAMPLER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
       VkDescriptorPoolSize{
           .type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-          .descriptorCount = 1000 * Config::frame_count,
+          .descriptorCount = 10000 * Config::frame_count,
       },
   };
 
@@ -136,7 +136,7 @@ void DescriptorResource::create_pool() {
   pool_info.pPoolSizes = pool_sizes.data();
 
   // We only use two descriptor sets for now
-  pool_info.maxSets = 1000 * Config::frame_count;
+  pool_info.maxSets = 10000 * Config::frame_count;
 
   for (auto &descriptor_pool : descriptor_pools) {
     verify(vkCreateDescriptorPool(device->get_device(), &pool_info, nullptr,

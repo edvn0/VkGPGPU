@@ -2,10 +2,12 @@
 
 #include "Image.hpp"
 #include "Math.hpp"
+#include "ResizeDependent.hpp"
 #include "Types.hpp"
 
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Core {
@@ -37,19 +39,21 @@ struct FramebufferAttachmentSpecification {
 struct FramebufferProperties {
   u32 width{0};
   u32 height{0};
-  bool resizeable{false};
-  floating scale{1.0f};
-  Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
-  floating depth_clear_value{1.0f};
-  bool clear_colour_on_load{true};
-  bool clear_depth_on_load{true};
+  const bool resizeable{true};
+  const floating scale{1.0f};
+  const Math::Vec4 clear_colour{0.0f, 0.0f, 0.0f, 1.0f};
+  const floating depth_clear_value{0.0f}; // We use inverted z-buffer
+  const bool clear_colour_on_load{true};
+  const bool clear_depth_on_load{true};
+  const bool clear_stencil_on_load{true};
 
-  bool blend{true};
+  const bool blend{true};
+  const bool invert_viewport{true};
   FramebufferBlendMode blend_mode = FramebufferBlendMode::None;
 
   FramebufferAttachmentSpecification attachments;
 
-  bool transfer{false};
+  const bool transfer{false};
 
   Ref<Image> existing_image;
   std::vector<u32> existing_image_layers;
@@ -57,19 +61,16 @@ struct FramebufferProperties {
   std::unordered_map<u32, Ref<Image>> existing_images;
 
   Ref<Framebuffer> existing_framebuffer;
-
+  const bool flip_viewport{true};
   std::string debug_name;
 };
 
 class Framebuffer {
-  using resize_callback = std::function<void(Framebuffer &)>;
-
 public:
   ~Framebuffer();
 
   auto on_resize(u32, u32, bool should_clean = false) -> void;
   auto on_resize(const Extent<u32> &) -> void;
-  auto add_resize_callback(const resize_callback &func) -> void;
 
   [[nodiscard]] auto get_width() const -> u32 { return width; }
   [[nodiscard]] auto get_height() const -> u32 { return height; }
@@ -101,6 +102,19 @@ public:
   [[nodiscard]] auto get_properties() const -> const auto & {
     return properties;
   }
+  [[nodiscard]] auto get_extent() const -> Extent<u32> {
+    return {width, height};
+  }
+
+  auto set_existing_image(u32 index, const Ref<Image> &img) {
+    properties.existing_images[index] = img;
+  }
+
+  auto add_resize_dependent(IResizeDependent<Framebuffer> *dependent) -> void {
+    if (resize_dependents.contains(dependent))
+      return;
+    resize_dependents.insert(dependent);
+  }
 
   auto invalidate() -> void;
 
@@ -122,10 +136,10 @@ private:
   VkRenderPass render_pass = nullptr;
   VkFramebuffer framebuffer = nullptr;
 
-  std::vector<resize_callback> resize_callbacks;
-
   auto clean() -> void;
   auto create_framebuffer() -> void;
+
+  std::unordered_set<IResizeDependent<Framebuffer> *> resize_dependents{};
 };
 
 } // namespace Core

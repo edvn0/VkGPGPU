@@ -29,7 +29,8 @@ public:
     object.bind(*command_buffer, std::forward<Args>(args)...);
   }
 
-  auto push_constant(const Pipeline &pipeline, const Material &material) {
+  auto push_constant(const ComputePipeline &pipeline,
+                     const Material &material) {
     const auto &constant_buffer = material.get_constant_buffer();
 
     if (!constant_buffer.valid())

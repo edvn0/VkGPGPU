@@ -9,6 +9,7 @@ namespace ECS {
 
 using Message =
     std::variant<Events::EntityAddedEvent, Events::EntityRemovedEvent,
-                 Events::SceneDestroyedEvent>;
+                 Events::SceneDestroyedEvent,
+                 Events::SelectedEntityUpdateEvent>;
 
 }

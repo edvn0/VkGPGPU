@@ -29,3 +29,12 @@
 [submodule "ThirdParty/assimp"]
 	path = ThirdParty/assimp
 	url = git@github.com:assimp/assimp.git
+[submodule "ThirdParty/ImGuizmo"]
+	path = ThirdParty/ImGuizmo
+	url = git@github.com:CedricGuillemet/ImGuizmo.git
+[submodule "ThirdParty/magic_enum"]
+	path = ThirdParty/magic_enum
+	url = git@github.com:Neargye/magic_enum.git
+[submodule "ThirdParty/portable-file-dialogs"]
+	path = ThirdParty/portable-file-dialogs
+	url = git@github.com:samhocevar/portable-file-dialogs.git

@@ -35,7 +35,7 @@ jobs:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: g++-12 gcc-12 libtbb-dev libxinerama-dev libxcursor-dev
-            libxi-dev mesa-utils libglu1-mesa-dev mesa-common-dev
+            libxi-dev mesa-utils libglu1-mesa-dev mesa-common-dev libxkbcommon-dev
             libglew-dev libglfw3-dev libglm-dev libao-dev libmpg123-dev
             mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers
           version: 1.0

@@ -11,20 +11,18 @@ constexpr auto GPGPU_BUFFER_SECONDS = 0.5;
 
 namespace Core {
 
-static constexpr auto loops_per_second = 20000;
-const size_t Timer::buffer_size = GPGPU_BUFFER_SECONDS * loops_per_second;
-std::vector<Timer::BufferSize> Timer::buffer(Timer::buffer_size);
-std::chrono::time_point<std::chrono::high_resolution_clock>
-    Timer::last_write_time = std::chrono::high_resolution_clock::now();
-size_t Timer::current_index = 0;
-size_t Timer::last_write_index = 0;
-std::mutex Timer::buffer_mutex;
-
 Timer::Timer(const Bus::MessagingClient &client) : messaging_client(&client) {
-  start_time = std::chrono::high_resolution_clock::now();
+  worker_thread =
+      std::jthread([this](std::stop_token st) { process_timings(st); });
 }
 
-Timer::~Timer() { write_to_file(); }
+Timer::~Timer() {
+  if (worker_thread.joinable()) {
+    worker_thread.request_stop(); // Signals the thread to stop
+    queue_cv.notify_one();        // Wake the thread to ensure it can exit
+    worker_thread.join();         // Wait for the thread to finish
+  }
+}
 
 void Timer::begin() { start_time = std::chrono::high_resolution_clock::now(); }
 
@@ -33,39 +31,41 @@ void Timer::end() {
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
                       end_time - start_time)
                       .count();
-  add_duration(duration);
-  if (should_write_to_file()) {
-    write_to_file();
+
+  {
+    std::lock_guard lock(queue_mutex);
+    timings_queue.push(duration);
+  }
+
+  queue_cv.notify_one();
+}
+
+void Timer::process_timings(std::stop_token stop_token) {
+  std::unique_lock lock(queue_mutex, std::defer_lock);
+
+  while (!stop_token.stop_requested()) {
+    lock.lock();
+    queue_cv.wait(lock, [&queue = timings_queue, &stop = stop_token]() {
+      return !queue.empty() || stop.stop_requested();
+    });
+
+    while (!timings_queue.empty()) {
+      auto duration = timings_queue.front();
+      timings_queue.pop();
+      lock.unlock();
+      write_to_file(duration);
+      lock.lock();
+    }
+
+    lock.unlock();
   }
 }
 
-void Timer::add_duration(Timer::BufferSize duration) {
-  std::lock_guard lock(buffer_mutex);
-  buffer[current_index] = duration;
-  current_index = (current_index + 1) % buffer_size;
-}
-
-bool Timer::should_write_to_file() {
-  auto now = std::chrono::high_resolution_clock::now();
-  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     now - last_write_time)
-                     .count();
-  return elapsed >= 200;
-}
-
-void Timer::write_to_file() {
-  std::lock_guard lock(buffer_mutex);
-
-  size_t index = last_write_index;
-  while (index != current_index) {
-    auto formatted =
-        fmt::format("Time Taken (microseconds), {}", buffer[index]);
-    messaging_client->send_message("Timer", formatted);
-    last_write_time = std::chrono::high_resolution_clock::now();
-    index = (index + 1) % buffer_size;
-  }
-
-  last_write_index = current_index; // Update the last write index after writing
+void Timer::write_to_file(BufferSize duration) {
+  // Implementation for writing a single duration to a file or sending via
+  // messaging client
+  auto formatted = fmt::format("Time Taken (microseconds): {}", duration);
+  messaging_client->send_message("Timer", formatted);
 }
 
 } // namespace Core

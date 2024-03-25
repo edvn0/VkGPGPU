@@ -4,6 +4,7 @@
 #include "Config.hpp"
 #include "Device.hpp"
 #include "Types.hpp"
+#include "Verify.hpp"
 
 #include <ranges>
 
@@ -32,7 +33,7 @@ public:
 
   ~BufferSet() = default;
 
-  auto set_frame_count(std::uint32_t frames) -> void {
+  auto set_frame_count(u32 frames) -> void {
     ensure(frame_set_binding_buffers.empty(),
            "BufferSet must be initialized before setting frame count");
     ensure(frames > 0,
@@ -60,11 +61,71 @@ public:
     return frame_set_binding_buffers.at(frame_index).at(set).at(binding);
   }
 
+  auto try_get(DescriptorBinding binding, FrameIndex frame_index,
+               DescriptorSet set = 0) -> const Buffer * {
+    if (!frame_set_binding_buffers.contains(frame_index))
+      return nullptr;
+    if (!frame_set_binding_buffers.at(frame_index).contains(set))
+      return nullptr;
+    if (!frame_set_binding_buffers.at(frame_index).at(set).contains(binding))
+      return nullptr;
+    return frame_set_binding_buffers.at(frame_index).at(set).at(binding).get();
+  }
+
   auto set(Scope<Buffer> &&buffer, FrameIndex frame_index,
            DescriptorSet set = DescriptorSet{0}) -> void {
     ensure(frame_index < frame_count, "BufferSet frame index out of range");
     frame_set_binding_buffers[frame_index][set].try_emplace(
         buffer->get_binding(), std::move(buffer));
+  }
+
+  [[nodiscard]] auto get_bindings(DescriptorSet set = 0) const
+      -> std::vector<VkDescriptorSetLayoutBinding> {
+    const auto &bindings = frame_set_binding_buffers.at(0).at(set);
+    std::vector<VkDescriptorSetLayoutBinding> result;
+    result.reserve(bindings.size());
+    for (const auto &[binding, buffer] : bindings) {
+      result.push_back(VkDescriptorSetLayoutBinding{
+          .binding = binding,
+          .descriptorType = buffer->get_vulkan_type(),
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr,
+      });
+    }
+    return result;
+  }
+
+  [[nodiscard]] auto get_write_descriptors(u32 current_frame,
+                                           DescriptorSet set = 0) const
+      -> std::vector<VkWriteDescriptorSet> {
+    static std::unordered_map<u32, std::vector<VkWriteDescriptorSet>>
+        write_descriptor_cache;
+    if (write_descriptor_cache.contains(current_frame)) {
+      return write_descriptor_cache.at(current_frame);
+    }
+
+    const auto &bindings = frame_set_binding_buffers.at(current_frame).at(set);
+    std::vector<VkWriteDescriptorSet> result;
+    result.reserve(bindings.size());
+    for (const auto &[binding, buffer] : bindings) {
+      result.push_back(VkWriteDescriptorSet{
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .pNext = nullptr,
+          .dstSet = nullptr,
+          .dstBinding = binding,
+          .dstArrayElement = 0,
+          .descriptorCount = 1,
+          .descriptorType = buffer->get_vulkan_type(),
+          .pImageInfo = nullptr,
+          .pBufferInfo = &buffer->get_descriptor_info(),
+          .pTexelBufferView = nullptr,
+      });
+    }
+
+    write_descriptor_cache[current_frame + set * Config::frame_count] = result;
+
+    return result;
   }
 
   static auto construct(const Device &device) -> Scope<BufferSet> {

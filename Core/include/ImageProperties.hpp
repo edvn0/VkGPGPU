@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Concepts.hpp"
 #include "Types.hpp"
 
 #include <fmt/core.h>
@@ -41,6 +42,8 @@ template <IsNumber T> struct Extent {
     return width > 0 && height > 0;
   }
 
+  [[nodiscard]] auto size() const noexcept -> T { return width * height; }
+
   // Cast to another type Other, not the same as T
   template <typename Other>
     requires(!std::is_same_v<Other, T> &&
@@ -51,6 +54,44 @@ template <IsNumber T> struct Extent {
         .height = static_cast<Other>(height),
     };
   }
+
+  auto as_pair() const { return std::pair<T, T>{width, height}; }
+
+  template <IsNumber U>
+    requires(!std::is_same_v<U, T>)
+  auto operator==(const Extent<U> &rhs) const -> bool {
+    return width == rhs.width && height == rhs.height;
+  }
+  template <IsNumber U>
+    requires(!std::is_same_v<U, T>)
+  auto operator!=(const Extent<U> &rhs) const -> bool {
+    return !(*this == rhs);
+  }
+  auto operator==(const Extent &rhs) const -> bool = default;
+  auto operator!=(const Extent &rhs) const -> bool = default;
+
+  auto operator/=(IsNumber auto number) -> Extent & {
+    width /= number;
+    height /= number;
+    return *this;
+  }
+  auto operator+=(const Extent &other) -> Extent & {
+    width += other.width;
+    height += other.height;
+    return *this;
+  }
+  auto operator+(IsNumber auto number) -> Extent {
+    return {
+        .width = width + number,
+        .height = height + number,
+    };
+  }
+  auto operator/(IsNumber auto number) -> Extent {
+    return {
+        .width = width / number,
+        .height = height / number,
+    };
+  }
 };
 
 enum class ImageTiling : std::uint8_t {
@@ -58,9 +99,7 @@ enum class ImageTiling : std::uint8_t {
   Linear,
 };
 
-static constexpr auto bit(std::size_t i) {
-  return static_cast<std::uint32_t>(1) << i;
-}
+static constexpr auto bit(std::size_t i) { return static_cast<u32>(1) << i; }
 
 enum class ImageUsage : std::uint8_t {
   TransferSrc = bit(0),
@@ -106,12 +145,12 @@ enum class ImageFormat : std::uint8_t {
 auto to_vulkan_format(ImageFormat format) -> VkFormat;
 
 enum class SamplerFilter : std::uint8_t {
-  Nearest,
+  Nearest = 0,
   Linear,
 };
 
 enum class SamplerAddressMode : std::uint8_t {
-  Repeat,
+  Repeat = 0,
   MirroredRepeat,
   ClampToEdge,
   ClampToBorder,

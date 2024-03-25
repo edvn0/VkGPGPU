@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DynamicLibraryLoader.hpp"
+
 #include <Windows.h>
 
 namespace Core::Windows {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+
 #include <optional>
 #include <span>
 #include <string>
@@ -15,28 +16,8 @@ public:
     environment_variables[key] = value;
   }
 
-  static auto get(const std::string &key) -> std::optional<std::string> {
-    for (auto &&[k, v] : environment_variables) {
-      info("key: {}, value: {}", k, v);
-    }
-
-    if (environment_variables.contains(key)) {
-      return environment_variables[key];
-    }
-
-    info("Key '{}' was not initialized on startup!", key);
-    return std::nullopt;
-  }
-
-  static void initialize(std::span<std::string> keys) {
-    for (const auto &key : keys) {
-      if (const auto value = std::getenv(key.data())) {
-        set_environment_variable(key, value);
-      } else {
-        info("Key {} was not found.", key);
-      }
-    }
-  }
+  static auto get(const std::string &key) -> std::optional<std::string>;
+  static void initialize(std::span<std::string> keys);
 
 private:
   static inline std::unordered_map<std::string, std::string>

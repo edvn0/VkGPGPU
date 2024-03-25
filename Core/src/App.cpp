@@ -23,6 +23,8 @@ auto AppDeleter::operator()(App *app) const noexcept -> void {
 }
 
 App::App(const ApplicationProperties &props) : properties(props) {
+  watcher = make_scope<FilesystemWatcher>(FS::get_current_path());
+
   // Initialize the instance
   instance = Instance::construct(properties.headless);
 
@@ -31,12 +33,16 @@ App::App(const ApplicationProperties &props) : properties(props) {
   message_client = make_scope<Bus::MessagingClient>(
       make_scope<Platform::RabbitMQ::RabbitMQMessagingAPI>(hostname, port));
 
-  window = Window::construct(*instance, {
-                                            .extent = extent,
-                                            .fullscreen = false,
-                                            .vsync = false,
-                                            .headless = properties.headless,
-                                        });
+  window = Window::construct(
+      *instance, {
+                     .extent = extent,
+                     .fullscreen = false,
+                     .vsync = false,
+                     .headless = properties.headless,
+                     .begin_fullscreen = properties.start_fullscreen,
+                 });
+  window->set_event_handler(
+      [this](Event &event) { forward_incoming_events(event); });
   // Initialize the device
   device = Device::construct(*instance, *window);
   UI::initialise(*device);
@@ -50,6 +56,7 @@ App::App(const ApplicationProperties &props) : properties(props) {
 }
 
 App::~App() {
+  watcher.reset();
   Allocator::destroy();
   swapchain.reset();
   window.reset();
@@ -59,12 +66,25 @@ App::~App() {
 
 auto App::frame() const -> u32 { return swapchain->current_frame(); }
 
+auto App::forward_incoming_events(Event &event) -> void {
+  EventDispatcher dispatcher(event);
+  dispatcher.dispatch<WindowResizeEvent>([this](WindowResizeEvent &event) {
+    const Extent<i32> extent{event.get_width(), event.get_height()};
+    on_resize(extent.as<u32>());
+    return true;
+  });
+
+  if (event.handled)
+    return;
+  on_event(event);
+}
+
 auto App::run() -> void {
   static constexpr auto now = [] {
     return std::chrono::high_resolution_clock::now();
   };
 
-  Scope<InterfaceSystem> interface_system =
+  const auto interface_system =
       make_scope<InterfaceSystem>(*device, *window, *swapchain);
 
   on_create();
@@ -73,9 +93,11 @@ auto App::run() -> void {
   const auto total_time = last_time;
 
   while (!window->should_close()) {
+
     if (was_resized()) {
       on_resize(window->get_extent());
       window->reset_resize_status();
+      vkDeviceWaitIdle(device->get_device());
       continue;
     }
 

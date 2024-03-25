@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CommandBuffer.hpp"
+#include "CommandBufferThreadPool.hpp"
 #include "Concepts.hpp"
 #include "Containers.hpp"
 #include "Device.hpp"
@@ -7,6 +9,8 @@
 #include "Types.hpp"
 
 #include <future>
+#include <map>
+#include <optional>
 #include <queue>
 #include <string>
 #include <unordered_set>
@@ -20,12 +24,21 @@ template <typename R> bool is_ready(const std::future<R> &f) {
 }
 
 template <class Constructor>
-concept ConstructorLike = requires(
-    const Device &device, const typename Constructor::Properties &properties) {
-  {
-    Constructor::construct(device, properties)
-  } -> std::same_as<Scope<typename Constructor::Type>>;
-};
+concept ConstructorLike =
+    requires(const Device &device,
+             const typename Constructor::Properties &properties) {
+      {
+        Constructor::construct(device, properties)
+      } -> std::same_as<Scope<typename Constructor::Type>>;
+    } ||
+    requires(const Device &device,
+             const typename Constructor::Properties &properties,
+             CommandBuffer &command_buffer) {
+      {
+        Constructor::construct_from_command_buffer(device, properties,
+                                                   command_buffer)
+      } -> std::same_as<Scope<typename Constructor::Type>>;
+    };
 
 template <class T, class P>
 concept Cacheable = requires(const Device &device, const P &properties) {
@@ -39,6 +52,13 @@ template <class T, class P> struct DefaultConstructor {
   static auto construct(const Device &device, const P &properties) -> Scope<T> {
     return T::construct(device, properties);
   }
+
+  static auto construct_from_command_buffer(const Device &device,
+                                            const P &properties,
+                                            CommandBuffer &command_buffer)
+      -> Scope<T> {
+    return T::construct_from_command_buffer(device, properties, command_buffer);
+  }
 };
 
 /**
@@ -47,7 +67,7 @@ template <class T, class P> struct DefaultConstructor {
  * @tparam T The type of objects to cache.
  * @tparam P The properties type used for object identification and
  * construction
- * @tparam IsAsynchronous Use the sync version of this cache
+ * @tparam IsAsynchronous Use the async version of this cache
  * @tparam C A constructor-like class for creating objects of type T. Must
  * satisfy ConstructorLike concept. The ConstructorLike concept is satisfied by
  * any class with a static construct function that returns a Scope<T> and takes
@@ -58,24 +78,11 @@ template <class T, class P, bool IsAsynchronous = true,
   requires(Cacheable<T, P>)
 class GenericCache {
 public:
-  /**
-   * @brief Construct a new Generic Cache object.
-   *
-   * @param dev Reference to the device used for object construction.
-   * @param loading_texture The texture to return while objects are loading.
-   */
-  explicit GenericCache(const Device &dev, Scope<Texture> loading_texture)
-      : device(&dev), loading(std::move(loading_texture)) {}
+  explicit GenericCache(const Device &dev, Scope<Texture> loading_texture,
+                        usize thread_count = 12)
+      : device(&dev), loading(std::move(loading_texture)),
+        command_buffer_pool(thread_count, dev) {}
 
-  /**
-   * @brief Get or load an object of type T, identified by properties of type P.
-   *
-   * If the object is not in the cache, it will be loaded asynchronously.
-   *
-   * @param props The properties identifying the object.
-   * @return const Scope<T>& A reference to the requested object, or a loading
-   * texture if loading.
-   */
   auto put_or_get(const P &props) -> const Scope<T> & {
     std::scoped_lock lock(access);
     if (processing_identifier_cache.contains(props.identifier)) {
@@ -86,15 +93,13 @@ public:
       return type_cache.at(props.identifier);
     } else {
       if constexpr (IsAsynchronous) {
-
         processing_identifier_cache.emplace(props.identifier);
-        auto future_texture = ThreadPool::submit(
-            [this, props]() { return C::construct(*device, props); });
-
-        future_cache.emplace(CacheTask{
-            .identifier = props.identifier,
-            .future = std::move(future_texture),
-        });
+        auto future_resource = command_buffer_pool.submit(
+            [this, props](CommandBuffer &cmd_buffer) {
+              return C::construct_from_command_buffer(*device, props,
+                                                      cmd_buffer);
+            });
+        future_tasks.emplace(props.identifier, std::move(future_resource));
         return loading;
       } else {
         type_cache[props.identifier] = C::construct(*device, props);
@@ -103,47 +108,54 @@ public:
     }
   }
 
-  /**
-   * @brief Update the cache by loading the next object in the queue.
-   *
-   * Will generally be called by external thread (non-main thread).
-   */
-  auto update_one() {
-    if (future_cache.empty()) {
+  void update_one() {
+    std::scoped_lock lock{access};
+    auto maybe = pop_first_no_copy(future_tasks);
+    if (!maybe)
       return;
-    }
-
-    std::scoped_lock lock(access);
-    auto &&[identifier, future] = future_cache.front();
-    // Check state of future
-    if (is_ready(future)) {
-      return;
-    }
-
-    auto result = future.get();
-    type_cache[identifier] = std::move(result);
-    future_cache.pop();
-    processing_identifier_cache.erase(identifier);
+    auto &&[key, future] = maybe.value();
+    type_cache.try_emplace(key, std::move(future.get()));
+    processing_identifier_cache.erase(key);
   }
 
-  auto type_cache_size() const -> usize { return type_cache.size(); }
-  auto future_cache_size() const -> usize { return future_cache.size(); }
+  template <typename F> void update_one(F &&post_insert_hook) {
+    std::scoped_lock lock{access};
+    auto maybe = pop_first_no_copy(future_tasks);
+    if (!maybe)
+      return;
+    auto &&[key, future] = maybe.value();
+    type_cache.try_emplace(key, std::move(future.get()));
 
-  auto get_loading_texture() const -> const Scope<Texture> & { return loading; }
+    auto &value = type_cache.at(key);
+    post_insert_hook(value);
+
+    processing_identifier_cache.erase(key);
+  }
 
 private:
   const Device *device;
-
-  struct CacheTask {
-    std::string identifier;
-    std::future<Scope<T>> future;
-  };
-
-  std::queue<CacheTask> future_cache;
-  std::unordered_set<std::string> processing_identifier_cache;
   Container::StringLikeMap<Scope<T>> type_cache;
+  std::map<std::string, std::future<Scope<T>>> future_tasks;
+  std::unordered_set<std::string> processing_identifier_cache;
   std::mutex access;
   Scope<Texture> loading;
+  CommandBufferThreadPool<T> command_buffer_pool;
+
+  template <typename K, typename V>
+  std::optional<std::pair<K, V>> pop_first_no_copy(std::map<K, V> &map) {
+    if (map.empty()) {
+      return {}; // Return an empty optional if the map is empty
+    }
+    auto it = map.begin();
+    if (!is_ready(it->second))
+      return {};
+
+    // Create a pair with a copy of the key and a move of the value
+    std::optional<std::pair<K, V>> result =
+        std::make_pair(it->first, std::move(it->second));
+    map.erase(it); // Erase the first element
+    return result; // Return the result without copying the value
+  }
 };
 
 } // namespace Core

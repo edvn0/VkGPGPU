@@ -26,4 +26,9 @@ public:
   using BaseException::BaseException;
 };
 
+class UnableToOpenException : public BaseException {
+public:
+  using BaseException::BaseException;
+};
+
 } // namespace Core

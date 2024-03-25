@@ -6,6 +6,10 @@
 
 #include <backends/imgui_impl_vulkan.h>
 #include <fmt/format.h>
+#include <imgui-notify/ImGuiNotify.hpp>
+#include <iomanip>
+#include <portable-file-dialogs/portable-file-dialogs.h>
+#include <sstream>
 
 template <typename... Args> auto make_id(Args &&...data) {
   // Use a fold expression to concatenate the formatted pointer strings
@@ -14,6 +18,33 @@ template <typename... Args> auto make_id(Args &&...data) {
 }
 
 namespace Core::UI {
+
+auto push_id() -> void { ImGui::PushID(generate_id()); }
+
+auto pop_id() -> void { ImGui::PopID(); }
+
+static unsigned int ui_id_counter =
+    0; // Ensure this is initialized appropriately
+static char ui_id_buffer[10] =
+    "ID"; // Adjust size based on expected range of ui_id_counter
+
+const char *generate_id() {
+  std::ostringstream stream;
+  stream << "ID" << std::hex
+         << ui_id_counter++; // Convert to hexadecimal and increment
+  std::string id_str = stream.str();
+
+  // Ensure the buffer is large enough for the string and a null terminator
+  size_t buffer_length = sizeof(ui_id_buffer);
+  if (id_str.length() + 1 <= buffer_length) {
+    std::copy(id_str.begin(), id_str.end(), ui_id_buffer);
+    ui_id_buffer[id_str.length()] = '\0'; // Null-terminate the string
+  } else {
+    // Handle error or buffer overflow
+  }
+
+  return ui_id_buffer;
+}
 
 template <std::integral N>
   requires(!std::is_same_v<N, f32>)
@@ -47,20 +78,37 @@ auto begin(const std::string_view name) -> bool {
   return ImGui::Begin(name.data());
 }
 
+auto begin(const std::string_view name, i32 flags) -> bool {
+  return ImGui::Begin(name.data(), nullptr, flags);
+}
+
 auto end() -> void { return ImGui::End(); }
 
-auto window_size() -> Extent<u32> {
-  Extent<u32> output;
+auto window_size() -> Extent<float> {
+  Extent<float> output;
 
-  auto content_min = ImGui::GetWindowContentRegionMin();
-  auto content_max = ImGui::GetWindowContentRegionMax();
-
-  output.width =
-      static_cast<u32>(content_max.x) - static_cast<u32>(content_min.x);
-  output.height =
-      static_cast<u32>(content_max.y) - static_cast<u32>(content_min.y);
-
+  auto content = ImGui::GetContentRegionAvail();
+  output.width = content.x;
+  output.height = content.y;
   return output;
+}
+
+auto window_position() -> std::tuple<u32, u32> {
+  ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+  ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+  vMin.x += ImGui::GetWindowPos().x;
+  vMin.y += ImGui::GetWindowPos().y;
+  vMax.x += ImGui::GetWindowPos().x;
+  vMax.y += ImGui::GetWindowPos().y;
+
+  ImGui::GetForegroundDrawList()->AddRect(vMin, vMax,
+                                          IM_COL32(255, 255, 0, 255));
+
+  return {
+      static_cast<u32>(vMin.x),
+      static_cast<u32>(vMin.y),
+  };
 }
 
 auto image(const Texture &texture, InterfaceImageProperties properties)
@@ -69,7 +117,10 @@ auto image(const Texture &texture, InterfaceImageProperties properties)
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, texture.hash());
   ImGui::PushID(made.c_str());
-  ImGui::Image(set, to_imvec2(properties.extent));
+  static constexpr ImVec2 uv0 = ImVec2(0, 0);
+  static constexpr ImVec2 uv1 = ImVec2(1, 1);
+  ImGui::Image(set, to_imvec2(properties.extent),
+               properties.flipped ? uv1 : uv0, properties.flipped ? uv0 : uv1);
   ImGui::PopID();
 }
 
@@ -78,7 +129,10 @@ auto image(const Image &image, InterfaceImageProperties properties) -> void {
   auto set = add_image(sampler, view, layout);
   auto made = make_id(set, sampler, view, layout, image.hash());
   ImGui::PushID(made.c_str());
-  ImGui::Image(set, to_imvec2(properties.extent));
+  static constexpr ImVec2 uv0 = ImVec2(0, 0);
+  static constexpr ImVec2 uv1 = ImVec2(1, 1);
+  ImGui::Image(set, to_imvec2(properties.extent),
+               properties.flipped ? uv1 : uv0, properties.flipped ? uv0 : uv1);
   ImGui::PopID();
 }
 
@@ -113,18 +167,20 @@ auto image_drop_button(Scope<Core::Texture> &texture,
 
   // Use the platform-independent payload handling function
   const auto dropped_file_path =
-      Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
+      Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
   if (!dropped_file_path.empty()) {
     try {
       auto path = std::filesystem::path{dropped_file_path};
       device.perform([&](auto &device) {
         auto new_text = Texture::construct_shader(
-            device, {
-                        .format = ImageFormat::UNORM_RGBA8,
-                        .path = path,
-                        .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                                 ImageUsage::TransferDst,
-                    });
+            device,
+            {
+                .format = ImageFormat::UNORM_RGBA8,
+                .path = path,
+                .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
+                         ImageUsage::TransferSrc | ImageUsage::TransferDst,
+                .mip_generation = MipGeneration(1),
+            });
         texture = std::move(new_text);
       });
     } catch (const std::exception &exc) {
@@ -134,7 +190,11 @@ auto image_drop_button(Scope<Core::Texture> &texture,
 }
 
 auto accept_drag_drop_payload(std::string_view) -> std::string {
-  return Platform::accept_drag_drop_payload(Identifiers::texture_identifier);
+  return Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
+}
+
+auto accept_drag_drop_payload() -> std::string {
+  return Platform::accept_drag_drop_payload(Identifiers::fs_widget_identifier);
 }
 
 auto set_drag_drop_payload(const std::string_view payload_identifier,
@@ -147,16 +207,37 @@ auto set_drag_drop_payload(const std::string_view payload_identifier,
 namespace Core::UI::Detail {
 
 auto text_impl(const std::string_view data) -> void {
-  return ImGui::Text(data.data());
+  return ImGui::Text("%s", data.data());
 }
 
 auto text_wrapped_impl(const std::string_view data) -> void {
-  return ImGui::TextWrapped(data.data());
+  return ImGui::TextWrapped("%s", data.data());
 }
 
 auto set_drag_drop_payload_impl(const std::string_view payload_identifier,
                                 const std::string_view data) -> bool {
   return Platform::set_drag_drop_payload(payload_identifier, data);
+}
+
+constexpr auto to_imgui_notify_type(Toast::Type type) {
+  return static_cast<ImGuiToastType>(type);
+}
+
+auto toast(Toast::Type type, u32 duration_ms, std::string_view data) -> void {
+  ImGuiToast toast{
+      to_imgui_notify_type(type),
+      static_cast<i32>(duration_ms),
+      "%s",
+      data.data(),
+  };
+  ImGui::InsertNotification(toast);
+}
+
+auto save_file_dialog(const std::string_view path) -> std::optional<FS::Path> {
+  auto destination = pfd::save_file("Select a file").result();
+
+  return destination.empty() ? std::optional<FS::Path>{}
+                             : FS::resolve(destination);
 }
 
 } // namespace Core::UI::Detail

@@ -1,13 +1,25 @@
 #pragma once
 
+#include "Event.hpp"
 #include "InterfaceSystem.hpp"
 #include "Types.hpp"
 
-class Widget {
+#include "core/Forward.hpp"
+#include "ecs/Forward.hpp"
+#include "ecs/ISceneObserver.hpp"
+
+class Widget : public ECS::ISceneObserver {
 public:
-  virtual ~Widget() = default;
+  ~Widget() override = default;
   virtual void on_update(Core::floating ts) = 0;
   virtual void on_interface(Core::InterfaceSystem &) = 0;
-  virtual void on_create() = 0;
+  virtual void on_create(const Core::Device &, const Core::Window &,
+                         const Core::Swapchain &) = 0;
   virtual void on_destroy() = 0;
+  virtual void on_event(Core::Event &) {}
+};
+
+struct ISceneContextDependent {
+  virtual ~ISceneContextDependent() = default;
+  virtual auto set_scene_context(ECS::Scene *) -> void = 0;
 };

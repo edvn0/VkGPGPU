@@ -1,11 +1,21 @@
 cmake_minimum_required(VERSION 3.21)
 project(App)
 
-add_executable(App ClientApp.hpp main.cpp ClientApp.cpp widgets/Widget.hpp widgets/include/FilesystemWidget.hpp widgets/src/FilesystemWidget.cpp)
-target_link_libraries(App PRIVATE Core ECS fmt::fmt Vulkan::Vulkan)
+add_executable(App ClientApp.hpp main.cpp ClientApp.cpp
+    widgets/Widget.hpp
+    widgets/include/FilesystemWidget.hpp
+    widgets/include/SceneWidget.hpp
+    widgets/src/FilesystemWidget.cpp
+    widgets/src/SceneWidget.cpp
+)
+target_link_libraries(App PRIVATE Core ECS fmt::fmt Vulkan::Vulkan imguizmo magic_enum imgui-notify)
 target_include_directories(App PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/widgets/include ${CMAKE_CURRENT_SOURCE_DIR}/widgets ${CMAKE_SOURCE_DIR}/ThirdParty/glm)
 target_sources(App PRIVATE version.rc)
 target_precompile_headers(App REUSE_FROM Core)
+
+if(GPGPU_CUSTOM_BASE_PATH)
+    target_compile_definitions(App PRIVATE -DGPGPU_CUSTOM_BASE_PATH="${GPGPU_CUSTOM_BASE_PATH}")
+endif()
 
 # Only if Vulkan_GLSLC_EXECUTABLE is set
 if(Vulkan_GLSLC_EXECUTABLE)
@@ -20,7 +30,7 @@ if(Vulkan_GLSLC_EXECUTABLE)
         set(SHADER_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SHADER_NAME}.spv")
         add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
-            COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${SHADER_OUTPUT} -I ${CMAKE_CURRENT_SOURCE_DIR}/shaders/include
+            COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${SHADER_OUTPUT} -I ${CMAKE_CURRENT_SOURCE_DIR}/shaders/include -g
             DEPENDS ${SHADER}
             COMMENT "Compiling shader: ${SHADER_NAME}"
         )

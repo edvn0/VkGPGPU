@@ -53,7 +53,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
   return VK_FALSE;
 }
 
-void populateDebugMessengerCreateInfo(
+void populate_debug_messenger_create_info(
     VkDebugUtilsMessengerCreateInfoEXT &createInfo) {
   createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -103,6 +103,10 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
 
   std::vector<const char *> enabled_extensions = {
       VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+#ifndef GPGPU_DEBUG
+  enabled_extensions.clear();
+#endif
+
   if (!headless) {
     if (!glfwInit()) {
       error("Failed to initialize GLFW");
@@ -121,17 +125,25 @@ auto Instance::construct_vulkan_instance(bool headless) -> void {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
       .pApplicationInfo = &application_info,
-      .enabledLayerCount = static_cast<std::uint32_t>(enabled_layers.size()),
+      .enabledLayerCount = static_cast<u32>(enabled_layers.size()),
       .ppEnabledLayerNames = enabled_layers.data(),
-      .enabledExtensionCount =
-          static_cast<std::uint32_t>(enabled_extensions.size()),
+      .enabledExtensionCount = static_cast<u32>(enabled_extensions.size()),
       .ppEnabledExtensionNames = enabled_extensions.data(),
   };
+
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
+  VkValidationFeaturesEXT validation_features{};
+  validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
   if (enable_validation_layers) {
-    populateDebugMessengerCreateInfo(debug_create_info);
-    create_info.pNext =
-        (VkDebugUtilsMessengerCreateInfoEXT *)&debug_create_info;
+    std::array<VkValidationFeatureEnableEXT, 1> enabled_features{};
+    // enabled_features[0] =
+    //    VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+
+    validation_features.enabledValidationFeatureCount = enabled_features.size();
+    validation_features.pEnabledValidationFeatures = enabled_features.data();
+    populate_debug_messenger_create_info(debug_create_info);
+    create_info.pNext = &debug_create_info;
+    debug_create_info.pNext = &validation_features;
   }
 
   verify(vkCreateInstance(&create_info, nullptr, &instance), "vkCreateInstance",
@@ -150,8 +162,8 @@ auto Instance::setup_debug_messenger() -> void {
   if (!enable_validation_layers)
     return;
 
-  VkDebugUtilsMessengerCreateInfoEXT createInfo;
-  populateDebugMessengerCreateInfo(createInfo);
+  VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+  populate_debug_messenger_create_info(createInfo);
 
   verify(create_debug_utils_messenger_ext(instance, &createInfo, nullptr,
                                           &debug_messenger),

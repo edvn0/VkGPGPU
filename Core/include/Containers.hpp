@@ -1,13 +1,17 @@
 #pragma once
 
+#include "IterationDecision.hpp"
+
 #include <algorithm>
 #include <concepts>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Core::Container {
@@ -41,6 +45,14 @@ template <typename Value>
 using StringLikeMap =
     std::unordered_map<std::string, Value, StringLikeHasher, StringLikeEqual>;
 
+template <typename Value>
+using StringLikeSet =
+    std::unordered_set<std::string, StringLikeHasher, StringLikeEqual>;
+
+template <typename T>
+using StringLikeUnorderedSet =
+    std::unordered_set<T, StringLikeHasher, StringLikeEqual>;
+
 template <typename T>
 concept Container = requires(T t) {
   typename T::value_type;
@@ -61,8 +73,23 @@ concept Container = requires(T t) {
   std::cbegin(t);
   std::size(t);
   std::empty(t);
-  std::data(t);
 };
+
+auto for_each_with_decision(Container auto &container, auto &&func) -> void {
+  for (auto &val : container) {
+    if (func(val) == IterationDecision::Break)
+      break;
+  }
+}
+
+auto for_each(Container auto &container, auto &&func) -> void {
+  if constexpr (std::is_same_v<decltype(func(*std::begin(container))),
+                               IterationDecision>) {
+    for_each_with_decision(container, func);
+  } else {
+    std::ranges::for_each(std::begin(container), std::end(container), func);
+  }
+}
 
 auto sort(Container auto &container) -> void {
   std::ranges::sort(std::begin(container), std::end(container));
@@ -70,6 +97,34 @@ auto sort(Container auto &container) -> void {
 
 auto sort(Container auto &container, auto &&predicate) -> void {
   std::ranges::sort(std::begin(container), std::end(container), predicate);
+}
+
+auto remove_if(Container auto &container, auto &&predicate) -> void {
+  std::erase_if(container, predicate);
+}
+
+template <Container C, Container... Cs>
+auto combine_into_one(const C &first, const Cs &...rest)
+    -> std::vector<typename C::value_type> {
+  using ValueType = typename C::value_type;
+
+  static_assert(
+      (std::is_same_v<typename C::value_type, typename Cs::value_type> && ...),
+      "All containers must be of the same type");
+
+  std::vector<ValueType> result;
+
+  // Reserve enough space for all elements
+  size_t totalSize = first.size() + (rest.size() + ...);
+  result.reserve(totalSize);
+
+  // Insert elements from the first container
+  std::copy(first.begin(), first.end(), std::back_inserter(result));
+
+  // Insert elements from the rest of the containers
+  (std::copy(rest.begin(), rest.end(), std::back_inserter(result)), ...);
+
+  return result;
 }
 
 template <class T, std::integral IndexType = std::size_t>

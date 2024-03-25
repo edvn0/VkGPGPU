@@ -171,20 +171,20 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev,
     const auto &queue_family = queue_families[i];
 
     if (i == dedicated_compute_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Compute, queue_info,
+      queue_infos.emplace_back(Queue::Type::Compute, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (i == dedicated_transfer_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
@@ -193,34 +193,34 @@ auto Device::find_all_possible_queue_infos(VkPhysicalDevice dev,
       };
       const auto disabled = true;
 
-      queue_infos.emplace_back(Queue::Type::Transfer, queue_info,
+      queue_infos.emplace_back(Queue::Type::Transfer, std::move(queue_info),
                                !disabled &&
                                    queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (i == dedicated_present_queue_index) {
-      auto priority = 1.0F;
+      static constexpr auto priority = 1.0F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Present, queue_info,
+      queue_infos.emplace_back(Queue::Type::Present, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
       continue;
     }
 
     if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      auto priority = 0.1F;
+      static constexpr auto priority = 0.1F;
       VkDeviceQueueCreateInfo queue_info{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
           .queueFamilyIndex = i,
           .queueCount = 1,
           .pQueuePriorities = &priority,
       };
-      queue_infos.emplace_back(Queue::Type::Graphics, queue_info,
+      queue_infos.emplace_back(Queue::Type::Graphics, std::move(queue_info),
                                queue_family.timestampValidBits > 0);
     }
   }
@@ -232,21 +232,39 @@ auto Device::create_vulkan_device(
     VkPhysicalDevice dev,
     std::vector<IndexQueueTypePair> &index_queue_type_pairs) -> VkDevice {
 
-  VkPhysicalDeviceFeatures device_features{};
-  device_features.pipelineStatisticsQuery = VK_TRUE;
-  device_features.logicOp = VK_TRUE;
-
   std::vector<VkDeviceQueueCreateInfo> queue_infos;
+  queue_infos.reserve(index_queue_type_pairs.size());
+  float priority = 1.0F;
   for (auto &&[type, queue_info, supports_timestamping] :
        index_queue_type_pairs) {
-    float priority = 1.0F;
     queue_info.pQueuePriorities = &priority;
     queue_infos.push_back(queue_info);
     queue_support[type] = {supports_timestamping};
   }
 
-  auto swapchain_extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-  std::vector<const char *> extensions = {swapchain_extension};
+  std::vector<const char *> extensions{};
+
+  if constexpr (Config::enable_ray_tracing) {
+    extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+    };
+  } else {
+    extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+  }
+  VkPhysicalDeviceFeatures2 device_features{};
+  device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  vkGetPhysicalDeviceFeatures2(physical_device, &device_features);
+
+  device_features.features.pipelineStatisticsQuery = VK_TRUE;
+  device_features.features.logicOp = VK_TRUE;
+  device_features.features.wideLines = VK_TRUE;
+  device_features.features.fillModeNonSolid = VK_TRUE;
+  device_features.features.samplerAnisotropy = VK_TRUE;
 
   VkDeviceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -255,12 +273,36 @@ auto Device::create_vulkan_device(
       .pQueueCreateInfos = queue_infos.data(),
       .enabledExtensionCount = static_cast<u32>(extensions.size()),
       .ppEnabledExtensionNames = extensions.data(),
-      .pEnabledFeatures = &device_features,
   };
+
+  if (Config::enable_ray_tracing) {
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_features = {};
+    acceleration_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR
+        ray_tracing_pipeline_features = {};
+    ray_tracing_pipeline_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+
+    acceleration_features.pNext = &ray_tracing_pipeline_features;
+    device_features.pNext = &acceleration_features;
+
+    acceleration_features.accelerationStructure = VK_TRUE;
+    ray_tracing_pipeline_features.rayTracingPipeline = VK_TRUE;
+  }
+
+  create_info.pNext = &device_features;
 
   VkDevice temp{};
   verify(vkCreateDevice(physical_device, &create_info, nullptr, &temp),
          "vkCreateDevice", "Failed to create Vulkan device");
+
+  VkPhysicalDeviceProperties2 properties_2{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  properties_2.pNext = &ray_tracing_properties;
+  vkGetPhysicalDeviceProperties2(physical_device, &properties_2);
+
   return temp;
 }
 

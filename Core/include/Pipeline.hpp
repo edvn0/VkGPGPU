@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CommandBuffer.hpp"
+#include "ResizeDependent.hpp"
 #include "Shader.hpp"
 #include "Types.hpp"
 
@@ -67,7 +68,7 @@ static constexpr auto to_size(ElementType type) -> std::size_t {
   case ElementType::Float4:
     return sizeof(float) * 4;
   case ElementType::Uint:
-    return sizeof(std::uint32_t);
+    return sizeof(u32);
   default:
     assert(false && "Could not map to size.");
   }
@@ -82,15 +83,15 @@ struct LayoutElement {
 
   ElementType type;
   std::string debug_name;
-  std::uint32_t size{0};
-  std::uint32_t offset{0};
+  u32 size{0};
+  u32 offset{0};
 };
 
 enum class InputRate : std::uint8_t { Vertex, Instance };
 
 struct VertexBinding {
-  std::uint32_t binding{0};
-  std::uint32_t stride{0};
+  u32 binding{0};
+  u32 stride{0};
   InputRate input_rate{InputRate::Vertex};
 };
 
@@ -102,7 +103,9 @@ struct VertexLayout {
       element.offset = total_size;
       total_size += element.size;
     }
-    binding.stride = total_size;
+    if (binding.stride == 0) {
+      binding.stride = total_size;
+    }
   }
 
   template <usize N>
@@ -116,11 +119,13 @@ struct VertexLayout {
     binding.stride = total_size;
   }
 
+  [[nodiscard]] auto empty() const noexcept -> bool { return elements.empty(); }
+
   [[nodiscard]] auto construct_binding() const -> const VertexBinding & {
     return binding;
   }
 
-  std::uint32_t total_size{0};
+  u32 total_size{0};
   std::vector<LayoutElement> elements;
   VertexBinding binding;
 };
@@ -130,19 +135,19 @@ enum class PipelineStage : u8 {
   Compute,
 };
 
-struct PipelineConfiguration {
+struct ComputePipelineConfiguration {
   std::string name;
   PipelineStage stage{PipelineStage::Compute};
   const Shader &shader;
 
-  PipelineConfiguration(std::string name, PipelineStage stage,
-                        const Shader &shader)
+  ComputePipelineConfiguration(std::string name, PipelineStage stage,
+                               const Shader &shader)
       : name(std::move(name)), stage(stage), shader(shader) {}
 };
 
-class Pipeline {
+class ComputePipeline {
 public:
-  ~Pipeline();
+  ~ComputePipeline();
   auto on_resize(const Extent<u32> &) -> void {}
 
   [[nodiscard]] auto get_pipeline() const -> const VkPipeline & {
@@ -162,15 +167,17 @@ public:
 
   auto bind(const CommandBuffer &) -> void;
 
-  static auto construct(const Device &dev, const PipelineConfiguration &)
-      -> Scope<Pipeline>;
+  static auto construct(const Device &dev, const ComputePipelineConfiguration &)
+      -> Scope<ComputePipeline>;
 
 private:
-  explicit Pipeline(const Device &dev, const PipelineConfiguration &);
-  auto construct_pipeline(const PipelineConfiguration &) -> void;
+  explicit ComputePipeline(const Device &dev,
+                           const ComputePipelineConfiguration &);
+  auto construct_pipeline(const ComputePipelineConfiguration &) -> void;
 
   const Device &device;
   std::string name{};
+  std::size_t cached_shader_hash;
   VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_COMPUTE};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};
@@ -181,20 +188,26 @@ class Framebuffer;
 struct GraphicsPipelineConfiguration {
   std::string name;
   const Shader *shader{nullptr};
-  const Framebuffer *framebuffer{nullptr};
+
+  // The framebuffer is not const because we register a resize dependent
+  Framebuffer *framebuffer{nullptr};
+
   VertexLayout layout{};
+  VertexLayout instance_layout{};
   PolygonMode polygon_mode{PolygonMode::Fill};
   float line_width{1.0F};
-  DepthCompareOperator depth_comparison_operator{DepthCompareOperator::Less};
+  DepthCompareOperator depth_comparison_operator{
+      DepthCompareOperator::GreaterOrEqual};
   CullMode cull_mode{CullMode::Back};
   FaceMode face_mode{FaceMode::CounterClockwise};
   bool write_depth{true};
   bool test_depth{true};
 };
-class GraphicsPipeline {
+class GraphicsPipeline : public IResizeDependent<Framebuffer> {
 public:
-  ~GraphicsPipeline();
-  auto on_resize(const Extent<u32> &) -> void {}
+  ~GraphicsPipeline() override;
+  auto on_resize(const Extent<u32> &) -> void;
+  auto resize(const Framebuffer &framebuffer) -> void override;
 
   [[nodiscard]] auto get_pipeline() const -> const VkPipeline & {
     return pipeline;
@@ -205,10 +218,12 @@ public:
   [[nodiscard]] auto get_bind_point() const -> const VkPipelineBindPoint & {
     return bind_point;
   }
+  [[nodiscard]] auto get_line_width() const { return configuration.line_width; }
   [[nodiscard]] auto hash() const noexcept -> usize {
     static constexpr std::hash<std::string> hasher;
     static constexpr std::hash<const void *> void_hasher;
-    return hasher(name) ^ void_hasher(static_cast<const void *>(pipeline));
+    return hasher(configuration.name) ^
+           void_hasher(static_cast<const void *>(pipeline));
   }
 
   auto bind(const CommandBuffer &) const -> void;
@@ -217,16 +232,21 @@ public:
                         const GraphicsPipelineConfiguration &)
       -> Scope<GraphicsPipeline>;
 
+  auto get_cached_shader_hash() const { return cached_shader_hash; }
+  auto get_shader() const { return configuration.shader; }
+  auto set_shader(const Shader *shader) { configuration.shader = shader; }
+
 private:
   explicit GraphicsPipeline(const Device &dev,
                             const GraphicsPipelineConfiguration &);
   auto construct_pipeline(const GraphicsPipelineConfiguration &) -> void;
   auto initialise_blend_states(const GraphicsPipelineConfiguration &)
       -> std::vector<VkPipelineColorBlendAttachmentState>;
+  auto destroy() -> void;
 
   const Device *device;
-  Extent<u32> extent;
-  std::string name{};
+  std::size_t cached_shader_hash;
+  GraphicsPipelineConfiguration configuration;
   VkPipelineBindPoint bind_point{VK_PIPELINE_BIND_POINT_GRAPHICS};
   VkPipelineLayout pipeline_layout{};
   VkPipelineCache pipeline_cache{};

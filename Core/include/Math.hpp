@@ -40,15 +40,22 @@ concept SubmitsRowAndColumnTypeStatically = requires {
 };
 
 template <typename T>
-concept IsGLM =
-    std::is_same_v<T, glm::mat2> || std::is_same_v<T, glm::mat3> ||
-    std::is_same_v<T, glm::mat4> || std::is_same_v<T, glm::mat2x2> ||
-    std::is_same_v<T, glm::mat2x3> || std::is_same_v<T, glm::mat2x4> ||
-    std::is_same_v<T, glm::mat3x2> || std::is_same_v<T, glm::mat3x3> ||
-    std::is_same_v<T, glm::mat3x4> || std::is_same_v<T, glm::mat4x2> ||
-    std::is_same_v<T, glm::mat4x3> || std::is_same_v<T, glm::mat4x4> ||
-    std::is_same_v<T, glm::vec2> || std::is_same_v<T, glm::vec3> ||
-    std::is_same_v<T, glm::vec4> || std::is_same_v<T, glm::quat>;
+concept IsGLM = std::is_same_v<std::decay_t<T>, glm::mat2> ||
+                std::is_same_v<std::decay_t<T>, glm::mat3> ||
+                std::is_same_v<std::decay_t<T>, glm::mat4> ||
+                std::is_same_v<std::decay_t<T>, glm::mat2x2> ||
+                std::is_same_v<std::decay_t<T>, glm::mat2x3> ||
+                std::is_same_v<std::decay_t<T>, glm::mat2x4> ||
+                std::is_same_v<std::decay_t<T>, glm::mat3x2> ||
+                std::is_same_v<std::decay_t<T>, glm::mat3x3> ||
+                std::is_same_v<std::decay_t<T>, glm::mat3x4> ||
+                std::is_same_v<std::decay_t<T>, glm::mat4x2> ||
+                std::is_same_v<std::decay_t<T>, glm::mat4x3> ||
+                std::is_same_v<std::decay_t<T>, glm::mat4x4> ||
+                std::is_same_v<std::decay_t<T>, glm::vec2> ||
+                std::is_same_v<std::decay_t<T>, glm::vec3> ||
+                std::is_same_v<std::decay_t<T>, glm::vec4> ||
+                std::is_same_v<std::decay_t<T>, glm::quat>;
 
 template <SubmitsRowAndColumnTypeStatically MatrixType>
 static constexpr auto for_each(MatrixType &&matrix, auto &&callback) {

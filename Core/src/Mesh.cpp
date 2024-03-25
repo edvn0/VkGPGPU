@@ -2,6 +2,7 @@
 
 #include "Mesh.hpp"
 
+#include "Formatters.hpp"
 #include "Logger.hpp"
 #include "Material.hpp"
 #include "SceneRenderer.hpp"
@@ -18,6 +19,72 @@
 #include <stb_image.h>
 
 namespace Core {
+
+auto create_texture_from_raw_data(const Device *device, const byte *data,
+                                  i32 width, i32 height) -> Scope<Texture> {
+  DataBuffer buffer{width * height * 4 * sizeof(byte)};
+  buffer.write(data, width * height * 4 * sizeof(byte));
+
+  return Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent = Extent<i32>(width, height).as<u32>(),
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueWhite,
+      },
+      std::move(buffer));
+}
+
+auto create_texture_from_memory(const Device *device, const aiTexel *data,
+                                size_t size) -> Scope<Texture> {
+  int width{};
+  int height{};
+  int channels{};
+  auto *raw_pixels =
+      stbi_load_from_memory(std::bit_cast<u8 *>(data),
+                            static_cast<i32>(size * 4 * sizeof(unsigned char)),
+                            &width, &height, &channels, STBI_rgb_alpha);
+
+  if (!raw_pixels) {
+    return nullptr;
+  }
+
+  auto texture =
+      create_texture_from_raw_data(device, raw_pixels, width, height);
+
+  stbi_image_free(raw_pixels);
+
+  return texture;
+}
+
+auto create_texture_from_raw_data(const Device *device, const aiTexel *data,
+                                  i32 width, i32 height) -> Scope<Texture> {
+  DataBuffer buffer{width * height * 4 * 4 * sizeof(byte)};
+  buffer.write(std::bit_cast<u8 *>(data),
+               width * height * 4 * 4 * sizeof(byte));
+
+  return Texture::construct_from_buffer(
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .extent = Extent<i32>(width, height).as<u32>(),
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
+                   ImageUsage::TransferSrc,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .address_mode = SamplerAddressMode::ClampToEdge,
+          .border_color = SamplerBorderColor::FloatOpaqueWhite,
+      },
+      std::move(buffer));
+}
+
+// Select the kinds of messages you want to receive on this log stream
+static constexpr u32 severity = Assimp::Logger::Debugging |
+                                Assimp::Logger::Info | Assimp::Logger::Err |
+                                Assimp::Logger::Warn;
 
 auto Mesh::get_materials_span() const -> std::span<Material *> {
   std::vector<Material *> raw_pointers;
@@ -41,82 +108,19 @@ auto Mesh::get_material(u32 index) const -> Material * {
   return nullptr;
 }
 
-struct InMemoryImageLoader {
-  explicit InMemoryImageLoader(const void *input_data,
-                               std::integral auto input_width,
-                               std::integral auto input_height,
-                               DataBuffer &input_buffer)
-      : buffer(input_buffer) {
-    if (input_data == nullptr) {
-      error("InMemoryImageLoader", "Could not load embedded texture.");
-      return;
-    }
-
-    constexpr std::int32_t requested_channels = STBI_rgb_alpha;
-    const auto size = input_height > 0
-                          ? input_width * input_height * requested_channels
-                          : input_width;
-
-    stbi_set_flip_vertically_on_load(true);
-    auto *loaded_image =
-        stbi_load_from_memory(static_cast<const u8 *>(input_data), size, &width,
-                              &height, &channels, requested_channels);
-
-    const auto span = std::span{
-        loaded_image,
-        static_cast<std::size_t>(width * height * channels),
-    };
-    const auto padded_buffer = pad_with_alpha(span);
-    const auto loaded_size = width * height * requested_channels;
-
-    const DataBuffer data_buffer{padded_buffer.data(), loaded_size};
-    stbi_image_free(loaded_image);
-
-    input_buffer.copy_from(data_buffer);
-  }
-
-  std::int32_t width{};
-  std::int32_t height{};
-  std::int32_t channels{};
-  DataBuffer &buffer;
-
-private:
-  auto pad_with_alpha(const auto data) const -> std::vector<u8> {
-    if (channels == 4) {
-      // Already has an alpha channel
-      return {data.begin(), data.end()};
-    }
-
-    std::vector<u8> new_data(width * height * 4); // 4 channels for RGBA
-
-    for (auto y = 0; y < height; ++y) {
-      for (auto x = 0; x < width; ++x) {
-        const int new_index = (y * width + x) * 4;
-        const int old_index = (y * width + x) * channels;
-
-        for (int j = 0; j < channels; ++j) {
-          new_data[new_index + j] = data[old_index + j];
-        }
-
-        new_data[new_index + 3] = 255;
-      }
-    }
-
-    return new_data;
-  }
-};
-
 struct ImporterImpl {
   Scope<Assimp::Importer> importer{nullptr};
   std::unordered_map<aiNode *, std::vector<u32>> node_map;
   const aiScene *scene;
 };
 
-auto Mesh::Deleter::operator()(ImporterImpl *impl) -> void { delete impl; }
+auto Mesh::Deleter::operator()(ImporterImpl *impl) const -> void {
+  delete impl;
+}
 
 namespace {
 constexpr auto to_mat4_from_assimp(const aiMatrix4x4 &matrix) -> glm::mat4 {
-  glm::mat4 result;
+  glm::mat4 result{};
   result[0][0] = matrix.a1;
   result[1][0] = matrix.a2;
   result[2][0] = matrix.a3;
@@ -144,44 +148,78 @@ auto traverse_nodes(auto &submeshes, auto &importer, aiNode *node,
     return;
   }
 
-  const glm::mat4 local_transform = to_mat4_from_assimp(node->mTransformation);
-  const glm::mat4 transform = parent_transform * local_transform;
-  importer->node_map[node].resize(node->mNumMeshes);
-  for (u32 i = 0; i < node->mNumMeshes; i++) {
-    const u32 mesh = node->mMeshes[i];
+  const auto local_transform = to_mat4_from_assimp(node->mTransformation);
+  const auto transform = parent_transform * local_transform;
+  const std::span node_meshes{node->mMeshes, node->mNumMeshes};
+
+  importer->node_map[node].resize(node_meshes.size());
+  for (auto i = 0; i < node_meshes.size(); i++) {
+    const u32 mesh = node_meshes[i];
     auto &submesh = submeshes[mesh];
     submesh.transform = transform;
     submesh.local_transform = local_transform;
     importer->node_map[node][i] = mesh;
   }
 
-  for (u32 i = 0; i < node->mNumChildren; i++) {
-    traverse_nodes(submeshes, importer, node->mChildren[i], transform,
-                   level + 1);
+  for (std::span children{node->mChildren, node->mNumChildren};
+       auto &child : children) {
+    traverse_nodes(submeshes, importer, child, transform, level + 1);
   }
 }
 
 static constexpr u32 mesh_import_flags =
-    aiProcess_Triangulate | aiProcess_GenUVCoords | aiProcess_CalcTangentSpace |
-    aiProcess_OptimizeMeshes | aiProcess_OptimizeGraph | aiProcess_FlipUVs;
+    aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals |
+    aiProcess_CalcTangentSpace | aiProcess_OptimizeMeshes |
+    aiProcess_GenBoundingBoxes | aiProcess_GenUVCoords |
+    aiProcess_OptimizeGraph | aiProcess_JoinIdenticalVertices |
+    aiProcess_ValidateDataStructure | aiProcess_ImproveCacheLocality |
+    aiProcess_RemoveRedundantMaterials | aiProcess_FindInvalidData |
+    aiProcess_FindDegenerates | aiProcess_FindInstances | aiProcess_SortByPType;
 
 auto Mesh::import_from(const Device &device, const FS::Path &file_path)
     -> Scope<Mesh> {
   return Scope<Mesh>(new Mesh{device, file_path});
 }
 
+auto Mesh::reference_import_from(const Device &device,
+                                 const FS::Path &file_path)
+    -> const Ref<Mesh> & {
+  const std::string key = file_path.string();
+  if (mesh_cache.contains(key)) {
+    return mesh_cache.at(key);
+  }
+
+  auto &&[value, could] =
+      mesh_cache.try_emplace(key, Ref<Mesh>(new Mesh{device, key}));
+
+  if (!could) {
+    throw NotFoundException{fmt::format("Could not insert mesh at {}", key)};
+  }
+
+  return mesh_cache.at(key);
+}
+
+// Quite hacky. Works for now :)
+auto Mesh::get_cube() -> const Ref<Mesh> & {
+  static const auto &mesh = mesh_cache.at(FS::model("cube.gltf").string());
+  return mesh;
+}
+
 Mesh::Mesh(const Device &dev, const FS::Path &path)
     : device(&dev), file_path(path) {
   importer = make_scope<ImporterImpl, Mesh::Deleter>();
+
   importer->importer = make_scope<Assimp::Importer>();
 
-  default_shader = Shader::construct(*device, FS::shader("Basic.vert.spv"),
-                                     FS::shader("Basic.frag.spv"));
+  default_shader = Shader::compile_graphics_scoped(
+      *device, FS::shader("Basic.vert"), FS::shader("Basic.frag"));
 
   const aiScene *loaded_scene =
       importer->importer->ReadFile(file_path.string(), mesh_import_flags);
   if (loaded_scene == nullptr) {
-    error("Mesh", "Failed to load mesh file: {0}", file_path.string());
+    auto error_string = importer->importer->GetErrorString();
+    error("Mesh: Failed to load mesh file: {0}. Reason: {1}",
+          file_path.string(), error_string);
     return;
   }
 
@@ -198,7 +236,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
 
   submeshes.reserve(num_meshes);
   for (u32 submesh_index = 0; submesh_index < num_meshes; submesh_index++) {
-    aiMesh *mesh = importer->scene->mMeshes[submesh_index];
+    aiMesh const *mesh = importer->scene->mMeshes[submesh_index];
 
     Submesh &submesh = submeshes.emplace_back();
     submesh.base_vertex = vertex_count;
@@ -206,7 +244,6 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh.material_index = mesh->mMaterialIndex;
     submesh.vertex_count = mesh->mNumVertices;
     submesh.index_count = mesh->mNumFaces * 3;
-    // submesh.mesh_name = mesh->mName.C_Str();
     submesh_indices.push_back(submesh_index);
     material_to_submesh_indices[submesh.material_index].push_back(
         submesh_index);
@@ -218,26 +255,45 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     ensure(mesh->HasPositions(), "Meshes require positions.");
     ensure(mesh->HasNormals(), "Meshes require normals.");
 
+    auto rotation =
+        glm::rotate(glm::mat4{1.0F}, glm::radians(90.0F), glm::vec3{1, 0, 0});
+
     // Vertices
     auto &submesh_aabb = submesh.bounding_box;
     for (std::size_t i = 0; i < mesh->mNumVertices; i++) {
       Vertex vertex{};
-      vertex.pos = {mesh->mVertices[i].x, mesh->mVertices[i].y,
-                    mesh->mVertices[i].z};
-      vertex.normals = {mesh->mNormals[i].x, mesh->mNormals[i].y,
-                        mesh->mNormals[i].z};
+      vertex.pos = {
+          mesh->mVertices[i].x,
+          mesh->mVertices[i].y,
+          mesh->mVertices[i].z,
+      };
+      vertex.pos = rotation * glm::vec4{vertex.pos, 1.0F};
       submesh_aabb.update(vertex.pos);
+      vertex.normals = {
+          mesh->mNormals[i].x,
+          mesh->mNormals[i].y,
+          mesh->mNormals[i].z,
+      };
+      vertex.normals = rotation * glm::vec4{vertex.normals, 1.0F};
 
       if (mesh->HasTangentsAndBitangents()) {
-        vertex.tangents = {mesh->mTangents[i].x, mesh->mTangents[i].y,
-                           mesh->mTangents[i].z};
-        vertex.bitangents = {mesh->mBitangents[i].x, mesh->mBitangents[i].y,
-                             mesh->mBitangents[i].z};
+        vertex.tangents = {
+            mesh->mTangents[i].x,
+            mesh->mTangents[i].y,
+            mesh->mTangents[i].z,
+        };
+        vertex.bitangents = {
+            mesh->mBitangents[i].x,
+            mesh->mBitangents[i].y,
+            mesh->mBitangents[i].z,
+        };
       }
 
       if (mesh->HasTextureCoords(0)) {
-        vertex.uvs = {mesh->mTextureCoords[0][i].x,
-                      mesh->mTextureCoords[0][i].y};
+        vertex.uvs = {
+            mesh->mTextureCoords[0][i].x,
+            mesh->mTextureCoords[0][i].y,
+        };
       }
 
       vertices.push_back(vertex);
@@ -255,6 +311,8 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     }
   }
 
+  traverse_nodes(submeshes, importer, importer->scene->mRootNode);
+
   vertex_buffer = Buffer::construct(*device, vertices.size() * sizeof(Vertex),
                                     Buffer::Type::Vertex, 0);
   vertex_buffer->write(std::span{vertices});
@@ -262,15 +320,43 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
                                    Buffer::Type::Index, 0);
   index_buffer->write(std::span{indices});
 
-  traverse_nodes(submeshes, importer, importer->scene->mRootNode);
+  static constexpr auto transform_aabb = [](const auto &aabb,
+                                            const auto &transform) {
+    std::vector<glm::vec3> corners;
 
+    // Define all eight corners of the AABB
+    const glm::vec3 &min = aabb.min();
+    const glm::vec3 &max = aabb.max();
+    corners.push_back(transform * glm::vec4(min.x, min.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, min.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, max.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, max.y, min.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, min.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, min.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(min.x, max.y, max.z, 1.0));
+    corners.push_back(transform * glm::vec4(max.x, max.y, max.z, 1.0));
+
+    // Calculate new AABB in world space
+    auto newMin = glm::vec3(std::numeric_limits<float>::max());
+    auto newMax = glm::vec3(std::numeric_limits<float>::lowest());
+    for (const auto &corner : corners) {
+      newMin = glm::min(newMin, glm::vec3(corner));
+      newMax = glm::max(newMax, glm::vec3(corner));
+    }
+
+    return AABB{newMin, newMax};
+  };
+  glm::vec3 globalMin(std::numeric_limits<float>::max());
+  glm::vec3 globalMax(std::numeric_limits<float>::lowest());
   for (const auto &submesh : submeshes) {
-    const auto &submesh_aabb = submesh.bounding_box;
-    const auto min = glm::vec3(submesh.transform * submesh_aabb.min_vector());
-    const auto max = glm::vec3(submesh.transform * submesh_aabb.max_vector());
 
-    bounding_box.update(min, max);
+    const auto &submesh_aabb = submesh.bounding_box;
+    AABB transformedAABB = transform_aabb(submesh_aabb, submesh.transform);
+    globalMin = glm::min(globalMin, transformedAABB.min());
+    globalMax = glm::max(globalMax, transformedAABB.max());
   }
+
+  bounding_box = AABB(globalMin, globalMax);
 
   // Materials
   const auto &white_texture = SceneRenderer::get_white_texture();
@@ -295,13 +381,13 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("metallic_map", white_texture);
     submesh_material->set("roughness_map", white_texture);
     submesh_material->set("ao_map", white_texture);
-    submesh_material->set("specular_map", white_texture);
     materials.push_back(submesh_material);
 
+    Assimp::DefaultLogger::kill();
     return;
   }
 
-  materials.resize(num_materials);
+  materials = {};
 
   std::size_t i = 0;
   for (const auto *ai_material : materials_span) {
@@ -309,16 +395,18 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     // convert to std::string
     const std::string material_name = ai_material_name.C_Str();
 
+    // Gltf erroneously adds a material in some cases. Don't know why.
+    if (material_name.empty())
+      continue;
+
     auto submesh_material =
         Material::construct_reference(*device, *default_shader);
-    materials[i++] = submesh_material;
     submesh_material->set("albedo_map", white_texture);
     submesh_material->set("diffuse_map", white_texture);
     submesh_material->set("normal_map", white_texture);
     submesh_material->set("metallic_map", white_texture);
     submesh_material->set("roughness_map", white_texture);
     submesh_material->set("ao_map", white_texture);
-    submesh_material->set("specular_map", white_texture);
 
     aiString ai_tex_path;
     glm::vec4 albedo_colour{0.8F, 0.8F, 0.8F, 1.0F};
@@ -336,7 +424,7 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
     submesh_material->set("pc.albedo_colour", albedo_colour);
     submesh_material->set("pc.emission", emission);
 
-    float shininess{};
+    float shininess{0.0F};
     float metalness{0.0F};
     if (ai_material->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS) {
       shininess = 80.0F; // Default value
@@ -347,40 +435,75 @@ Mesh::Mesh(const Device &dev, const FS::Path &path)
       metalness = 0.0F;
     }
 
-    handle_albedo_map(white_texture, ai_material, *submesh_material,
-                      ai_tex_path);
-    handle_normal_map(white_texture, ai_material, *submesh_material,
-                      ai_tex_path);
+    handle_albedo_map(ai_material, *submesh_material, ai_tex_path);
+    handle_normal_map(ai_material, *submesh_material, ai_tex_path);
 
-    auto roughness = 1.0F - glm::sqrt(shininess / 100.0f);
-    handle_roughness_map(white_texture, ai_material, *submesh_material,
-                         ai_tex_path, roughness);
-    handle_metalness_map(white_texture, ai_material, *submesh_material,
-                         metalness);
+    auto roughness = 1.0F - glm::sqrt(shininess / 250.0f);
+    handle_roughness_map(ai_material, *submesh_material, ai_tex_path,
+                         roughness);
+    handle_metalness_map(ai_material, *submesh_material, metalness);
+
+    materials.push_back(std::move(submesh_material));
   }
+
+  if (materials.empty()) {
+    auto submesh_material =
+        Material::construct_reference(*device, *default_shader);
+
+    static constexpr auto default_roughness_and_albedo = 0.8F;
+    auto vec_default_roughness_and_albedo = glm::vec3(0.8F);
+    submesh_material->set("pc.albedo_colour", vec_default_roughness_and_albedo);
+    submesh_material->set("pc.emission", 0.1F);
+    submesh_material->set("pc.metalness", 0.1F);
+    submesh_material->set("pc.roughness", default_roughness_and_albedo);
+    submesh_material->set("pc.use_normal_map", 0.0F);
+
+    submesh_material->set("albedo_map", white_texture);
+    submesh_material->set("diffuse_map", white_texture);
+    submesh_material->set("normal_map", white_texture);
+    submesh_material->set("metallic_map", white_texture);
+    submesh_material->set("roughness_map", white_texture);
+    submesh_material->set("ao_map", white_texture);
+    materials.push_back(submesh_material);
+
+    Assimp::DefaultLogger::kill();
+    return;
+  }
+
+  Assimp::DefaultLogger::kill();
 }
 
-void Mesh::handle_albedo_map(const Texture &white_texture,
-                             const aiMaterial *ai_material,
+void Mesh::handle_albedo_map(const aiMaterial *ai_material,
                              Material &submesh_material, aiString ai_tex_path) {
   const bool has_albedo_map =
       ai_material->GetTexture(aiTextureType_DIFFUSE, 0, &ai_tex_path) ==
       AI_SUCCESS;
   auto fallback = !has_albedo_map;
   if (const std::string key = ai_tex_path.C_Str(); has_albedo_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
+    bool texture_loaded = false;
+    if (const aiTexture *ai_texture_embedded =
             importer->scene->GetEmbeddedTexture(key.c_str())) {
-      ensure(false, "No support for embedded textures");
+      if (ai_texture_embedded->mHeight == 0) {
+        auto texture = create_texture_from_memory(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      } else {
+        auto texture = create_texture_from_raw_data(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth,
+            ai_texture_embedded->mHeight);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      }
     } else {
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-      texture = true;
+      texture_loaded = true;
     }
 
-    if (texture) {
-      info("{}", key);
-      const auto &texture = mesh_owned_textures.at(key);
-      submesh_material.set("albedo_map", *texture);
+    if (texture_loaded) {
+      info("Has albedo map: {}", mesh_owned_textures.at(key)->get_file_path());
+      const auto &text = mesh_owned_textures.at(key);
+      submesh_material.set("albedo_map", *text);
       auto albedo_colour = glm::vec3(1.0F);
       submesh_material.set("pc.albedo_colour", albedo_colour);
     } else {
@@ -389,130 +512,210 @@ void Mesh::handle_albedo_map(const Texture &white_texture,
   }
 
   if (fallback) {
-    submesh_material.set("albedo_map", white_texture);
+    submesh_material.set("albedo_map", SceneRenderer::get_white_texture());
   }
 }
 
-void Mesh::handle_normal_map(const Texture &white_texture,
-                             const aiMaterial *ai_material,
+void Mesh::handle_normal_map(const aiMaterial *ai_material,
                              Material &submesh_material, aiString ai_tex_path) {
   auto has_normal_map = ai_material->GetTexture(aiTextureType_NORMALS, 0,
                                                 &ai_tex_path) == AI_SUCCESS;
   auto fallback = !has_normal_map;
   if (const std::string key = ai_tex_path.C_Str(); has_normal_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
-            importer->scene->GetEmbeddedTexture(ai_tex_path.C_Str())) {
-      ensure(false, "Embedded textures are not supported.");
+    bool texture_loaded = false;
+    if (const aiTexture *ai_texture_embedded =
+            importer->scene->GetEmbeddedTexture(key.c_str())) {
+      // Handle embedded texture.
+      // Check if the embedded texture is uncompressed (RAW) or compressed.
+      if (ai_texture_embedded->mHeight == 0) {
+        // The embedded texture is compressed (e.g., PNG, JPG).
+        // Use your method to create a texture from the compressed data in
+        // memory.
+        auto texture = create_texture_from_memory(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      } else {
+        // The embedded texture is uncompressed (RAW).
+        // mWidth and mHeight specify the dimensions, and pcData contains the
+        // pixel data.
+        auto texture = create_texture_from_raw_data(
+            device, ai_texture_embedded->pcData, ai_texture_embedded->mWidth,
+            ai_texture_embedded->mHeight);
+        mesh_owned_textures.try_emplace(key, std::move(texture));
+        texture_loaded = true;
+      }
     } else {
+      // Texture is not embedded, read from file path.
       mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-      texture = true;
+      texture_loaded = true;
     }
 
-    if (texture) {
+    if (texture_loaded) {
       submesh_material.set("normal_map", *mesh_owned_textures.at(key));
       submesh_material.set("pc.use_normal_map", 1.0F);
+      info("Has normal map: {}", mesh_owned_textures.at(key)->get_file_path());
     } else {
       fallback = true;
     }
   }
 
   if (fallback) {
-    submesh_material.set("normal_map", white_texture);
+    submesh_material.set("normal_map", SceneRenderer::get_white_texture());
     submesh_material.set("pc.use_normal_map", 0.0F);
   }
 }
 
-void Mesh::handle_roughness_map(const Texture &white_texture,
-                                const aiMaterial *ai_material,
+static constexpr auto load_texture = [](const auto *ai_material, auto type,
+                                        auto &out_path) {
+  if (type == aiTextureType_UNKNOWN)
+    return ai_material->GetTexture(type, 0, &out_path, nullptr, nullptr,
+                                   nullptr, nullptr, nullptr) == AI_SUCCESS;
+  return ai_material->GetTexture(type, 0, &out_path) == AI_SUCCESS;
+};
+
+void Mesh::handle_roughness_map(const aiMaterial *ai_material,
                                 Material &submesh_material,
                                 aiString ai_tex_path, float roughness) {
-  const auto has_roughness_map =
-      ai_material->GetTexture(aiTextureType_SHININESS, 0, &ai_tex_path) ==
-      AI_SUCCESS;
-  auto fallback = !has_roughness_map;
-  if (const std::string key = ai_tex_path.C_Str(); has_roughness_map) {
-    bool texture = false;
-    if (const auto *ai_texture_embedded =
-            importer->scene->GetEmbeddedTexture(ai_tex_path.C_Str())) {
-      ensure(false, "Embedded textures are not supported.");
+  aiString path; // Path to the texture
+  bool has_roughness_texture = false;
 
-    } else {
-      mesh_owned_textures.try_emplace(key, read_texture_from_file_path(key));
-    }
+  // Attempt to get the texture path for the metallic-roughness map
+  // Assimp defines the key AI_MATKEY_TEXTURE_TYPE_METALNESS as the way to
+  // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
+  // aiTextureType_METALNESS for metallic-roughness maps
 
-    if (texture) {
-      submesh_material.set("roughness_map", *mesh_owned_textures.at(key));
-      submesh_material.set("pc.roughness", 1.0F);
-    } else {
-      fallback = true;
-    }
-  }
+  if (load_texture(ai_material, aiTextureType_DIFFUSE_ROUGHNESS, path) ||
+      load_texture(ai_material, aiTextureType_METALNESS, path) ||
+      load_texture(ai_material, aiTextureType_UNKNOWN, path) ||
+      load_texture(ai_material, aiTextureType_SHININESS, path)) {
+    std::string texture_path = path.C_Str();
 
-  if (fallback) {
-    submesh_material.set("roughness_map", white_texture);
-    submesh_material.set("pc.roughness", roughness);
-  }
-}
-
-void Mesh::handle_metalness_map(const Texture &white_texture,
-                                const aiMaterial *ai_material,
-                                Material &submesh_material, float metalness) {
-  bool has_metalness_texture = false;
-  for (u32 property_index = 0; property_index < ai_material->mNumProperties;
-       property_index++) {
-    if (const auto *prop = ai_material->mProperties[property_index];
-        prop->mType == aiPTI_String) {
-      const auto str_length = *std::bit_cast<u32 *>(prop->mData);
-      std::string str(prop->mData + 4, str_length);
-
-      if (const std::string key = prop->mKey.data;
-          key == "$raw.ReflectionFactor|file") {
-        bool texture = false;
-        if (const auto *ai_texture_embedded =
-                importer->scene->GetEmbeddedTexture(str.data())) {
-          ensure(false, "Embedded textures are not supported.");
-        } else {
-          mesh_owned_textures.try_emplace(key,
-                                          read_texture_from_file_path(str));
-          texture = true;
+    if (!texture_path.empty()) {
+      try {
+        // Load the texture from the path
+        if (!mesh_owned_textures.contains(texture_path)) {
+          mesh_owned_textures.try_emplace(
+              texture_path, read_texture_from_file_path(texture_path));
         }
+        has_roughness_texture = true;
 
-        if (texture) {
-          has_metalness_texture = true;
-          submesh_material.set("metallic_map", *mesh_owned_textures.at(key));
-          submesh_material.set("pc.metalness", 1.0F);
-        } else {
-          error("Mesh", "Could not load texture: {0}", str);
-        }
-        break;
+        submesh_material.set("roughness_map",
+                             *mesh_owned_textures.at(texture_path));
+        submesh_material.set("pc.roughness", 1.0F);
+
+        info("Has roughness texture: {}", texture_path);
+      } catch (const std::exception &exc) {
+        error("Exception: {}", exc);
+        has_roughness_texture = false;
       }
     }
   }
 
-  auto fallback = !has_metalness_texture;
-  if (fallback) {
-    submesh_material.set("metallic_map", white_texture);
+  // Fallback to default white texture if no metallic-roughness map was found
+  if (!has_roughness_texture) {
+    submesh_material.set("roughness_map", SceneRenderer::get_white_texture());
+    submesh_material.set("pc.roughness", roughness);
+  }
+}
+
+void Mesh::handle_metalness_map(const aiMaterial *ai_material,
+                                Material &submesh_material, float metalness) {
+  aiString path; // Path to the texture
+  bool has_metalness_texture = false;
+
+  // Attempt to get the texture path for the metallic-roughness map
+  // Assimp defines the key AI_MATKEY_TEXTURE_TYPE_METALNESS as the way to
+  // access metalness maps, but for GLTF, we often use aiTextureType_UNKNOWN or
+  // aiTextureType_METALNESS for metallic-roughness maps
+  if (load_texture(ai_material, aiTextureType_METALNESS, path) ||
+      load_texture(ai_material, aiTextureType_UNKNOWN, path)) {
+    std::string texture_path = path.C_Str();
+
+    if (!texture_path.empty()) {
+      try {
+
+        // Load the texture from the path
+        if (!mesh_owned_textures.contains(texture_path)) {
+          mesh_owned_textures.try_emplace(
+              texture_path, read_texture_from_file_path(texture_path));
+        }
+        has_metalness_texture = true;
+
+        submesh_material.set("metallic_map",
+                             *mesh_owned_textures.at(texture_path));
+        submesh_material.set("pc.metalness", 1.0F);
+
+        info("Has metalness texture: {}", texture_path);
+      } catch (const std::exception &exc) {
+        error("Exception: {}", exc);
+        has_metalness_texture = false;
+      }
+    }
+  }
+
+  // Fallback to default white texture if no metallic-roughness map was found
+  if (!has_metalness_texture) {
+    submesh_material.set("metallic_map", SceneRenderer::get_white_texture());
     submesh_material.set("pc.metalness", metalness);
   }
 }
 
-auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
-    -> Scope<Texture> {
-  auto path = FS::resolve(file_path.parent_path() / texture_path);
+auto load_path_from_texture_path(const std::string_view texture_path) {
+  static constexpr auto paths = std::array{"."};
+  using recursive_iterator = std::filesystem::recursive_directory_iterator;
+  static constexpr std::hash<std::string_view> hasher{};
+  static std::unordered_map<std::size_t, std::filesystem::path> cache{};
 
-  if (!FS::exists(path)) {
-    path = FS::resolve(file_path.parent_path() / "textures" / texture_path);
+  // Remove everything before and including App in texture_path
+  FS::Path actual_path;
+  if (texture_path.find("App") != std::string::npos) {
+    actual_path = FS::Path{texture_path.substr(texture_path.find("App") + 4)};
+  } else {
+    actual_path = FS::Path{texture_path};
   }
 
+  const auto texture_path_hash = hasher(actual_path.filename().string());
+  if (cache.contains(texture_path_hash)) {
+    return cache.at(texture_path_hash);
+  }
+
+  for (const auto &path : paths) {
+    for (const auto &entry :
+         recursive_iterator(std::filesystem::absolute(path))) {
+      if (entry.is_regular_file()) {
+        const auto hash = hasher(entry.path().filename().string());
+        cache.try_emplace(hash, entry.path());
+      }
+    }
+  }
+
+  if (cache.contains(texture_path_hash)) {
+    return cache.at(texture_path_hash);
+  }
+
+  return FS::Path{};
+}
+
+auto Mesh::read_texture_from_file_path(const std::string &texture_path) const
+    -> Scope<Texture> {
+  using enum Core::ImageUsage;
+  const auto path = load_path_from_texture_path(texture_path);
+  if (path.empty())
+    return nullptr;
+
+  static std::mutex mutex;
+  std::unique_lock lock{mutex};
   return Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = path,
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferDst |
-                            ImageUsage::TransferSrc,
-                   .layout = ImageLayout::ShaderReadOnlyOptimal,
-               });
+      *device,
+      {
+          .format = ImageFormat::UNORM_RGBA8,
+          .path = path,
+          .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
+                   ImageUsage::TransferSrc | ImageUsage::TransferDst,
+          .layout = ImageLayout::ShaderReadOnlyOptimal,
+          .mip_generation = MipGeneration(MipGenerationStrategy::FromSize),
+      });
 }
 
 } // namespace Core

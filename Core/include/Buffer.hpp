@@ -1,14 +1,15 @@
 #pragma once
 
-#include "Device.hpp"
 #include "Types.hpp"
-#include "Verify.hpp"
 
 #include <cstring>
+#include <fmt/core.h>
 #include <limits>
 #include <span>
 #include <vector>
 #include <vulkan/vulkan_core.h>
+
+#include "core/Forward.hpp"
 
 namespace Core {
 
@@ -26,19 +27,13 @@ public:
   auto operator=(const Buffer &) -> Buffer & = delete;
   // Make movable
 
+  void resize(u64 new_size);
+
   [[nodiscard]] auto get_type() const noexcept -> Type { return type; }
-  [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType {
-    switch (type) {
-    case Type::Uniform:
-      return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    case Type::Storage:
-      return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    default:
-      return unreachable_return<VK_DESCRIPTOR_TYPE_MAX_ENUM>();
-    }
-  }
+  [[nodiscard]] auto get_vulkan_type() const noexcept -> VkDescriptorType;
   [[nodiscard]] auto get_size() const noexcept -> u64 { return size; }
   [[nodiscard]] auto get_binding() const noexcept -> u32 { return binding; }
+  auto set_binding(u32 bind) { binding = bind; }
   [[nodiscard]] auto get_buffer() const noexcept -> VkBuffer;
 
   [[nodiscard]] auto get_descriptor_info() const noexcept
@@ -47,11 +42,12 @@ public:
   }
 
   template <typename T> void write(std::span<T> data) {
-    write(data.data(), data.size() * sizeof(T));
+    write(data.data(), data.size_bytes());
   }
   template <typename T> void write(const T &data) { write(&data, sizeof(T)); }
 
   void write(const void *data, u64 data_size);
+  void write(const void *data, u64 data_size, u64 offset);
 
   template <typename T> auto read(std::vector<T> &output, size_t offset = 0) {
     auto data_size = output.size() * sizeof(T);
@@ -66,7 +62,7 @@ public:
     write(&data, sizeof(T));
   }
 
-  void write(const void *data, u64 data_size) const;
+  void write(const void *data, u64 data_size, u64 offset) const;
 
   template <typename T>
   auto read(std::vector<T> &output, size_t offset = 0) const {

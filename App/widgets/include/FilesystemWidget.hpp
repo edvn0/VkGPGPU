@@ -6,13 +6,15 @@
 #include "Texture.hpp"
 #include "Widget.hpp"
 
+#include <span>
 #include <stack>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 using namespace Core;
 
-using TextureCache = GenericCache<Texture, TextureProperties, false>;
+using TextureCache = GenericCache<Texture, TextureProperties, true>;
 
 class FilesystemWidget : public Widget {
 public:
@@ -20,8 +22,16 @@ public:
 
   void on_update(floating ts) override;
   void on_interface(InterfaceSystem &) override;
-  void on_create() override;
+  void on_create(const Core::Device &, const Core::Window &,
+                 const Core::Swapchain &) override;
   void on_destroy() override;
+  auto on_notify(const ECS::Message &message) -> void override {}
+
+  auto add_ignored_extensions(const std::span<const std::string> &extensions) {
+    for (const auto &ext : extensions) {
+      ignored_extensions.insert(ext);
+    }
+  }
 
 private:
   const Device *device;
@@ -43,6 +53,8 @@ private:
 
   TextureCache texture_cache;
   std::jthread pop_one_from_texture_cache_thread;
+  std::unordered_set<std::string> ignored_extensions;
+
   Container::StringLikeMap<std::vector<Core::FS::DirectoryEntry>>
       directory_cache;
 

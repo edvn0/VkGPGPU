@@ -2,6 +2,7 @@
 
 #include "UI.hpp"
 
+#include <cstdlib> // For std::system
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -12,23 +13,28 @@ FilesystemWidget::FilesystemWidget(const Device &dev,
                              dev, {
                                       .format = ImageFormat::UNORM_RGBA8,
                                       .path = FS::icon("loading.png"),
-                                      .usage = ImageUsage::Sampled |
-                                               ImageUsage::TransferSrc |
-                                               ImageUsage::TransferDst,
+                                      .mip_generation = MipGeneration(1),
                                   })) {
   history.push_back(current_path);
+
+  static constexpr auto post_insert_hook = [](Scope<Texture> &texture) -> void {
+    texture->transition_image(ImageLayout::ShaderReadOnlyOptimal);
+  };
 
   pop_one_from_texture_cache_thread = std::jthread{
       [this](const auto &stop_token) {
         while (!stop_token.stop_requested()) {
           std::this_thread::sleep_for(std::chrono::milliseconds(160));
-          texture_cache.update_one();
+          texture_cache.update_one(post_insert_hook);
         }
       },
   };
 }
 
-void FilesystemWidget::on_create() { load_icons(); }
+void FilesystemWidget::on_create(const Core::Device &, const Core::Window &,
+                                 const Core::Swapchain &) {
+  load_icons();
+}
 
 void FilesystemWidget::on_update(Core::floating ts) {
   // Handle any updates here, if necessary
@@ -48,7 +54,10 @@ void FilesystemWidget::update_directory_cache(const Core::FS::Path &path) {
   entries.clear();
 
   for (const auto &entry : Core::FS::DirectoryIterator(path)) {
-    entries.push_back(entry);
+    if (!ignored_extensions.contains(entry.path().extension().string())) {
+      // If not ignored, add it to the cache
+      entries.push_back(entry);
+    }
   }
 }
 
@@ -95,6 +104,13 @@ void FilesystemWidget::render_navigation_buttons() {
   }
 }
 
+static constexpr auto is_image = [](const auto &path) {
+  const auto extension = path.extension().string();
+  return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+         extension == ".bmp" || extension == ".tga" || extension == ".gif" ||
+         extension == ".psd" || extension == ".hdr" || extension == ".pic";
+};
+
 void FilesystemWidget::render_directory_contents() {
   auto render_file_or_directory = [&](const auto &entry, const auto size) {
     Extent<u32> extent{
@@ -102,24 +118,17 @@ void FilesystemWidget::render_directory_contents() {
         static_cast<u32>(size),
     };
     if (entry.is_directory()) {
-      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+      if (UI::set_drag_drop_payload(UI::Identifiers::fs_widget_identifier,
                                     entry.path()) &&
           UI::image_button(*directory_icon, {extent})) {
         change_directory(entry);
       }
     } else {
-      if (UI::set_drag_drop_payload(UI::Identifiers::texture_identifier,
+      if (UI::set_drag_drop_payload(UI::Identifiers::fs_widget_identifier,
                                     entry.path())) {
         UI::image(*file_icon, {extent});
       }
     }
-  };
-
-  static constexpr auto is_image = [](const auto &path) {
-    const auto extension = path.extension().string();
-    return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
-           extension == ".bmp" || extension == ".tga" || extension == ".gif" ||
-           extension == ".psd" || extension == ".hdr" || extension == ".pic";
   };
 
   static constexpr float padding = 16.0F;
@@ -151,10 +160,12 @@ void FilesystemWidget::render_directory_contents() {
             .identifier = filename_string,
             .path = path,
             .extent = extent,
-            .tiling = ImageTiling::Linear,
+            .tiling = ImageTiling::Optimal,
             .usage = ImageUsage::ColourAttachment | ImageUsage::Sampled |
                      ImageUsage::TransferSrc | ImageUsage::TransferDst,
             .layout = ImageLayout::ShaderReadOnlyOptimal,
+            .mip_generation = MipGeneration(1),
+            .resize = ResizeStrategy{extent},
         });
 
         UI::image_button(*texture, {extent});
@@ -162,8 +173,8 @@ void FilesystemWidget::render_directory_contents() {
         render_file_or_directory(directory_entry, thumbnail_size);
       }
 
-      [[maybe_unused]] auto could =
-          UI::set_drag_drop_payload(UI::Identifiers::texture_identifier, path);
+      [[maybe_unused]] auto could = UI::set_drag_drop_payload(
+          UI::Identifiers::fs_widget_identifier, path);
 
       UI::text_wrapped("{}", filename_string);
 
@@ -176,41 +187,30 @@ void FilesystemWidget::render_directory_contents() {
 }
 
 void FilesystemWidget::load_icons() {
-  back_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("back.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
-  forward_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("forward.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
+  back_icon =
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("back.png"),
+                                          .mip_generation = MipGeneration(1)});
+  forward_icon =
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("forward.png"),
+                                          .mip_generation = MipGeneration(1)
 
-               });
-  home_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("home.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
+                                         });
+  home_icon =
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("home.png"),
+                                          .mip_generation = MipGeneration(1)
 
-               });
-  file_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("file.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
-  directory_icon = Texture::construct_shader(
-      *device, {
-                   .format = ImageFormat::UNORM_RGBA8,
-                   .path = FS::icon("directory.png"),
-                   .usage = ImageUsage::Sampled | ImageUsage::TransferSrc |
-                            ImageUsage::TransferDst,
-               });
+                                         });
+  file_icon =
+      Texture::construct_shader(*device, {.format = ImageFormat::UNORM_RGBA8,
+                                          .path = FS::icon("file.png"),
+                                          .mip_generation = MipGeneration(1)});
+  directory_icon =
+      Texture::construct_shader(*device, {
+                                             .format = ImageFormat::UNORM_RGBA8,
+                                             .path = FS::icon("directory.png"),
+                                             .mip_generation = MipGeneration(1),
+                                         });
 }

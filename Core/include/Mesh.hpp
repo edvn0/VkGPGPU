@@ -65,14 +65,26 @@ public:
   [[nodiscard]] auto get_index_buffer() const -> const auto & {
     return index_buffer;
   }
-  [[nodiscard]] auto get_aabb() const { return nullptr; }
+  [[nodiscard]] auto get_aabb() const -> const AABB & { return bounding_box; }
 
   [[nodiscard]] constexpr auto casts_shadows() const -> bool {
     return is_shadow_caster;
   }
+  [[nodiscard]] auto is_shadow_casting(bool casts) { is_shadow_caster = casts; }
+
+  [[nodiscard]] auto get_file_path() const -> const FS::Path & {
+    return file_path;
+  }
+
+  static auto get_cube() -> const Ref<Mesh> &;
 
   static auto import_from(const Device &device, const FS::Path &file_path)
       -> Scope<Mesh>;
+  static auto reference_import_from(const Device &device,
+                                    const FS::Path &file_path)
+      -> const Ref<Mesh> &;
+
+  static auto clear_cache() -> void { mesh_cache.clear(); }
 
 private:
   Mesh(const Device &device, const FS::Path &);
@@ -98,26 +110,25 @@ private:
   [[nodiscard]] auto
   read_texture_from_file_path(const std::string &texture_path) const
       -> Scope<Texture>;
-  void handle_normal_map(const Texture &white_texture,
-                         const aiMaterial *ai_material,
+
+  void handle_normal_map(const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
-  void handle_roughness_map(const Texture &white_texture,
-                            const aiMaterial *ai_material,
+  void handle_roughness_map(const aiMaterial *ai_material,
                             Material &submesh_material, aiString ai_tex_path,
                             float roughness);
-  void handle_metalness_map(const Texture &white_texture,
-                            const aiMaterial *ai_material,
+  void handle_metalness_map(const aiMaterial *ai_material,
                             Material &submesh_material, float metalness);
-  void handle_albedo_map(const Texture &white_texture,
-                         const aiMaterial *ai_material,
+  void handle_albedo_map(const aiMaterial *ai_material,
                          Material &submesh_material, aiString ai_tex_path);
 
   struct Deleter {
-    auto operator()(ImporterImpl *pimpl) -> void;
+    auto operator()(ImporterImpl *pimpl) const -> void;
   };
   Scope<ImporterImpl, Deleter> importer;
 
   bool is_shadow_caster{true};
+
+  static inline std::unordered_map<std::string, Ref<Mesh>> mesh_cache{};
 };
 
 } // namespace Core

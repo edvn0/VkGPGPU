@@ -9,6 +9,7 @@ namespace Core {
 
 using usize = std::size_t;
 using u8 = std::uint8_t;
+using byte = u8;
 using u16 = std::uint16_t;
 using u32 = std::uint32_t;
 using u64 = std::uint64_t;
@@ -46,5 +47,15 @@ auto make_scope(Args &&...args) -> Scope<T, Deleter> {
 template <class T, typename... Args> auto make_ref(Args &&...args) -> Ref<T> {
   return std::make_shared<T>(std::forward<Args>(args)...);
 }
+
+template <typename T> class Badge {
+  friend T;
+  Badge() = default;
+};
+
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 } // namespace Core

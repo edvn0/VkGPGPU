@@ -6,6 +6,7 @@
 #include "Types.hpp"
 
 #include <fmt/core.h>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -59,6 +60,11 @@ public:
     vkGetPhysicalDeviceProperties(physical_device, &properties);
     return properties;
   }
+
+  auto get_ray_tracing_properties() const -> const auto & {
+    return ray_tracing_properties;
+  }
+
   [[nodiscard]] auto get_descriptor_resource() const
       -> const Scope<DescriptorResource> & {
     return descriptor_resource;
@@ -92,6 +98,11 @@ private:
   };
   std::unordered_map<Queue::Type, IndexedQueue> queues{};
   std::unordered_map<Queue::Type, QueueFeatureSupport> queue_support{};
+
+  VkPhysicalDeviceRayTracingPipelinePropertiesKHR ray_tracing_properties{
+      .sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR,
+  };
 
   static auto enumerate_physical_devices(VkInstance)
       -> std::vector<VkPhysicalDevice>;

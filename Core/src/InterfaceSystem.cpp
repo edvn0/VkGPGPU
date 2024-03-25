@@ -10,9 +10,16 @@
 #include "Verify.hpp"
 #include "Window.hpp"
 
+#include <fstream>
+
+// clang-format off
+#include <imgui.h>
+#include <ImGuizmo.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
-#include <imgui.h>
+#include <imgui-notify/ImGuiNotify.hpp>
+#include <imgui-notify/IconsFontAwesome6.h>
+// clang-format on
 
 namespace Core {
 
@@ -24,7 +31,7 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 
   command_executor =
       CommandBuffer::construct(*device, {
-                                            .count = 3,
+                                            .count = Config::frame_count,
                                             .is_primary = false,
                                             .owned_by_swapchain = false,
                                             .record_stats = false,
@@ -46,8 +53,8 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
   VkDescriptorPoolCreateInfo pool_info = {};
   pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pool_info.maxSets = static_cast<std::uint32_t>(pool_sizes.size()) * 11ul;
-  pool_info.poolSizeCount = static_cast<std::uint32_t>(std::size(pool_sizes));
+  pool_info.maxSets = static_cast<u32>(pool_sizes.size()) * 11ul;
+  pool_info.poolSizeCount = static_cast<u32>(std::size(pool_sizes));
   pool_info.pPoolSizes = pool_sizes.data();
 
   verify(
@@ -96,19 +103,44 @@ InterfaceSystem::InterfaceSystem(const Device &dev, const Window &win,
 
   ImGui_ImplVulkan_Init(&init_info, swapchain->get_renderpass());
 
+  constexpr float base_font_size = 12.0f;
+  constexpr float icon_font_size = base_font_size * 2.0f / 3.0f;
   {
     FS::for_each_in_directory(
         FS::font_directory(),
-        [&fonts = io.Fonts](const auto &entry) {
+        [&chosen_font = font, &fonts = io.Fonts](const auto &entry) {
           static constexpr auto font_sizes = std::array{12.F, 11.F};
           for (const auto &size : font_sizes) {
-            fonts->AddFontFromFileTTF(entry.path().string().c_str(), size);
+            auto *loaded =
+                fonts->AddFontFromFileTTF(entry.path().string().c_str(), size);
+            if (chosen_font == nullptr) {
+              chosen_font = loaded;
+            }
           }
         },
         [](const std::filesystem::directory_entry &entry) {
-          return entry.path().extension() == ".ttf";
+          return entry.path().extension() == ".ttf" &&
+                 entry.path().string().find("fa") == std::string::npos;
         });
   }
+
+  // Check if FONT_ICON_FILE_NAME_FAS is a valid path
+  const auto path = FS::Path{FONT_ICON_FILE_NAME_FAS};
+  ensure(std::filesystem::exists(path), "Could not find font awesome file");
+  std::ifstream font_awesome_file(path);
+
+  if (!font_awesome_file) {
+    error("Could not find FA file. {}", path);
+    throw Core::NotFoundException(path.string());
+  }
+
+  static const ImWchar icons_range[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
+  ImFontConfig iconsConfig;
+  iconsConfig.MergeMode = true;
+  iconsConfig.PixelSnapH = true;
+  iconsConfig.GlyphMinAdvanceX = icon_font_size;
+  auto *font = io.Fonts->AddFontFromFileTTF(
+      FONT_ICON_FILE_NAME_FAS, icon_font_size, &iconsConfig, icons_range);
 }
 
 auto InterfaceSystem::begin_frame() -> void {
@@ -117,9 +149,23 @@ auto InterfaceSystem::begin_frame() -> void {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+  if (font) {
+    ImGui::PushFont(font);
+  }
+  ImGuizmo::BeginFrame();
 }
 
 auto InterfaceSystem::end_frame() -> void {
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.10f, 0.10f, 1.00f));
+  ImGui::RenderNotifications();
+  ImGui::PopStyleVar(2);
+  ImGui::PopStyleColor(1);
+
+  if (font) {
+    ImGui::PopFont();
+  }
   ImGui::Render();
   static constexpr VkClearColorValue clear_colour{
       {
@@ -129,14 +175,9 @@ auto InterfaceSystem::end_frame() -> void {
           0.2F,
       },
   };
-  static constexpr VkClearDepthStencilValue depth_stencil_clear{
-      .depth = 1.0F,
-      .stencil = 0,
-  };
 
-  std::array<VkClearValue, 2> clear_values{};
+  std::array<VkClearValue, 1> clear_values{};
   clear_values[0].color = clear_colour;
-  clear_values[1].depthStencil = depth_stencil_clear;
 
   const auto &[width, height] = swapchain->get_extent();
 
@@ -159,7 +200,7 @@ auto InterfaceSystem::end_frame() -> void {
   render_pass_begin_info.renderArea.extent.width = width;
   render_pass_begin_info.renderArea.extent.height = height;
   render_pass_begin_info.clearValueCount =
-      static_cast<std::uint32_t>(clear_values.size());
+      static_cast<u32>(clear_values.size());
   render_pass_begin_info.pClearValues = clear_values.data();
   render_pass_begin_info.framebuffer = vk_framebuffer;
 
@@ -211,10 +252,10 @@ auto InterfaceSystem::end_frame() -> void {
   vkCmdEndRenderPass(draw_command_buffer);
 
   {
-    std::unique_lock lock{callbacks_mutex};
     while (!frame_end_callbacks.empty()) {
       auto front = frame_end_callbacks.front();
       frame_end_callbacks.pop();
+      std::unique_lock lock{callbacks_mutex};
       front(*command_executor);
     }
   }

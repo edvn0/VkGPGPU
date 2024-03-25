@@ -39,6 +39,26 @@ function(add_imgui)
     target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 endfunction()
 
+function(add_imguizmo)
+    set(IMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ImGuizmo)
+    set(IMGUIZMO_SOURCES
+        ${IMGUIZMO_DIR}/ImGuizmo.cpp
+        ${IMGUIZMO_DIR}/ImCurveEdit.cpp
+        ${IMGUIZMO_DIR}/ImGradient.cpp
+        ${IMGUIZMO_DIR}/ImSequencer.cpp
+        ${IMGUIZMO_DIR}/GraphEditor.cpp
+        ${IMGUIZMO_DIR}/ImGuizmo.h
+        ${IMGUIZMO_DIR}/ImCurveEdit.h
+        ${IMGUIZMO_DIR}/ImGradient.h
+        ${IMGUIZMO_DIR}/ImSequencer.h
+        ${IMGUIZMO_DIR}/GraphEditor.h
+    )
+
+    add_library(imguizmo STATIC ${IMGUIZMO_SOURCES})
+    target_include_directories(imguizmo PUBLIC ${IMGUIZMO_DIR})
+    target_link_libraries(imguizmo PUBLIC imgui)
+endfunction()
+
 # Function to add a header-only library
 function(add_header_only_library LIB_NAME INCLUDE_PATH)
     add_library(${LIB_NAME} INTERFACE)
@@ -50,6 +70,8 @@ set(REPONAME_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thread-pool/include)
 add_header_only_library(thread-pool ${REPONAME_INCLUDE_DIR})
 
 add_imgui()
+add_subdirectory(imgui-notify)
+add_imguizmo()
 
 function(add_glm)
     set(GLM_BUILD_LIBRARY OFF CACHE BOOL "")
@@ -73,6 +95,7 @@ function(add_assimp)
     set(ASSIMP_IGNORE_GIT_HASH ON CACHE BOOL "")
 
     set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "")
+    set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "")
     set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "")
     set(ASSIMP_BUILD_3DS_IMPORTER ON CACHE BOOL "")
     set(ASSIMP_BUILD_SMD_IMPORTER ON CACHE BOOL "")
@@ -83,6 +106,10 @@ function(add_assimp)
 endfunction()
 
 add_assimp()
+
+add_subdirectory(portable-file-dialogs)
+
+add_subdirectory(magic_enum)
 
 if(ENABLE_TESTING)
     add_subdirectory(Catch2)

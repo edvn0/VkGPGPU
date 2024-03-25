@@ -10,7 +10,8 @@
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "buildCommandArgs": "",
-      "ctestCommandArgs": ""
+      "ctestCommandArgs": "",
+      "cmakeCommandArgs": "-DENABLE_TESTING=ON"
     },
     {
       "name": "x64-RelWithDebInfo",
@@ -22,8 +23,7 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [
         "msvc_x64_x64"
-      ],
-      "variables": []
+      ]
     }
   ]
 }

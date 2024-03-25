@@ -5,8 +5,8 @@
 #include "Config.hpp"
 #include "Device.hpp"
 #include "Math.hpp"
-#include "Shader.hpp"
 #include "Texture.hpp"
+#include "TextureCube.hpp"
 
 #include <BufferSet.hpp>
 #include <optional>
@@ -31,14 +31,18 @@ public:
 
   auto set(const std::string_view identifier, Math::IsGLM auto &value) -> bool {
     const auto &copy = value;
-    return set(identifier, Math::value_ptr(copy));
+    return set(identifier, glm::value_ptr(copy));
   }
 
   auto set(std::string_view, const Texture &) -> bool;
+  auto set(std::string_view, const TextureCube &) -> bool;
   auto set(std::string_view, const Image &) -> bool;
   auto set(std::string_view, const Buffer &) -> bool;
   [[nodiscard]] auto get_constant_buffer() const -> const auto & {
     return constant_buffer;
+  }
+  [[nodiscard]] auto get_stored_buffer(u32 index) const -> const auto & {
+    return buffer_references.at(index);
   }
 
   auto
@@ -61,6 +65,10 @@ public:
   }
 
   [[nodiscard]] auto get_shader() const -> const auto & { return *shader; }
+
+  /// @brief Sets all the default materials for a functioning material in this
+  /// engine.
+  auto default_initialisation() -> void;
 
 private:
   Material(const Device &, const Shader &);
@@ -90,15 +98,18 @@ private:
     Texture2D = 1,
     TextureCube = 2,
     Image2D = 3,
+    Buffer = 4,
   };
 
   struct PendingDescriptor {
     PendingDescriptorType type = PendingDescriptorType::None;
-    VkWriteDescriptorSet write_set;
-    VkDescriptorImageInfo image_info;
+    VkWriteDescriptorSet write_set{};
+    VkDescriptorImageInfo image_info{};
+    VkDescriptorBufferInfo buffer_info{};
     const Texture *texture{nullptr};
     const Image *image{nullptr};
-    VkDescriptorImageInfo descriptor_image_info{};
+    const TextureCube *texture_cube{nullptr};
+    const Buffer *buffer{nullptr};
   };
 
   struct PendingDescriptorArray {
@@ -121,7 +132,9 @@ private:
       descriptor_sets{};
 
   std::vector<const Texture *> texture_references;
+  std::vector<const TextureCube *> texture_cube_references;
   std::vector<const Image *> image_references;
+  std::vector<const Buffer *> buffer_references;
 
   std::vector<std::vector<VkWriteDescriptorSet>> write_descriptors;
   std::vector<bool> dirty_descriptor_sets;

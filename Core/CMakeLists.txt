@@ -6,6 +6,7 @@ set(SOURCES
     include/App.hpp
     include/Buffer.hpp
     include/BufferSet.hpp
+    include/Camera.hpp
     include/Colours.hpp
     include/CommandBuffer.hpp
     include/CommandDispatcher.hpp
@@ -25,6 +26,7 @@ set(SOURCES
     include/Formatters.hpp
     include/Framebuffer.hpp
     include/GIFTexture.hpp
+    include/GeometryRenderer.hpp
     include/Mesh.hpp
     include/SceneRenderer.hpp
     include/GenericCache.hpp
@@ -38,9 +40,12 @@ set(SOURCES
     include/Pipeline.hpp
     include/PlatformConfig.hpp
     include/PlatformUI.hpp
+    include/RenderingDefinitions.hpp
+    include/ResizeDependent.hpp
     include/Shader.hpp
     include/Swapchain.hpp
     include/Texture.hpp
+    include/TextureCube.hpp
     include/ThreadPool.hpp
     include/Timer.hpp
     include/Types.hpp
@@ -54,7 +59,9 @@ set(SOURCES
     inline/Logger.inl
     src/Allocator.cpp
     src/App.cpp
+    src/Environment.cpp
     src/Buffer.cpp
+    src/Camera.cpp
     src/CommandBuffer.cpp
     src/DataBuffer.cpp
     src/DebugMarker.cpp
@@ -64,6 +71,7 @@ set(SOURCES
     src/Formatters.cpp
     src/Framebuffer.cpp
     src/GIFTexture.cpp
+    src/GeometryRenderer.cpp
     src/Image.cpp
     src/Instance.cpp
     src/InterfaceSystem.cpp
@@ -75,10 +83,14 @@ set(SOURCES
     src/Shader.cpp
     src/Swapchain.cpp
     src/Texture.cpp
+    src/TextureCube.cpp
     src/Timer.cpp
     src/UI.cpp
     src/Verify.cpp
+    src/Input.cpp
     src/Window.cpp
+    src/post-processing-effects/Bloom.cpp
+    src/post-processing-effects/LightCulling.cpp
 )
 
 add_library(Core STATIC ${SOURCES})
@@ -91,18 +103,22 @@ target_include_directories(Core PUBLIC
     ${CMAKE_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/include
     ${CMAKE_SOURCE_DIR}/ThirdParty/assimp/include
     ${CMAKE_SOURCE_DIR}/ThirdParty/thread-pool/include)
-target_link_libraries(Core PUBLIC ECS Platform Reflection imgui assimp::assimp glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage)
+target_link_libraries(Core PUBLIC ECS Platform ShaderCompilation imgui imguizmo imgui-notify assimp::assimp glfw fmt::fmt Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator stbimage::stbimage)
 target_precompile_headers(Core PUBLIC include/pch/vkgpgpu_pch.hpp)
 target_compile_definitions(Core PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(Core PUBLIC GPGPU_DEBUG)
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
+    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=1024)
+    set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(Core PUBLIC GPGPU_FRAME_COUNT=3)
     target_compile_definitions(Core PUBLIC GPGPU_RELEASE)
+    target_compile_definitions(Core PUBLIC GPGPU_ENVIRONMENT_MAP_SIZE=4096)
+    set(GPGPU_FAST_LOGGING ON)
 endif()
 
 if(GPGPU_PIPELINE STREQUAL "ON")
@@ -110,6 +126,10 @@ if(GPGPU_PIPELINE STREQUAL "ON")
     target_compile_definitions(Core PUBLIC GPGPU_PIPELINE)
 else()
     message(STATUS "GPGPU_PIPELINE is OFF")
+endif()
+
+if(GPGPU_FAST_LOGGING)
+    target_compile_definitions(Core PUBLIC GPGPU_OPTIMIZE_LOGGING)
 endif()
 
 # If we're on Linux + clang/gnu, need to set -Wno-nullability-completeness

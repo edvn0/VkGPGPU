@@ -1,19 +1,28 @@
 {
-  "sonarlint.pathToCompileCommands": "${workspaceFolder}\\compile_commands.json",
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}\\build-clang\\compile_commands.json",
   "C_Cpp.default.compileCommands": "${workspaceFolder}\\compile_commands.json",
   "C_Cpp.codeAnalysis.clangTidy.useBuildPath": true,
   "cSpell.words": [
+    "aabb",
     "blit",
     "databuffer",
     "librenderdoc",
+    "metalness",
+    "quat",
     "rdoc",
     "renderpass",
+    "Serialiser",
+    "skybox",
+    "ssbos",
     "SUBPASS",
-    "subresource"
+    "subresource",
+    "ubos",
+    "Unremovable"
   ],
   "files.associations": {
-    "*.frag": "hlsl",
-    "*.vert": "hlsl",
+    "*.frag": "glsl",
+    "*.vert": "glsl",
+    "*.comp": "glsl",
     "any": "cpp",
     "array": "cpp",
     "atomic": "cpp",
@@ -113,6 +122,11 @@
     "xtree": "cpp",
     "xutility": "cpp",
     "coroutine": "cpp",
-    "resumable": "cpp"
+    "resumable": "cpp",
+    "execution": "cpp",
+    "valarray": "cpp",
+    "expected": "cpp",
+    "*.glsl": "glsl",
+    "cassert": "cpp"
   }
 }

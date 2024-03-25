@@ -169,55 +169,61 @@ auto save_cache(auto &device, auto pipeline_cache, const std::string &name) {
     info("Failed to open pipeline cache file at {}", name + ".cache");
     return;
   }
-
-  auto pipeline_cache_size = size_t{0};
-  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
-                                &pipeline_cache_size, nullptr),
-         "vkGetPipelineCacheData", "Failed to get pipeline cache data");
-
-  auto pipeline_cache_data = std::vector<u8>(pipeline_cache_size);
-  verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
-                                &pipeline_cache_size,
-                                pipeline_cache_data.data()),
-         "vkGetPipelineCacheData", "Failed to get pipeline cache data");
-
-  file.write(reinterpret_cast<const char *>(pipeline_cache_data.data()),
-             pipeline_cache_data.size());
-}
-} // namespace PipelineHelpers
-
-auto Pipeline::construct(const Device &dev,
-                         const PipelineConfiguration &configuration)
-    -> Scope<Pipeline> {
-  return Scope<Pipeline>(new Pipeline(dev, configuration));
-}
-
-Pipeline::Pipeline(const Device &dev,
-                   const PipelineConfiguration &configuration)
-    : device(dev), name(configuration.name) {
-  construct_pipeline(configuration);
-}
-
-Pipeline::~Pipeline() {
   try {
-    PipelineHelpers::save_cache(device, pipeline_cache, name);
+    auto pipeline_cache_size = size_t{0};
+    verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                  &pipeline_cache_size, nullptr),
+           "vkGetPipelineCacheData", "Failed to get pipeline cache data");
+
+    auto pipeline_cache_data = std::vector<u8>(pipeline_cache_size);
+    verify(vkGetPipelineCacheData(device.get_device(), pipeline_cache,
+                                  &pipeline_cache_size,
+                                  pipeline_cache_data.data()),
+           "vkGetPipelineCacheData", "Failed to get pipeline cache data");
+
+    file.write(std::bit_cast<const char *>(pipeline_cache_data.data()),
+               pipeline_cache_data.size());
   } catch (const std::exception &exc) {
     error("Pipeline save_cache exception: {}", exc.what());
   }
+}
+} // namespace PipelineHelpers
+
+auto ComputePipeline::construct(
+    const Device &dev, const ComputePipelineConfiguration &configuration)
+    -> Scope<ComputePipeline> {
+  return Scope<ComputePipeline>(new ComputePipeline(dev, configuration));
+}
+
+ComputePipeline::ComputePipeline(
+    const Device &dev, const ComputePipelineConfiguration &configuration)
+    : device(dev), name(configuration.name) {
+  construct_pipeline(configuration);
+  cached_shader_hash = configuration.shader.hash();
+}
+
+ComputePipeline::~ComputePipeline() {
+  if constexpr (Config::use_pipeline_cache) {
+    try {
+      PipelineHelpers::save_cache(device, pipeline_cache, name);
+    } catch (const std::exception &exc) {
+      error("Pipeline save_cache exception: {}", exc.what());
+    }
+    vkDestroyPipelineCache(device.get_device(), pipeline_cache, nullptr);
+  }
 
   vkDestroyPipelineLayout(device.get_device(), pipeline_layout, nullptr);
-  vkDestroyPipelineCache(device.get_device(), pipeline_cache, nullptr);
   vkDestroyPipeline(device.get_device(), pipeline, nullptr);
 }
 
-auto Pipeline::bind(const CommandBuffer &command_buffer) -> void {
+auto ComputePipeline::bind(const CommandBuffer &command_buffer) -> void {
   vkCmdBindPipeline(command_buffer.get_command_buffer(),
                     static_cast<VkPipelineBindPoint>(PipelineStage::Compute),
                     pipeline);
 }
 
-auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
-    -> void {
+auto ComputePipeline::construct_pipeline(
+    const ComputePipelineConfiguration &configuration) -> void {
 
   VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
   pipeline_layout_create_info.sType =
@@ -249,18 +255,20 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
                                 &pipeline_layout),
          "vkCreatePipelineLayout", "Failed to create pipeline layout");
 
-  const auto maybe_empty_pipeline_cache_data =
-      PipelineHelpers::try_load_pipeline_cache(name);
-  VkPipelineCacheCreateInfo pipeline_cache_create_info{};
-  pipeline_cache_create_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-  pipeline_cache_create_info.initialDataSize =
-      maybe_empty_pipeline_cache_data.size();
-  pipeline_cache_create_info.pInitialData =
-      maybe_empty_pipeline_cache_data.data();
+  if constexpr (Config::use_pipeline_cache) {
+    const auto maybe_empty_pipeline_cache_data =
+        PipelineHelpers::try_load_pipeline_cache(name);
+    VkPipelineCacheCreateInfo pipeline_cache_create_info{};
+    pipeline_cache_create_info.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    pipeline_cache_create_info.initialDataSize =
+        maybe_empty_pipeline_cache_data.size();
+    pipeline_cache_create_info.pInitialData =
+        maybe_empty_pipeline_cache_data.data();
 
-  vkCreatePipelineCache(device.get_device(), &pipeline_cache_create_info,
-                        nullptr, &pipeline_cache);
+    vkCreatePipelineCache(device.get_device(), &pipeline_cache_create_info,
+                          nullptr, &pipeline_cache);
+  }
 
   VkComputePipelineCreateInfo compute_pipeline_create_info{};
   compute_pipeline_create_info.sType =
@@ -283,20 +291,38 @@ auto Pipeline::construct_pipeline(const PipelineConfiguration &configuration)
          "vkCreateComputePipelines", "Failed to create compute pipeline");
 }
 
-GraphicsPipeline::GraphicsPipeline(
-    const Device &dev, const GraphicsPipelineConfiguration &configuration)
-    : device(&dev), name(configuration.name) {
+GraphicsPipeline::GraphicsPipeline(const Device &dev,
+                                   const GraphicsPipelineConfiguration &config)
+    : device(&dev), configuration(config) {
   construct_pipeline(configuration);
+  cached_shader_hash = config.shader->hash();
 }
 
-GraphicsPipeline::~GraphicsPipeline() {
+auto GraphicsPipeline::on_resize(const Extent<u32> &extent) -> void {
+  destroy();
+  construct_pipeline(configuration);
+  info("Pipeline with name {} was resized to extent {}", configuration.name,
+       extent);
+}
+
+auto GraphicsPipeline::resize(const Framebuffer &framebuffer) -> void {
+  on_resize(framebuffer.get_extent());
+}
+
+auto GraphicsPipeline::destroy() -> void {
   auto vk_device = device->get_device();
   vkDestroyPipelineLayout(vk_device, pipeline_layout, nullptr);
   vkDestroyPipelineCache(vk_device, pipeline_cache, nullptr);
   vkDestroyPipeline(vk_device, pipeline, nullptr);
-};
+}
+
+GraphicsPipeline::~GraphicsPipeline() { destroy(); };
 
 auto GraphicsPipeline::bind(const CommandBuffer &buffer) const -> void {
+  if (configuration.polygon_mode == PolygonMode::Line) {
+    vkCmdSetLineWidth(buffer.get_command_buffer(), configuration.line_width);
+  }
+
   vkCmdBindPipeline(buffer.get_command_buffer(),
                     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
@@ -372,6 +398,8 @@ auto GraphicsPipeline::initialise_blend_states(
 auto GraphicsPipeline::construct_pipeline(
     const GraphicsPipelineConfiguration &configuration) -> void {
 
+  configuration.framebuffer->add_resize_dependent(this);
+
   std::vector dynamic_states = {
       VK_DYNAMIC_STATE_VIEWPORT,
       VK_DYNAMIC_STATE_SCISSOR,
@@ -391,27 +419,53 @@ auto GraphicsPipeline::construct_pipeline(
   VkVertexInputBindingDescription binding_description{};
   binding_description.binding = bindings.binding;
   binding_description.stride = bindings.stride;
-  binding_description.inputRate = bindings.input_rate == InputRate::Vertex
-                                      ? VK_VERTEX_INPUT_RATE_VERTEX
-                                      : VK_VERTEX_INPUT_RATE_INSTANCE;
+  binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-  std::vector<VkVertexInputAttributeDescription> attribute_descriptions{};
-  u32 location = 0;
-  for (const auto &attribute : configuration.layout.elements) {
-    auto &[attribute_location, binding, format, offset] =
-        attribute_descriptions.emplace_back();
-    binding = 0;
-    format = PipelineHelpers::to_vulkan_format(attribute.type);
-    offset = attribute.offset;
-    attribute_location = location++;
+  std::vector<VkVertexInputBindingDescription> binding_descriptions{};
+  binding_descriptions.push_back(binding_description);
+
+  if (!configuration.instance_layout.elements.empty()) {
+    const auto &instance_bindings =
+        configuration.instance_layout.construct_binding();
+    VkVertexInputBindingDescription instance_binding_description{};
+    instance_binding_description.binding = instance_bindings.binding;
+    instance_binding_description.stride = instance_bindings.stride;
+    instance_binding_description.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+    binding_descriptions.push_back(instance_binding_description);
   }
 
-  vertex_input_info.vertexBindingDescriptionCount = 1;
-  vertex_input_info.pVertexBindingDescriptions = &binding_description;
-  vertex_input_info.vertexAttributeDescriptionCount =
-      static_cast<u32>(attribute_descriptions.size());
+  std::vector<VkVertexInputAttributeDescription> attribute_descriptions;
+  attribute_descriptions.resize(configuration.layout.elements.size() +
+                                configuration.instance_layout.elements.size());
+  u32 binding = 0;
+  u32 location = 0;
+  for (const auto &layout : {configuration.layout.elements,
+                             configuration.instance_layout.elements}) {
+    for (const auto &element : layout) {
+      attribute_descriptions[location].binding = binding;
+      attribute_descriptions[location].location = location;
+      attribute_descriptions[location].format =
+          PipelineHelpers::to_vulkan_format(element.type);
+      attribute_descriptions[location].offset = element.offset;
+      location++;
+    }
+    binding++;
+  }
+
+  vertex_input_info.pVertexBindingDescriptions = binding_descriptions.data();
+  vertex_input_info.vertexBindingDescriptionCount =
+      static_cast<u32>(binding_descriptions.size());
   vertex_input_info.pVertexAttributeDescriptions =
       attribute_descriptions.data();
+  vertex_input_info.vertexAttributeDescriptionCount =
+      static_cast<u32>(attribute_descriptions.size());
+
+  if (configuration.layout.empty() && configuration.instance_layout.empty()) {
+    vertex_input_info.vertexBindingDescriptionCount = 0;
+    vertex_input_info.vertexAttributeDescriptionCount = 0;
+    vertex_input_info.pVertexBindingDescriptions = nullptr;
+    vertex_input_info.pVertexAttributeDescriptions = nullptr;
+  }
 
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   input_assembly.sType =
@@ -421,23 +475,8 @@ auto GraphicsPipeline::construct_pipeline(
   input_assembly.primitiveRestartEnable = static_cast<VkBool32>(false);
 
   // Prefer extent over props (due to resizing API)
-  u32 width{extent.width};
-  u32 height{extent.height};
-
   VkViewport viewport{};
-  viewport.x = 0.0F;
-  viewport.y = 0.0F;
-  viewport.width = static_cast<float>(width);
-  viewport.height = static_cast<float>(height);
-  viewport.minDepth = 0.0F;
-  viewport.maxDepth = 1.0F;
-
   VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = {
-      .width = width,
-      .height = height,
-  };
 
   VkPipelineViewportStateCreateInfo viewport_state{};
   viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;

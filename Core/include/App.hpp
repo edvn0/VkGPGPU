@@ -3,6 +3,7 @@
 #include "DescriptorResource.hpp"
 #include "Device.hpp"
 #include "DynamicLibraryLoader.hpp"
+#include "FilesystemListener.hpp"
 #include "Instance.hpp"
 #include "Swapchain.hpp"
 #include "Types.hpp"
@@ -12,8 +13,8 @@
 
 namespace Core {
 
-template <Core::usize N = 10000> struct FPSAverage {
-  std::array<Core::floating, N> frame_times{};
+template <Core::usize N = 100> struct FPSAverage {
+  std::array<Core::floating, N> frame_times{0};
   Core::floating frame_time_sum = 0.0;
   Core::usize frame_time_index = 0;
   Core::usize frame_counter = 0;
@@ -56,7 +57,7 @@ template <Core::usize N = 10000> struct FPSAverage {
          fps);
   }
 
-  auto get_statistics() const {
+  [[nodiscard]] auto get_statistics() const {
     const auto avg_frame_time = frame_time_sum / N;
     const auto fps = 1.0 / avg_frame_time;
     return std::tuple{1000.0F * avg_frame_time, fps};
@@ -70,7 +71,8 @@ struct AppDeleter {
 };
 
 struct ApplicationProperties {
-  bool headless{true};
+  const bool headless{true};
+  const bool start_fullscreen{false};
 };
 
 class App {
@@ -84,6 +86,7 @@ protected:
   virtual auto on_interface(InterfaceSystem &) -> void = 0;
   virtual auto on_create() -> void = 0;
   virtual auto on_destroy() -> void = 0;
+  virtual auto on_event(Event &) -> void{};
 
   explicit App(const ApplicationProperties &);
 
@@ -114,17 +117,27 @@ protected:
 
   [[nodiscard]] auto get_timer() const -> const auto & { return fps_average; };
 
+  [[nodiscard]] auto file_system_hook(Scope<IFilesystemChangeListener> change) {
+    if (!change) {
+      return;
+    }
+    watcher->add_change_listener(std::move(change));
+  }
+
 private:
   Scope<Instance> instance;
   Scope<Device> device;
   Scope<Bus::MessagingClient> message_client;
   Scope<Window> window;
   Scope<Swapchain> swapchain;
+  Scope<FilesystemWatcher> watcher;
 
   Extent<u32> extent{1280, 720};
-  FPSAverage<144> fps_average{};
+  FPSAverage<2 * 144> fps_average{};
 
   ApplicationProperties properties{};
+
+  auto forward_incoming_events(Event &) -> void;
 
   u64 frame_counter{0};
 };

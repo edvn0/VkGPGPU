@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <stb_image.h>
+#include <stb_image_resize2.h>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
 
@@ -39,8 +40,8 @@ auto to_vulkan_format(ImageFormat format) -> VkFormat {
 }
 
 bool transition_image(
-    const ImmediateCommandBuffer &buffer, VkImage &to_transition,
-    VkImageLayout from, VkImageLayout to,
+    const VkCommandBuffer &buffer, VkImage &to_transition, VkImageLayout from,
+    VkImageLayout to, u32 mip_levels = 1,
     VkImageAspectFlags aspect_bit = VK_IMAGE_ASPECT_COLOR_BIT) {
   VkImageMemoryBarrier barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -51,7 +52,7 @@ bool transition_image(
   barrier.image = to_transition;
   barrier.subresourceRange.aspectMask = aspect_bit;
   barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.levelCount = mip_levels;
   barrier.subresourceRange.baseArrayLayer = 0;
   barrier.subresourceRange.layerCount = 1;
   VkPipelineStageFlags sourceStage;
@@ -122,8 +123,60 @@ bool transition_image(
   }
 
   VkDependencyFlags flags = VK_DEPENDENCY_BY_REGION_BIT;
-  vkCmdPipelineBarrier(buffer.get_command_buffer(), sourceStage,
-                       destinationStage,
+  vkCmdPipelineBarrier(buffer, sourceStage, destinationStage,
+                       flags,      // Dependency flags
+                       0, nullptr, // Memory barrier count and data
+                       0, nullptr, // Buffer memory barrier count and data
+                       1, &barrier // Image memory barrier count and data
+  );
+
+  return true;
+}
+
+bool transition_image(const VkCommandBuffer &buffer, VkImage &to_transition,
+                      VkImageLayout from, VkImageLayout to, u32 mip_levels,
+                      VkImageAspectFlags aspect_bit, bool is_transfer_queue) {
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = from;
+  barrier.newLayout = to;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = to_transition;
+  barrier.subresourceRange.aspectMask = aspect_bit;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = mip_levels;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+
+  VkPipelineStageFlags sourceStage;
+  VkPipelineStageFlags destinationStage;
+
+  // Adjust source and destination stages for transfer queue operations
+  if (is_transfer_queue) {
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+    if (from == VK_IMAGE_LAYOUT_UNDEFINED &&
+        to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+      barrier.srcAccessMask = 0;
+      barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    } else if (from == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+               to == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+      barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      destinationStage =
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT; // For graphics queue usage
+    } else {
+      // Handle other cases or set a default case as appropriate
+    }
+  } else {
+    return transition_image(buffer, to_transition, from, to, 1,
+                            VK_IMAGE_ASPECT_COLOR_BIT);
+  }
+
+  VkDependencyFlags flags = VK_DEPENDENCY_BY_REGION_BIT;
+  vkCmdPipelineBarrier(buffer, sourceStage, destinationStage,
                        flags,      // Dependency flags
                        0, nullptr, // Memory barrier count and data
                        0, nullptr, // Buffer memory barrier count and data
@@ -144,7 +197,7 @@ auto to_vulkan_layout(ImageLayout layout) -> VkImageLayout {
   case ColorAttachmentOptimal:
     return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   case DepthStencilAttachmentOptimal:
-    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   case DepthStencilReadOnlyOptimal:
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   case ShaderReadOnlyOptimal:
@@ -195,8 +248,8 @@ auto load_databuffer_from_file(const FS::Path &path) -> DataBuffer {
   return databuffer;
 }
 
-auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent)
-    -> DataBuffer {
+auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent,
+                               ResizeInfo resize_info) -> DataBuffer {
   if (!FS::exists(path)) {
     error("File does not exist: {}", path);
     return DataBuffer::empty();
@@ -206,6 +259,20 @@ auto load_databuffer_from_file(const FS::Path &path, Extent<u32> &output_extent)
   std::int32_t actual_channels{};
   auto *stbi_pixels = stbi_load(path.string().c_str(), &width, &height,
                                 &actual_channels, STBI_rgb_alpha);
+
+  // Lets resize if needed
+  if (resize_info.resize) {
+    auto new_width = resize_info.extent.width;
+    auto new_height = resize_info.extent.height;
+    auto new_channels = 4;
+    auto *new_pixels = new u8[new_width * new_height * new_channels];
+    stbir_resize_uint8_srgb(stbi_pixels, width, height, 0, new_pixels,
+                            new_width, new_height, 0, STBIR_RGBA);
+    stbi_image_free(stbi_pixels);
+    stbi_pixels = new_pixels;
+    width = new_width;
+    height = new_height;
+  }
 
   DataBuffer databuffer{
       static_cast<std::size_t>(width * height * STBI_rgb_alpha)};
@@ -229,6 +296,8 @@ struct Image::ImageStorageImpl {
   VkImageView image_view{};
   VkSampler sampler{};
 
+  std::unordered_map<u32, VkImageView> per_mip_image_views{};
+
   explicit ImageStorageImpl(const Device *dev) : device(dev) {}
 
   ~ImageStorageImpl() {
@@ -236,19 +305,33 @@ struct Image::ImageStorageImpl {
     vkDestroyImageView(device->get_device(), image_view, nullptr);
     Allocator allocator{"Image"};
     allocator.deallocate_image(allocation, image);
+
+    for (auto &&[k, img] : per_mip_image_views) {
+      vkDestroyImageView(device->get_device(), img, nullptr);
+    }
   }
 };
 
 auto to_aspect_bit(const ImageFormat &format) -> VkImageAspectFlags {
-  if (format == ImageFormat::DEPTH16 ||
-      format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
+  switch (format) {
+  case ImageFormat::DEPTH16:
+  case ImageFormat::DEPTH32F:
     return VK_IMAGE_ASPECT_DEPTH_BIT;
-  return VK_IMAGE_ASPECT_COLOR_BIT;
+  case ImageFormat::DEPTH24STENCIL8:
+    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+  case ImageFormat::SRGB_RGBA32:
+  case ImageFormat::SRGB_RGBA8:
+  case ImageFormat::UNORM_RGBA8:
+    return VK_IMAGE_ASPECT_COLOR_BIT;
+  default:
+    throw std::runtime_error("Could not map to a VkImageLayout");
+  };
 }
 
 Image::Image(const Device &dev, ImageProperties props)
     : device(&dev), properties(props),
-      aspect_bit(to_aspect_bit(properties.format)) {
+      aspect_bit(to_aspect_bit(properties.format)),
+      override_command_buffer(props.command_buffer_override) {
   ensure(device != nullptr, "Device cannot be null. This class name: {}",
          "Image");
   ensure(properties.extent.width > 0, "Extent width must be greater than 0");
@@ -257,12 +340,24 @@ Image::Image(const Device &dev, ImageProperties props)
          "Format cannot be undefined");
   ensure(properties.layout != ImageLayout::Undefined,
          "Layout cannot be undefined");
+  if ((aspect_bit & VK_IMAGE_ASPECT_DEPTH_BIT) != VkImageAspectFlags{0}) {
+    properties.mip_info.mips = 1;
+    properties.mip_info.use_mips = false;
+  }
 
   recreate();
-  if (aspect_bit == VK_IMAGE_ASPECT_DEPTH_BIT) {
-    transition_image(create_immediate(*device, Queue::Type::Graphics),
-                     impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     to_vulkan_layout(properties.layout), aspect_bit);
+  if ((aspect_bit & VK_IMAGE_ASPECT_DEPTH_BIT) != VkImageAspectFlags{0}) {
+    if (override_command_buffer != nullptr) {
+      transition_image(override_command_buffer->get_command_buffer(),
+                       impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                       to_vulkan_layout(properties.layout), 1, aspect_bit,
+                       true);
+    } else {
+      transition_image(
+          create_immediate(*device, Queue::Type::Graphics).get_command_buffer(),
+          impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+          to_vulkan_layout(properties.layout), 1, aspect_bit);
+    }
   }
 }
 
@@ -277,13 +372,25 @@ auto Image::recreate() -> void {
 
   initialise_vulkan_image();
   initialise_vulkan_descriptor_info();
-  // if (properties.mip_info.valid()) {
-  //  create_mips();
-  //}
+  if (properties.generate_per_mip_image_views) {
+    initialise_per_mip_image_views();
+  }
+
+  // If we have command_buffer_override, it is transfer and cannot construct
+  // mips.
+  if (properties.mip_info.valid() && !properties.command_buffer_override) {
+    create_mips();
+  }
 }
 
-auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
-    -> void {
+auto Image::transition_image_to(ImageLayout to) -> void {
+  auto immediate = create_immediate(*device, Queue::Type::Graphics);
+  [[maybe_unused]] auto could = transition_image(
+      immediate.get_command_buffer(), impl->image, to_vulkan_layout(current),
+      to_vulkan_layout(to), 1, VK_IMAGE_ASPECT_COLOR_BIT);
+}
+
+auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) -> void {
   // Create a transfer buffer
   Allocator allocator{"Image"};
   VkBufferCreateInfo buffer_create_info{};
@@ -295,18 +402,56 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
   VmaAllocationInfo staging_allocation_info{};
   const auto allocation = allocator.allocate_buffer(
       staging_buffer, staging_allocation_info, buffer_create_info,
-      {.usage = Usage::AUTO_PREFER_DEVICE,
-       .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT});
+      {
+          .usage = Usage::AUTO_PREFER_DEVICE,
+          .creation = Creation::HOST_ACCESS_RANDOM_BIT | Creation::MAPPED_BIT,
+      });
   const std::span allocation_span{
       static_cast<u8 *>(staging_allocation_info.pMappedData),
       staging_allocation_info.size};
   data_buffer.read(allocation_span);
 
-  {
+  if (override_command_buffer != nullptr) {
+    current = ImageLayout::TransferDstOptimal;
+    transition_image(override_command_buffer->get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_UNDEFINED, to_vulkan_layout(current),
+                     aspect_bit, true);
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = aspect_bit;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {
+        0,
+        0,
+        0,
+    };
+    region.imageExtent = {
+        properties.extent.width,
+        properties.extent.height,
+        1,
+    };
+
+    vkCmdCopyBufferToImage(override_command_buffer->get_command_buffer(),
+                           staging_buffer, impl->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    // We cannot transition here, because our transfer queue does not allow us
+    // to get it to fragment_bit.
+
+    transition_image(override_command_buffer->get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     to_vulkan_layout(properties.layout), aspect_bit, true);
+  } else {
     const auto buffer = create_immediate(*device, Queue::Type::Graphics);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, aspect_bit);
+    current = ImageLayout::TransferDstOptimal;
+    transition_image(buffer.get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_UNDEFINED, to_vulkan_layout(current),
+                     aspect_bit);
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -330,8 +475,10 @@ auto Image::load_image_data_from_buffer(const DataBuffer &data_buffer) const
                            impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &region);
 
-    transition_image(buffer, impl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     to_vulkan_layout(properties.layout), aspect_bit);
+    current = properties.layout;
+    transition_image(buffer.get_command_buffer(), impl->image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     to_vulkan_layout(current), aspect_bit);
   }
 
   allocator.deallocate_buffer(allocation, staging_buffer);
@@ -341,13 +488,44 @@ Image::Image(const Device &dev, ImageProperties properties,
              const DataBuffer &data_buffer)
     : Image(dev, properties) {
   load_image_data_from_buffer(data_buffer);
-  create_mips();
+  if (!properties.command_buffer_override) {
+    create_mips();
+  }
 }
 
 auto Image::initialise_vulkan_descriptor_info() -> void {
   descriptor_image_info.sampler = impl->sampler;
   descriptor_image_info.imageView = impl->image_view;
   descriptor_image_info.imageLayout = to_vulkan_layout(properties.layout);
+}
+
+auto Image::initialise_per_mip_image_views(u32 override_count) -> void {
+  const auto actual_count =
+      override_count > 0 ? override_count : properties.mip_info.mips;
+  for (auto mip = 0U; mip < actual_count; mip++) {
+    VkImageAspectFlags aspectMask = aspect_bit;
+    if (properties.format == ImageFormat::DEPTH24STENCIL8)
+      aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+    VkFormat vulkanFormat = to_vulkan_format(properties.format);
+
+    VkImageViewCreateInfo image_view_create_info = {};
+    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    image_view_create_info.format = vulkanFormat;
+    image_view_create_info.flags = 0;
+    image_view_create_info.subresourceRange = {};
+    image_view_create_info.subresourceRange.aspectMask = aspectMask;
+    image_view_create_info.subresourceRange.baseMipLevel = mip;
+    image_view_create_info.subresourceRange.levelCount = 1;
+    image_view_create_info.subresourceRange.baseArrayLayer = 0;
+    image_view_create_info.subresourceRange.layerCount = 1;
+    image_view_create_info.image = impl->image;
+
+    verify(vkCreateImageView(device->get_device(), &image_view_create_info,
+                             nullptr, &impl->per_mip_image_views[mip]),
+           "vkCreateImageView", "failed to create");
+  }
 }
 
 auto Image::get_descriptor_info() const -> const VkDescriptorImageInfo & {
@@ -377,8 +555,23 @@ auto Image::get_extent() const noexcept -> const Extent<u32> & {
   return properties.extent;
 }
 
+auto Image::get_mip_image_view_at(u32 mip) const -> VkImageView {
+  return impl->per_mip_image_views.at(mip);
+}
+
+auto Image::get_mip_size(u32 mip) const -> std::pair<u32, u32> {
+  Extent<u32> final_extent{properties.extent};
+  while (mip > 0) {
+    final_extent /= 2;
+    mip /= 2;
+  }
+  return final_extent.as_pair();
+}
+
+auto Image::get_image() const -> VkImage { return impl->image; }
+
 namespace {
-auto hash_combine(usize &seed, const void *value) noexcept -> void {
+auto hash_combine(usize &seed, const auto *value) noexcept -> void {
   static constexpr auto hasher = std::hash<const void *>{};
   seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
@@ -407,8 +600,16 @@ void Image::create_mips() {
   auto &&[mip_width, mip_height] = properties.extent.as<i32>();
 
   auto command_buffer = create_immediate(*device, Queue::Type::Graphics);
-  transition_image(command_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  VkCommandBuffer vk_cmd_buffer{nullptr};
+  if (override_command_buffer != nullptr) {
+    vk_cmd_buffer = override_command_buffer->get_command_buffer();
+  } else {
+    vk_cmd_buffer = command_buffer.get_command_buffer();
+  }
+
+  current = ImageLayout::TransferDstOptimal;
+  transition_image(vk_cmd_buffer, impl->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                   to_vulkan_layout(current), properties.mip_info.mips);
   for (u32 i = 1; i < properties.mip_info.mips; i++) {
     barrier.subresourceRange.baseMipLevel = i - 1;
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -416,9 +617,9 @@ void Image::create_mips() {
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-    vkCmdPipelineBarrier(
-        command_buffer.get_command_buffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &barrier);
 
     VkImageBlit blit{};
     blit.srcOffsets[0] = {
@@ -450,18 +651,18 @@ void Image::create_mips() {
     blit.dstSubresource.baseArrayLayer = 0;
     blit.dstSubresource.layerCount = 1;
 
-    vkCmdBlitImage(command_buffer.get_command_buffer(), impl->image,
+    vkCmdBlitImage(vk_cmd_buffer, impl->image,
                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
                    VK_FILTER_LINEAR);
 
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    current = properties.layout;
+    barrier.newLayout = to_vulkan_layout(current);
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+    vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
                          0, nullptr, 1, &barrier);
 
@@ -475,12 +676,12 @@ void Image::create_mips() {
 
   barrier.subresourceRange.baseMipLevel = properties.mip_info.mips - 1;
   barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  barrier.newLayout = to_vulkan_layout(properties.layout);
+  current = properties.layout;
+  barrier.newLayout = to_vulkan_layout(current);
   barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-  vkCmdPipelineBarrier(command_buffer.get_command_buffer(),
-                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+  vkCmdPipelineBarrier(vk_cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 }
@@ -519,12 +720,25 @@ auto Image::initialise_vulkan_image() -> void {
           .creation = creation,
       });
 
+  static constexpr auto is_depth_format = [](ImageFormat format) -> bool {
+    switch (format) {
+    case ImageFormat::DEPTH16:
+    case ImageFormat::DEPTH32F:
+    case ImageFormat::DEPTH24STENCIL8:
+      return true;
+    default:
+      return false;
+    }
+  };
+
   VkImageViewCreateInfo image_view_create_info{};
   image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   image_view_create_info.image = impl->image;
   image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
   image_view_create_info.format = to_vulkan_format(properties.format);
-  image_view_create_info.subresourceRange.aspectMask = aspect_bit;
+  image_view_create_info.subresourceRange.aspectMask =
+      is_depth_format(properties.format) ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                         : VK_IMAGE_ASPECT_COLOR_BIT;
   image_view_create_info.subresourceRange.baseMipLevel = 0;
   image_view_create_info.subresourceRange.levelCount =
       properties.mip_info.valid() ? properties.mip_info.mips : 1;
@@ -542,26 +756,25 @@ auto Image::initialise_vulkan_image() -> void {
   sampler_create_info.addressModeU =
       static_cast<VkSamplerAddressMode>(properties.address_mode);
   sampler_create_info.addressModeV =
-
       static_cast<VkSamplerAddressMode>(properties.address_mode);
   sampler_create_info.addressModeW =
       static_cast<VkSamplerAddressMode>(properties.address_mode);
-  sampler_create_info.anisotropyEnable = VK_FALSE;
-  sampler_create_info.maxAnisotropy = 1.0f;
+  sampler_create_info.anisotropyEnable = VK_TRUE;
+  sampler_create_info.maxAnisotropy =
+      device->get_device_properties().limits.maxSamplerAnisotropy;
   sampler_create_info.borderColor =
       static_cast<VkBorderColor>(properties.border_color);
   sampler_create_info.unnormalizedCoordinates = VK_FALSE;
-  sampler_create_info.compareEnable = VK_FALSE;
-  sampler_create_info.compareOp =
-      static_cast<VkCompareOp>(properties.compare_op);
   sampler_create_info.mipLodBias = 0.0f;
-  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
   sampler_create_info.minLod = 0.0f;
   sampler_create_info.maxLod =
       properties.mip_info.valid() ? static_cast<float>(properties.mip_info.mips)
                                   : 1.0f;
+
   sampler_create_info.compareEnable = VK_TRUE;
-  sampler_create_info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  sampler_create_info.compareOp =
+      static_cast<VkCompareOp>(properties.compare_op);
 
   verify(vkCreateSampler(device->get_device(), &sampler_create_info, nullptr,
                          &impl->sampler),

@@ -14,8 +14,6 @@ public:
   }
 
 private:
-  ThreadPool() = default;
-
   static constexpr u32 thread_count = Config::thread_count;
   static inline BS::thread_pool pool{thread_count};
 };

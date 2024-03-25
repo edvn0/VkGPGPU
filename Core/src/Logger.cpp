@@ -35,9 +35,13 @@ void Logger::stop_all() {
 }
 
 void Logger::log(std::string &&message, LogLevel level) {
+#ifdef GPGPU_OPTIMIZE_LOGGING
   std::lock_guard lock(queue_mutex);
   log_queue.emplace(std::move(message), level);
   cv.notify_one();
+#else
+  process_single({std::move(message), level});
+#endif
 }
 
 void Logger::process_queue(const std::stop_token &stop_token) {
@@ -71,23 +75,23 @@ void Logger::process_single(const BackgroundLogMessage &message) {
     using enum Core::LogLevel;
   case Trace:
     std::cout << AnsiColor::Blue << "[TRACE] " << message.message
-              << AnsiColor::Reset << std::endl;
+              << AnsiColor::Reset << "\n";
     break;
   case Debug:
     std::cout << AnsiColor::Yellow << "[DEBUG] " << message.message
-              << AnsiColor::Reset << std::endl;
+              << AnsiColor::Reset << "\n";
     break;
   case Info:
     std::cout << AnsiColor::Green << "[INFO] " << message.message
-              << AnsiColor::Reset << std::endl;
+              << AnsiColor::Reset << "\n";
     break;
   case Warn:
     std::cout << AnsiColor::Magenta << "[WARN] " << message.message
-              << AnsiColor::Reset << std::endl;
+              << AnsiColor::Reset << "\n";
     break;
   case Error:
     std::cout << AnsiColor::Red << "[ERROR] " << message.message
-              << AnsiColor::Reset << std::endl;
+              << AnsiColor::Reset << "\n";
     break;
   case None:
     break;
@@ -98,7 +102,7 @@ void Logger::set_level(LogLevel level) { current_level = level; }
 
 LogLevel Logger::get_level() const { return current_level; }
 
-auto to_lower(const std::string &str) {
+static auto to_lower(const std::string &str) {
   std::string lower_str;
   lower_str.reserve(str.size());
   for (const char ch : str) {
